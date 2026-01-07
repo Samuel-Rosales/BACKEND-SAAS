@@ -1,5 +1,5 @@
 // --------------------------------------------------------
-// CONFIGURACIÓN INICIAL
+// CONFIGURACIÓN
 // --------------------------------------------------------
 generator client {
   provider = "prisma-client-js"
@@ -7,63 +7,54 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // The `url` property is removed from schema files in Prisma v7+.
-  // Move connection URLs for Migrate to prisma.config.ts and pass either
-  // `adapter` for a direct database connection or `accelerateUrl` for Accelerate
-  // to the PrismaClient constructor. See https://pris.ly/d/config-datasource and
-  // https://pris.ly/d/prisma7-client-config
 }
 
 // --------------------------------------------------------
-// 1. USUARIOS Y ACCESO (GLOBAL)
+// 1. USUARIOS Y ACCESO
 // --------------------------------------------------------
 
 model User {
-  id            Int              @id @default(autoincrement())
-  email         String           @unique
-  passwordHash  String
-  fullName      String
-  phone         String?
-  isActive      Boolean          @default(true)
-  createdAt     DateTime         @default(now())
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  password     String
+  fullName     String
+  phone        String   @default("") // Sin nulos: Si no tiene, es string vacío
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
-  // Un usuario puede pertenecer a varios negocios (Dueño en uno, Cajero en otro)
-  memberships   BusinessMember[]
+  memberships  BusinessMember[]
   
-  // Auditoría (Opcional: quién creó este usuario, útil si fue creado por un dueño)
-  createdByUserId Int? 
+  // Auditoría: Eliminamos la autoreferencia nullable. 
+  // Si necesitas auditoría estricta, se usa una tabla separada "AuditLog".
 }
 
-// Roles dentro de un negocio
 enum UserRole {
-  OWNER    // Acceso total + Configuración + Pagos
-  ADMIN    // Gestión de inventario y personal (sin ver pagos de licencia)
-  CASHIER  // Solo pantalla de ventas y cierre de caja
-  AUDITOR  // Solo lectura de reportes
+  OWNER
+  ADMIN
+  CASHIER
+  AUDITOR
 }
 
 // --------------------------------------------------------
-// 2. NEGOCIOS Y LICENCIAS (CORE)
+// 2. NEGOCIOS CORE
 // --------------------------------------------------------
 
 model Business {
-  id             Int              @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   name           String
   
-  // Configuración Regional / Moneda
-  currencySymbol String           @default("$")   // El símbolo principal del sistema
-  exchangeRate   Decimal          @default(1.0)   @db.Decimal(10, 4) // Tasa manual (ej: 50.50 Bs/$)
-  address        String?
-  logoUrl        String?
-  
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  // Configuración: Defaults para evitar nulos
+  currencySymbol String   @default("$")
+  exchangeRate   Decimal  @default(1.0) @db.Decimal(10, 4)
+  address        String   @default("") 
+  logoUrl        String   @default("") 
 
-  // Relaciones
-  subscription   Subscription?    // La Licencia (1:1)
-  members        BusinessMember[] // Los Empleados y Dueños
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subscription   Subscription?
+  members        BusinessMember[]
   
-  // Datos Operativos
   products       Product[]
   categories     Category[]
   clients        Client[]
@@ -74,42 +65,45 @@ model Business {
   cashRegisters  CashRegister[]
 }
 
-// La tabla que une Usuarios con Negocios
 model BusinessMember {
-  id          Int      @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   
-  userId      Int
-  user        User     @relation(fields: [userId], references: [id])
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  businessId  Int
-  business    Business @relation(fields: [businessId], references: [id])
+  businessId Int
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   
-  role        UserRole @default(CASHIER)
-  isActive    Boolean  @default(true) // El dueño puede poner esto en false para bloquear al empleado
-  joinedAt    DateTime @default(now())
+  role       UserRole @default(CASHIER)
+  isActive   Boolean  @default(true)
+  joinedAt   DateTime @default(now())
 
-  // Relaciones para auditoría (Saber qué hizo este miembro específico)
   sales          Sale[]
   purchases      Purchase[]
-  movements      StockMovement[]
-  shifts         CashRegister[]
+  stockMovements StockMovement[]
+  cashRegisters  CashRegister[]
 
-  @@unique([userId, businessId]) // Un usuario no puede estar duplicado en el mismo negocio
+  @@unique([userId, businessId])
 }
 
-// Control de Licencias
+// --------------------------------------------------------
+// 3. LICENCIAS
+// --------------------------------------------------------
+
 model Subscription {
-  id               Int        @id @default(autoincrement())
-  businessId       Int        @unique
-  business         Business   @relation(fields: [businessId], references: [id])
+  id             Int        @id @default(autoincrement())
+  businessId     Int        @unique
+  business       Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
   
-  planType         String     // "TRIAL", "BASIC", "PREMIUM"
-  status           PlanStatus @default(TRIALING)
+  planType       String     
+  status         PlanStatus @default(TRIALING)
   
-  startDate        DateTime   @default(now())
-  endDate          DateTime   // SI HOY > ENDDATE -> BLOQUEAR SISTEMA
+  startDate      DateTime   @default(now())
+  endDate        DateTime   
   
-  lastPaymentRef   String?    // Referencia del pago manual o Stripe ID
+  lastPaymentRef String     @default("") // Sin nulos
+
+  @@index([status]) // Índice para búsquedas rápidas de bloqueo
 }
 
 enum PlanStatus {
@@ -120,113 +114,105 @@ enum PlanStatus {
 }
 
 // --------------------------------------------------------
-// 3. INVENTARIO
+// 4. INVENTARIO (NORMALIZADO)
 // --------------------------------------------------------
 
 model Category {
-  id          Int       @id @default(autoincrement())
-  businessId  Int
-  business    Business  @relation(fields: [businessId], references: [id])
-  name        String
-  products    Product[]
+  id         Int       @id @default(autoincrement())
+  businessId Int
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name       String
+  products   Product[]
   
   @@unique([businessId, name])
 }
 
 model Product {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   businessId  Int
-  business    Business  @relation(fields: [businessId], references: [id])
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   
-  categoryId  Int?
-  category    Category? @relation(fields: [categoryId], references: [id])
+  // NORMALIZACIÓN: Un producto DEBE tener categoría.
+  // Backend: Crear categoría "General" automática al crear el negocio.
+  categoryId  Int      
+  category    Category @relation(fields: [categoryId], references: [id]) 
   
   name        String
-  sku         String?   // Código de barras
-  description String?
-  imageUrl    String?
+  sku         String   @default("") // Si no tiene, string vacío (o generar UUID)
+  description String   @default("")
+  imageUrl    String   @default("")
   
-  // Precios
-  costPrice   Decimal   @db.Decimal(10, 2)
-  salePrice   Decimal   @db.Decimal(10, 2)
+  costPrice   Decimal  @db.Decimal(10, 2) @default(0.00)
+  salePrice   Decimal  @db.Decimal(10, 2) @default(0.00)
   
-  // Inventario
-  stock       Int       @default(0)
-  minStock    Int       @default(5)
+  stock       Int      @default(0)
+  minStock    Int      @default(5)
+  isService   Boolean  @default(false)
   
-  // Configuración extra
-  isService   Boolean   @default(false) // Si es true, no descuenta stock (ej: Mano de obra)
-  
-  // Relaciones
   saleItems   SaleItem[]
   purchaseItems PurchaseItem[]
   movements   StockMovement[]
 
-  @@unique([businessId, sku])
+  @@unique([businessId, sku]) // OJO: Si SKU es vacío, cuidado con duplicados vacíos.
 }
 
 // --------------------------------------------------------
-// 4. VENTAS Y FINANZAS (MULTI-MONEDA)
+// 5. VENTAS (ESTRICTO)
 // --------------------------------------------------------
 
 model Sale {
-  id             Int            @id @default(autoincrement())
-  businessId     Int
-  business       Business       @relation(fields: [businessId], references: [id])
+  id           Int      @id @default(autoincrement())
+  businessId   Int
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   
-  memberId       Int            // Empleado que vendió
-  member         BusinessMember @relation(fields: [memberId], references: [id])
+  memberId     Int
+  member       BusinessMember @relation(fields: [memberId], references: [id])
   
-  clientId       Int?
-  client         Client?        @relation(fields: [clientId], references: [id])
+  // NORMALIZACIÓN: Toda venta debe tener cliente.
+  // Backend: Usar un "Cliente Público/Genérico" si es venta anónima.
+  clientId     Int      
+  client       Client   @relation(fields: [clientId], references: [id])
   
-  // Finanzas Globales de la Venta (Moneda Base)
-  totalAmount    Decimal        @db.Decimal(12, 2) 
+  totalAmount  Decimal  @db.Decimal(12, 2)
+  exchangeRate Decimal  @db.Decimal(10, 4)
   
-  // Tasa de cambio usada EN ESTA VENTA (Snapshot)
-  exchangeRate   Decimal        @db.Decimal(10, 4) // Ej: 50.00
+  status       SaleStatus @default(COMPLETED)
+  createdAt    DateTime @default(now())
   
-  status         SaleStatus     @default(COMPLETED)
-  createdAt      DateTime       @default(now())
-  
-  items          SaleItem[]
-  payments       Payment[]      // Detalle de cómo pagaron
+  items        SaleItem[]
+  payments     Payment[]
 }
 
 enum SaleStatus {
   COMPLETED
-  PENDING_PAYMENT // Crédito
-  CANCELED        // Anulada
+  PENDING_PAYMENT
+  CANCELED
 }
 
 model SaleItem {
-  id          Int      @id @default(autoincrement())
-  saleId      Int
-  sale        Sale     @relation(fields: [saleId], references: [id])
-  productId   Int
-  product     Product  @relation(fields: [productId], references: [id])
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
   
-  quantity    Int
-  unitPrice   Decimal  @db.Decimal(10, 2) // Precio al momento de vender
-  subTotal    Decimal  @db.Decimal(10, 2)
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  subTotal  Decimal @db.Decimal(10, 2)
 }
 
-// PAGOS MIXTOS (Clave para Venezuela)
-// Una venta de $10 puede tener:
-// 1. Payment: $5 en ZELLE (Tasa 1.0)
-// 2. Payment: 250 Bs en EFECTIVO (Tasa 50.0)
 model Payment {
   id           Int      @id @default(autoincrement())
   saleId       Int
-  sale         Sale     @relation(fields: [saleId], references: [id])
+  sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   
   method       PaymentMethod
   
-  amount       Decimal  @db.Decimal(12, 2) // Cantidad entregada en la moneda original
-  currency     String   // "USD", "VES", "EUR"
-  exchangeRate Decimal  @db.Decimal(10, 4) // Tasa usada para convertir a la moneda base
+  amount       Decimal  @db.Decimal(12, 2)
+  currency     String   
+  exchangeRate Decimal  @db.Decimal(10, 4)
   
-  reference    String?  // Nro Referencia Zelle/PagoMóvil
+  reference    String   @default("") // Sin nulos
   date         DateTime @default(now())
 }
 
@@ -234,106 +220,158 @@ enum PaymentMethod {
   CASH
   DEBIT_CARD
   CREDIT_CARD
-  MOBILE_PAYMENT // Pago Móvil
+  MOBILE_PAYMENT
   TRANSFER
   ZELLE
   OTHER
 }
 
 // --------------------------------------------------------
-// 5. TERCEROS Y OPERACIONES
+// 6. TERCEROS
 // --------------------------------------------------------
 
 model Client {
-  id          Int      @id @default(autoincrement())
-  businessId  Int
-  business    Business @relation(fields: [businessId], references: [id])
-  name        String
-  documentId  String?  // Cédula/RIF
-  phone       String?
-  email       String?
-  sales       Sale[]
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  name       String
+  documentId String   @default("") 
+  phone      String   @default("")
+  email      String   @default("")
+  address    String   @default("")
+  
+  sales      Sale[]
 }
 
 model Supplier {
-  id          Int        @id @default(autoincrement())
-  businessId  Int
-  business    Business   @relation(fields: [businessId], references: [id])
-  name        String
-  contact     String?
-  purchases   Purchase[]
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  name       String
+  contact    String   @default("")
+  phone      String   @default("")
+  
+  purchases  Purchase[]
 }
 
 model Purchase {
-  id          Int            @id @default(autoincrement())
-  businessId  Int
-  business    Business       @relation(fields: [businessId], references: [id])
-  supplierId  Int?
-  supplier    Supplier?      @relation(fields: [supplierId], references: [id])
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   
-  memberId    Int            // Quién registró la compra
-  member      BusinessMember @relation(fields: [memberId], references: [id])
-
-  totalCost   Decimal        @db.Decimal(12, 2)
-  date        DateTime       @default(now())
+  // Compra siempre tiene proveedor (Crear "Proveedor Genérico" si es necesario)
+  supplierId Int      
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
   
-  items       PurchaseItem[]
+  memberId   Int
+  member     BusinessMember @relation(fields: [memberId], references: [id])
+  
+  totalCost  Decimal  @db.Decimal(12, 2)
+  date       DateTime @default(now())
+  
+  items      PurchaseItem[]
 }
 
 model PurchaseItem {
-  id          Int      @id @default(autoincrement())
-  purchaseId  Int
-  purchase    Purchase @relation(fields: [purchaseId], references: [id])
-  productId   Int
-  product     Product  @relation(fields: [productId], references: [id])
+  id         Int      @id @default(autoincrement())
+  purchaseId Int
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
   
-  quantity    Int
-  unitCost    Decimal  @db.Decimal(10, 2)
+  quantity   Int
+  unitCost   Decimal  @db.Decimal(10, 2)
 }
 
-// Historial de Movimientos (Kardex)
+// --------------------------------------------------------
+// 7. KARDEX
+// --------------------------------------------------------
+
 model StockMovement {
-  id          Int            @id @default(autoincrement())
-  businessId  Int
-  business    Business       @relation(fields: [businessId], references: [id])
-  productId   Int
-  product     Product        @relation(fields: [productId], references: [id])
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   
-  memberId    Int
-  member      BusinessMember @relation(fields: [memberId], references: [id])
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   
-  type        MovementType
-  quantity    Int      // + Entrada, - Salida
-  reason      String?  // "Venta #123", "Merma", "Compra #50"
-  date        DateTime @default(now())
+  memberId   Int
+  member     BusinessMember @relation(fields: [memberId], references: [id])
+  
+  type       MovementType
+  quantity   Int      
+  reason     String   @default("") // Sin nulos
+  date       DateTime @default(now())
 }
 
 enum MovementType {
   SALE
   PURCHASE
-  ADJUSTMENT_IN  // Inventario inicial o ajuste positivo
-  ADJUSTMENT_OUT // Pérdida, robo, daño
-  RETURN         // Devolución de cliente
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  RETURN
 }
+
+// --------------------------------------------------------
+// 8. CAJA (CORREGIDO PARA 1NF - SIN JSON)
+// --------------------------------------------------------
 
 model CashRegister {
-  id             Int            @id @default(autoincrement())
-  businessId     Int
-  business       Business       @relation(fields: [businessId], references: [id])
+  id            Int      @id @default(autoincrement())
+  businessId    Int
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   
-  memberId       Int
-  member         BusinessMember @relation(fields: [memberId], references: [id])
+  memberId      Int
+  member        BusinessMember @relation(fields: [memberId], references: [id])
   
-  openTime       DateTime       @default(now())
-  closeTime      DateTime?
+  // Estado de la caja
+  status        RegisterStatus @default(OPEN)
   
-  initialAmount  Decimal        @db.Decimal(12, 2)
-  finalAmount    Decimal?       @db.Decimal(12, 2)
+  openTime      DateTime @default(now())
+  // OJO: "closeTime" DEBE ser nulo lógica y físicamente si la caja está abierta.
+  // Poner una fecha dummy (ej: año 1970) es mala práctica. 
+  // Para normalizar estrictamente, separamos el cierre en otra tabla 
+  // O aceptamos este único nulo necesario.
+  // Opción elegida: Aceptar nulo aquí, o usar tabla separada "CashRegisterClosing".
+  // MANTENDRÉ closeTime NULO porque es un "estado temporal". 
+  // Si insistes en NO NULL, requiere una tabla hija "RegisterClosing".
+  closeTime     DateTime? 
+
+  initialAmount Decimal  @db.Decimal(12, 2)
+  finalAmount   Decimal  @db.Decimal(12, 2) @default(0.00)
   
-  details        String?        // JSON string con desglose de billetes si quieres
+  // Relación 1 a Muchos para el desglose de dinero (Sustituye al JSON)
+  cashCounts    CashCount[]
 }
 
+enum RegisterStatus {
+  OPEN
+  CLOSED
+}
+
+// Nueva tabla para Normalizar el JSON de "detalles de billetes"
+model CashCount {
+  id             Int          @id @default(autoincrement())
+  cashRegisterId Int
+  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  
+  denomination   Decimal      @db.Decimal(10, 2) // Ej: 10.00, 20.00, 100.00
+  quantity       Int          // Ej: 5 billetes
+  currency       String       // "USD", "VES"
+  type           CountType    // INICIAL o FINAL
+}
+
+enum CountType {
+  OPENING
+  CLOSING
+}
+
+// --------------------------------------------------------
+// EXTRAS
+// --------------------------------------------------------
 generator erd {
   provider = "prisma-erd-generator"
-  output   = "../ERD.svg"  // Guardará la imagen en la carpeta principal
+  output   = "../ERD.svg"
 }
