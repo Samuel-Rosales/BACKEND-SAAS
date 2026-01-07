@@ -63,6 +63,31 @@ model Business {
   purchases      Purchase[]
   stockMovements StockMovement[]
   cashRegisters  CashRegister[]
+  exchangeRates ExchangeRate[]
+}
+
+model ExchangeRate {
+  id          Int      @id @default(autoincrement())
+  businessId  Int
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  currency    String   // "VES", "EUR", "COP"
+  rate        Decimal  @db.Decimal(10, 4) // Ej: 50.50
+  
+  // Fecha exacta en que esta tasa entró en vigencia
+  createdAt   DateTime @default(now()) 
+  
+  // Quién creó esta tasa (Auditoría)
+  createdById Int?     // Opcional, si quieres saber qué empleado la montó
+  
+  // RELACIONES: Todas las tablas que dependen de esta tasa
+  sales       Sale[]
+  salePayments    SalePayment[]
+  purchasePayments PurchasePayment[]
+  purchases   Purchase[]
+  cashCounts  CashCount[]
+
+  @@index([businessId, createdAt]) // Para buscar rápido la tasa de un día específico
 }
 
 model BusinessMember {
@@ -174,13 +199,14 @@ model Sale {
   client       Client   @relation(fields: [clientId], references: [id])
   
   totalAmount  Decimal  @db.Decimal(12, 2)
-  exchangeRate Decimal  @db.Decimal(10, 4)
+  exchangeRateId Int
+  exchangeRate   ExchangeRate @relation(fields: [exchangeRateId], references: [id])
   
   status       SaleStatus @default(COMPLETED)
   createdAt    DateTime @default(now())
   
   items        SaleItem[]
-  payments     Payment[]
+  salePayments     SalePayment[]
 }
 
 enum SaleStatus {
@@ -201,7 +227,7 @@ model SaleItem {
   subTotal  Decimal @db.Decimal(10, 2)
 }
 
-model Payment {
+model SalePayment {
   id           Int      @id @default(autoincrement())
   saleId       Int
   sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
@@ -210,10 +236,12 @@ model Payment {
   
   amount       Decimal  @db.Decimal(12, 2)
   currency     String   
-  exchangeRate Decimal  @db.Decimal(10, 4)
+  exchangeRateId Int
+  exchangeRate   ExchangeRate @relation(fields: [exchangeRateId], references: [id])
   
   reference    String   @default("") // Sin nulos
   date         DateTime @default(now())
+	@@map("Payment")
 }
 
 enum PaymentMethod {
@@ -269,9 +297,14 @@ model Purchase {
   member     BusinessMember @relation(fields: [memberId], references: [id])
   
   totalCost  Decimal  @db.Decimal(12, 2)
+
+  exchangeRateId Int
+  exchangeRate   ExchangeRate @relation(fields: [exchangeRateId], references: [id])
+  
   date       DateTime @default(now())
   
   items      PurchaseItem[]
+  payments   PurchasePayment[]
 }
 
 model PurchaseItem {
@@ -283,6 +316,27 @@ model PurchaseItem {
   
   quantity   Int
   unitCost   Decimal  @db.Decimal(10, 2)
+}
+
+model PurchasePayment {
+  id             Int      @id @default(autoincrement())
+  purchaseId     Int
+  purchase       Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  
+  // ¿Cómo pagaste?
+  method         PaymentMethod // Usamos el mismo Enum que en ventas (CASH, ZELLE, etc)
+  
+  // ¿Cuánto dinero salió de tu bolsillo?
+  amount         Decimal  @db.Decimal(12, 2) 
+  currency       String   // "USD", "VES"
+  
+  // IMPORTANTE: Tasa del momento del PAGO.
+  // Si pagas una deuda 15 días después, la tasa será distinta a la de la factura.
+  exchangeRateId Int
+  exchangeRate   ExchangeRate @relation(fields: [exchangeRateId], references: [id])
+  
+  reference      String   @default("") // Nro de confirmación bancaria
+  paymentDate    DateTime @default(now())
 }
 
 // --------------------------------------------------------
@@ -359,6 +413,10 @@ model CashCount {
   
   denomination   Decimal      @db.Decimal(10, 2) // Ej: 10.00, 20.00, 100.00
   quantity       Int          // Ej: 5 billetes
+
+  exchangeRateId Int
+  exchangeRate   ExchangeRate @relation(fields: [exchangeRateId], references: [id])
+  
   currency       String       // "USD", "VES"
   type           CountType    // INICIAL o FINAL
 }
