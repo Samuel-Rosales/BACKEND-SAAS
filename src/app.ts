@@ -1,17 +1,7 @@
-import express from 'express';
 import dotenv from 'dotenv';
+dotenv.config(); 
 
-dotenv.config();
+import { Server } from './server/server.server';
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json());
-
-app.get('/', (req, res) => {
-  res.send('Servidor SEDGE funcionando 🚀');
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
-});
+const server = new Server();
+server.listen();

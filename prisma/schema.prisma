@@ -14,10 +14,10 @@ datasource db {
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
-  ci        String?  @unique // Cédula de identidad
+  ci        String  @unique // Cédula de identidad
   password  String   // Hash de la contraseña (nunca texto plano)
   name      String
-  phone     String?
+  phone     String
   
   // Relaciones
   memberships BusinessMember[] // Un usuario puede trabajar en varios negocios
