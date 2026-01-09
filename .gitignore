@@ -1,9 +1,11 @@
 
 /src/generated/prisma
 node_modules
-
 .env
 .DS_Store
 npm-debug.log
 dist
 ERD.svg
+.vscode
+logs
+
