@@ -227,7 +227,7 @@ model Client {
   id         Int     @id @default(autoincrement())
   businessId Int
   name       String
-  ci         String? // Cédula / RIF / DNI
+  ci         String // Cédula / RIF / DNI
   phone      String?
   email      String?
   address    String?
