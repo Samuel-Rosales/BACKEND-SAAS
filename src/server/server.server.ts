@@ -1,5 +1,4 @@
 import express from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
 import { stream, connectDB } from '../configs/index.config';
@@ -47,7 +46,7 @@ export class Server {
     
     async listen() {
         this.app.listen(this.apiPort, () => {
-        console.log(`Server running at http://localhost:${this.apiPort}`);
+        console.log(`🚀 Server running at ${this.apiUrl}`);
         // Log opcional para ver las rutas activas al iniciar
         console.log(`Endpoints disponibles en ${this.prefix}/...`);
         })
