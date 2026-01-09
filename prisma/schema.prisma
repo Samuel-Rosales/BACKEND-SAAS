@@ -81,6 +81,7 @@ model Business {
   depots         Depot[]
   stockMovements StockMovement[]
   cashRegisters  CashRegister[]
+  paymentMethods PaymentMethod[]
 }
 
 model Subscription {
@@ -292,7 +293,8 @@ model SaleItemLot {
 model SalePayment {
   id             Int      @id @default(autoincrement())
   saleId         Int
-  method         PaymentMethod // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
+  paymentMethodId Int
+  paymentMethod  PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
   amount         Decimal  @db.Decimal(15, 2)
   currency       String   // Moneda del pago (ej: USD)
   exchangeRateId Int      // Si pagaron en Bs, qué tasa se usó
@@ -365,7 +367,8 @@ model ItemLot {
 model PurchasePayment {
   id             Int      @id @default(autoincrement())
   purchaseId     Int
-  method         PaymentMethod
+  paymentMethodId         Int
+  paymentMethod  PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
   amount         Decimal  @db.Decimal(15, 2)
   currency       String
   exchangeRateId Int
@@ -406,6 +409,22 @@ model CashCount {
 
   cashRegister CashRegister  @relation(fields: [cashRegisterId], references: [id])
   exchangeRate ExchangeRate @relation(fields: [exchangeRateId], references: [id])
+}
+
+model PaymentMethod {
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  name       String   // Ej: "Zelle Banesco", "Caja Chica", "Punto de Venta"
+  type       PaymentType // El tipo "interno" para que el sistema sepa cómo comportarse
+  isActive   Boolean  @default(true) // Para ocultar cuentas viejas sin borrar historial
+
+  business   Business @relation(fields: [businessId], references: [id])
+  
+  // Relaciones con los pagos realizados
+  salePayments     SalePayment[]
+  purchasePayments PurchasePayment[]
+
+  @@unique([businessId, name]) // Evita que creen dos veces "Zelle Banesco"
 }
 
 // ==========================================
@@ -453,12 +472,12 @@ enum PurchaseStatus {
   CANCELLED
 }
 
-enum PaymentMethod {
+enum PaymentType {
   CASH
   DEBIT_CARD
   CREDIT_CARD
   TRANSFER
-  MOBILE_PAYMENT // Pago Móvil
+  MOBILE_PAYMENT
   ZELLE
   OTHER
 }
