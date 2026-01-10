@@ -81,7 +81,6 @@ model Business {
   depots         Depot[]
   stockMovements StockMovement[]
   cashRegisters  CashRegister[]
-  paymentMethods PaymentMethod[]
 }
 
 model Subscription {
@@ -413,18 +412,16 @@ model CashCount {
 
 model PaymentMethod {
   id         Int      @id @default(autoincrement())
-  businessId Int
   name       String   // Ej: "Zelle Banesco", "Caja Chica", "Punto de Venta"
   type       PaymentType // El tipo "interno" para que el sistema sepa cómo comportarse
   isActive   Boolean  @default(true) // Para ocultar cuentas viejas sin borrar historial
 
-  business   Business @relation(fields: [businessId], references: [id])
   
   // Relaciones con los pagos realizados
   salePayments     SalePayment[]
   purchasePayments PurchasePayment[]
 
-  @@unique([businessId, name]) // Evita que creen dos veces "Zelle Banesco"
+  @@unique([name]) // Evita que creen dos veces "Zelle Banesco"
 }
 
 // ==========================================
