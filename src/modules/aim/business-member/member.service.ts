@@ -6,12 +6,13 @@ export class MemberService {
 
     // "BUSCAR O CREAR" Y VINCULAR
     async addMember(businessId: number, data: AddMemberInterface) {
-        try {
 
-            const response = await prisma.$transaction(async (tx) => {
-                
+        return await prisma.$transaction(async (tx) => {
+
+            try {
+            
                 // 1. Verificar si el usuario YA existe globalmente (por Email o Cédula)
-                const user = await tx.user.findUnique({
+                let user = await tx.user.findUnique({
                     where: {
                         ci: data.ci,
                     },
@@ -23,62 +24,252 @@ export class MemberService {
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash(data.ci, salt); // Password = Cédula
 
-                    const newUser = await tx.user.create({
+                    user = await tx.user.create({
                         data: {
                             ci: data.ci,
                             name: data.name,
                             password: hashedPassword // Se guarda encriptada
                         }
                     });
-                } else {
-                    // Opcional: Validar consistencia.
-                    // Si encontraste el email, pero la cédula es distinta a la que enviaron, es un error.
-                    if (user.ci !== data.ci && user.email === data.email) {
-                        throw new Error('El correo ya existe pero pertenece a otra cédula.');
+
+                    if (!user) {
+                        return {
+                            message: `Error al crear el usuario`,
+                            status: 400,
+                            data: null
+                        };
                     }
-                    if (user.ci === data.ci && user.email !== data.email) {
-                        throw new Error('La cédula ya existe pero tiene otro correo asociado.');
-                    }
+
                 }
 
-            // 3. Ahora que tenemos al usuario (nuevo o viejo), verificamos si ya trabaja aquí
-            const existingMember = await tx.businessMember.findFirst({
-                where: {
-                businessId: businessId,
-                userId: user.id
+                // 3. Ahora que tenemos al usuario (nuevo o viejo), verificamos si ya trabaja aquí
+                const existingMember = await tx.businessMember.findFirst({
+                    where: {
+                    businessId: businessId,
+                    userId: user.id
+                    }
+                });
+
+                if (existingMember) {
+                    return {
+                        message: `El usuario ${user.name} ya es parte de tu equipo.`,
+                        status: 400,
+                        data: null
+                    };
                 }
+
+                // 4. Crear la vinculación (BusinessMember)
+                const newMember = await tx.businessMember.create({
+                    data: {
+                        businessId: businessId,
+                        userId: user.id,
+                        roleId: data.roleId,
+                        isActive: true
+                    },
+                    include: {
+                        user: { 
+                            select: { 
+                                id: true, 
+                                name: true, 
+                                ci: true 
+                            } 
+                        },
+                        role: true
+                    }
+                });
+
+                if (!newMember) {
+                    return {
+                        message: `Error al crear el miembro`,
+                        status: 400,
+                        data: null
+                    };
+                }
+
+                return {
+                    data: newMember,
+                    message: `Miembro creado exitosamente`,
+                    status: 201,
+                };
+
+            } catch (error) {
+
+                console.error("Error al crear el miembro:", error);
+
+                return {
+                    message: `Por favor contacte al administrador`,
+                    status: 500,
+                    data: null
+                };
+            }
+        });
+    }
+
+    // 2. LISTAR EMPLEADOS (Solo de mi empresa)
+    async findAll(businessId: number) {
+        try {
+
+            const members = await prisma.businessMember.findMany({
+                where: { businessId: businessId }, // <--- FILTRO CRÍTICO
+                include: {
+                    user: { 
+                        select: { id: true, name: true, ci: true } 
+                    },
+                    role: { select: { code: true, name: true } }
+                },
+                orderBy: { joinedAt: 'desc' }
             });
 
-            if (existingMember) {
-                throw new Error(`El usuario ${user.name} ya es parte de tu equipo.`);
+            if (members.length === 0) {
+                return {
+                    message: `No hay miembros registrados`,
+                    status: 404,
+                    data: null
+                };
             }
 
-            // 4. Crear la vinculación (BusinessMember)
-            const newMember = await tx.businessMember.create({
-                data: {
-                businessId: businessId,
-                userId: user.id,
-                roleId: data.roleId,
-                isActive: true
+            return {
+                message: `Miembros obtenidos exitosamente`,
+                status: 200,
+                data: members
+            };
+
+        } catch (error) {
+
+            console.error("Error al obtener los miembros:", error);
+
+            return {
+                message: `Por favor contacte al administrador`,
+                status: 500,
+                data: null
+            };
+        }
+    }
+
+    // 3. OBTENER UN EMPLEADO
+    async findOne(businessId: number, memberId: number) {
+        try {
+
+            const member = await prisma.businessMember.findFirst({
+                where: { 
+                    id: memberId,
+                    businessId: businessId // <--- Seguridad: Que pertenezca a mi empresa
                 },
                 include: {
-                user: { select: { id: true, name: true, email: true, ci: true } },
-                role: true
+                    user: { select: { id: true, name: true, ci: true } },
+                    role: { select: { code: true, name: true } }
                 }
             });
 
+            if (!member) {
+                return {
+                    message: `Empleado no encontrado.`,
+                    status: 404,
+                    data: null
+                };
+            }
+
             return {
-                ...newMember,
-                // Mensaje informativo para el frontend
-                infoMessage: user.createdAt > new Date(Date.now() - 5000) 
-                    ? 'Usuario creado exitosamente. Su contraseña es su número de Cédula.' 
-                    : 'Usuario existente agregado a la empresa.'
+                message: `Empleado obtenido exitosamente`,
+                status: 200,
+                data: member
             };
-            });
+
         } catch (error) {
-            console.error(error);
+            console.error("Error al obtener el empleado:", error);
+
             return {
-                message: `Por favor contacte al administrador`,
+                message: `Error al obtener el empleado`,
+                status: 500,
+                data: null
+            };
+        }
+    }
+    
+    // 4. ACTUALIZAR (Cambiar rol o Desactivar)
+    async update(businessId: number, memberId: number, data: UpdateMemberInterface) {
+
+            const { data: memberData, message, status } = await this.findOne(businessId, memberId);
+
+            if (!memberData) {
+                return {
+                    message: message,
+                    status: status,
+                    data: null
+                };
+            }
+
+        try {
+
+            const updatedMember = await prisma.businessMember.update({
+                where: { id: memberId },
+                data: data,
+                include: { role: true }
+            });
+
+            if (!updatedMember) {
+                return {
+                    message: `No se pudo actualizar el miembro`,
+                    status: 400,
+                    data: null
+                };
+            }
+
+            return {
+                message: `Miembro actualizado exitosamente`,
+                status: 200,
+                data: updatedMember
+            };
+
+        } catch (error) {
+
+            console.error("Error al actualizar el miembro:", error);
+
+            return {
+                message: `Error al actualizar el miembro`,
+                status: 500,
+                data: null
+            };
+        }
+    }
+
+    // 5. ELIMINAR (Quitar acceso totalmente)
+    async remove(businessId: number, memberId: number) {
+
+        const { data, message, status } = await this.findOne(businessId, memberId);
+
+        if (!data) {
+            return {
+                message: message,
+                status: status,
+                data: null
+            };
+        }
+        
+        try {
+            const deletedMember = await prisma.businessMember.delete({
+                where: { id: memberId }
+            });
+
+            if (!deletedMember) {
+                return {
+                    message: `No se pudo eliminar el miembro`,
+                    status: 400,
+                    data: null
+                };
+            }
+
+            return {
+                message: `Miembro eliminado exitosamente`,
+                status: 200,
+                data: deletedMember
+            };
+
+        } catch (error) {
+            console.error("Error al eliminar el miembro:", error);
+
+            return {
+                message: `Error al eliminar el miembro`,
                 status: 500,
                 data: null
             };
