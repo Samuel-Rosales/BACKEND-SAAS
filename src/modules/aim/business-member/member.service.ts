@@ -10,6 +10,18 @@ export class MemberService {
         return await prisma.$transaction(async (tx) => {
 
             try {
+
+                const business = await tx.business.findUnique({
+                    where: { id: businessId }
+                });
+        
+                if (!business) {
+                    return {
+                        message: `Negocio no encontrado`,
+                        status: 404,
+                        data: null
+                    };
+                }
             
                 // 1. Verificar si el usuario YA existe globalmente (por Email o Cédula)
                 let user = await tx.user.findUnique({
@@ -189,36 +201,34 @@ export class MemberService {
     // 4. ACTUALIZAR (Cambiar rol o Desactivar)
     async update(businessId: number, memberId: number, data: UpdateMemberInterface) {
 
-            const { data: memberData, message, status } = await this.findOne(businessId, memberId);
-
-            if (!memberData) {
-                return {
-                    message: message,
-                    status: status,
-                    data: null
-                };
-            }
-
         try {
 
-            const updatedMember = await prisma.businessMember.update({
-                where: { id: memberId },
-                data: data,
-                include: { role: true }
+            const updatedMember = await prisma.businessMember.updateMany({
+                where: { 
+                    id: memberId,
+                    businessId: businessId // Seguridad: solo actualiza si pertenece al negocio
+                },
+                data: data
             });
-
-            if (!updatedMember) {
+    
+            if (updatedMember.count === 0) {
                 return {
-                    message: `No se pudo actualizar el miembro`,
-                    status: 400,
+                    message: `Empleado no encontrado o no pertenece a este negocio`,
+                    status: 404,
                     data: null
                 };
             }
-
+    
+            // Luego hacer un findUnique para retornar los datos completos
+            const member = await prisma.businessMember.findUnique({
+                where: { id: memberId },
+                include: { role: true, user: true }
+            });
+    
             return {
                 message: `Miembro actualizado exitosamente`,
                 status: 200,
-                data: updatedMember
+                data: member
             };
 
         } catch (error) {
