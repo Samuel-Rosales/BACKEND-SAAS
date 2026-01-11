@@ -4,6 +4,7 @@ import morgan from 'morgan';
 import { stream, connectDB } from '../configs';
 
 import { UserRoute } from '../modules/auth/user';
+import { RoleRoute } from '../modules/auth/role';
 
 export class Server {
 
@@ -21,6 +22,7 @@ export class Server {
         this.paths = {
             users: `${this.prefix}/user`,
             products: `${this.prefix}/product`,
+            roles: `${this.prefix}/role`,
         };
 
         this.dbConnection();
@@ -40,6 +42,7 @@ export class Server {
 
     private routes() {
         this.app.use(this.paths.users, UserRoute);
+        this.app.use(this.paths.roles, RoleRoute);
     }
 
     async dbConnection() {

@@ -65,7 +65,7 @@ model Business {
   exchangeRate   Decimal  @default(1.0) @db.Decimal(10, 4) // Tasa base global actual
   address        String?
   logoUrl        String?
-  category        String?  // Tipo de negocio (Restaurante, Retail, Servicios)
+  category       String?  // Tipo de negocio (Restaurante, Retail, Servicios)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
