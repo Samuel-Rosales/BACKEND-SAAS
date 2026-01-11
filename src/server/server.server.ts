@@ -3,7 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { stream, connectDB } from '../configs';
 
-import { UserRoute, RoleRoute, AuthRoute } from '../modules/aim';
+import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute } from '../modules/aim';
 
 export class Server {
 
@@ -22,6 +22,7 @@ export class Server {
             users: `${this.prefix}/aim/user`,
             roles: `${this.prefix}/aim/role`,
             auth: `${this.prefix}/aim/auth`,
+            businessMembers: `${this.prefix}/aim/business-member`,
         };
 
         this.dbConnection();
@@ -43,6 +44,7 @@ export class Server {
         this.app.use(this.paths.users, UserRoute);
         this.app.use(this.paths.roles, RoleRoute);
         this.app.use(this.paths.auth, AuthRoute);
+        this.app.use(this.paths.businessMembers, BusinessMemberRoute);
     }
 
     async dbConnection() {
