@@ -4,6 +4,7 @@ import morgan from 'morgan';
 import { stream, connectDB } from '../configs';
 
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute } from '../modules/aim';
+import { BusinessCategoryRoute } from '../modules/platform';
 
 export class Server {
 
@@ -23,6 +24,7 @@ export class Server {
             roles: `${this.prefix}/aim/role`,
             auth: `${this.prefix}/aim/auth`,
             businessMembers: `${this.prefix}/aim/business-member`,
+            businessCategories: `${this.prefix}/platform/business-category`,
         };
 
         this.dbConnection();
@@ -45,6 +47,7 @@ export class Server {
         this.app.use(this.paths.roles, RoleRoute);
         this.app.use(this.paths.auth, AuthRoute);
         this.app.use(this.paths.businessMembers, BusinessMemberRoute);
+        this.app.use(this.paths.businessCategories, BusinessCategoryRoute);
     }
 
     async dbConnection() {

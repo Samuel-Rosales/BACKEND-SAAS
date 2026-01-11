@@ -75,7 +75,6 @@ model BusinessMember {
 model Business {
   id             Int      @id @default(autoincrement())
   name           String
-  currencySymbol String   @default("$") // Símbolo visual ($, Bs)
   exchangeRate   Decimal  @default(1.0) @db.Decimal(10, 4) // Tasa base global actual
 
   businessCategoryId Int
