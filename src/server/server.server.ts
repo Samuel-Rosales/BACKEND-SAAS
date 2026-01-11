@@ -3,8 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { stream, connectDB } from '../configs';
 
-import { UserRoute } from '../modules/auth/user';
-import { RoleRoute } from '../modules/auth/role';
+import { UserRoute, RoleRoute, AuthRoute } from '../modules/aim';
 
 export class Server {
 
@@ -20,9 +19,9 @@ export class Server {
         this.apiUrl = process.env.API_URL || `http://localhost:${this.apiPort}`;
         this.prefix = '/api/v1';
         this.paths = {
-            users: `${this.prefix}/user`,
-            products: `${this.prefix}/product`,
-            roles: `${this.prefix}/role`,
+            users: `${this.prefix}/aim/user`,
+            roles: `${this.prefix}/aim/role`,
+            auth: `${this.prefix}/aim/auth`,
         };
 
         this.dbConnection();
@@ -43,6 +42,7 @@ export class Server {
     private routes() {
         this.app.use(this.paths.users, UserRoute);
         this.app.use(this.paths.roles, RoleRoute);
+        this.app.use(this.paths.auth, AuthRoute);
     }
 
     async dbConnection() {
