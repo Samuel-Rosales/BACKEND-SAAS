@@ -11,18 +11,6 @@ export class UserValidator {
             .trim() // Sanitización: quita espacios al inicio/final
             .notEmpty().withMessage('El nombre es obligatorio')
             .isString().withMessage('El nombre debe ser texto'),
-
-        // 2. EMAIL
-        body('email')
-            .trim()
-            .notEmpty().withMessage('El email es obligatorio')
-            .isEmail().withMessage('Formato de email inválido')
-            .custom(async (email) => {
-                const exist = await prisma.user.findUnique({ where: { email } });
-                if (exist) throw new Error(`El email ${email} ya está en uso.`);
-                return true;
-            }),
-
         // 3. CONTRASEÑA
         body('password')
             .notEmpty().withMessage('La contraseña es obligatoria')
@@ -38,13 +26,6 @@ export class UserValidator {
                 if (exist) throw new Error(`La cédula ${ci} ya está registrada.`);
                 return true;
             }),
-
-        // 5. TELÉFONO (Opcional pero validado)
-        body('phone')
-            .optional()
-            .trim()
-            .isMobilePhone('any').withMessage('El formato del teléfono no es válido'),
-
         // 6. ROL (FK Check) - Reemplazando tu 'validateRoleIdExists' antiguo
         // Asumiendo que al crear usuario le pasas un roleId para asignarlo
         /*body('roleId')
@@ -62,20 +43,6 @@ export class UserValidator {
         param('id').isInt().toInt().withMessage('El ID debe ser un número entero'),
 
         body('name').optional().trim().isString().isLength({ min: 3 }),
-        
-        body('email')
-            .optional()
-            .trim()
-            .isEmail()
-            .normalizeEmail()
-            .custom(async (email, { req }) => {
-                const userId = Number(req.params?.id);
-                const exist = await prisma.user.findFirst({
-                    where: { email: email, NOT: { id: userId } }
-                });
-                if (exist) throw new Error(`El email ya está en uso por otro usuario.`);
-                return true;
-            }),
 
         body('ci')
             .optional()

@@ -11,9 +11,7 @@ export class UserService {
                 select: {
                     id: true,
                     name: true,
-                    email: true,
                     ci: true,
-                    phone: true
                 }
             });
 
@@ -53,7 +51,7 @@ export class UserService {
         try {
             
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(data.password, salt);
+            const hashedPassword: string = await bcrypt.hash(data.password, salt);
 
             const user = await prisma.user.create({
                 data: {
@@ -63,9 +61,7 @@ export class UserService {
                 select: {
                     id: true,
                     name: true,
-                    email: true,
                     ci: true,
-                    phone: true,
                 },
             });
 
@@ -101,9 +97,8 @@ export class UserService {
                 select: {
                     id: true,
                     name: true,
-                    email: true,
-                    phone: true,
-                    memberships: true
+                    memberships: true,
+                    contacts: true,
                 }
             });
 
@@ -144,7 +139,7 @@ export class UserService {
                 select: { 
                     id: true, 
                     name: true, 
-                    email: true 
+                    contacts: true,
                 }
             });
 
