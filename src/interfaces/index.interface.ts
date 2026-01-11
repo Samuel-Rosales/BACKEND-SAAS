@@ -1,1 +1,0 @@
-export * from '../modules/auth/user/interfaces/create-user.interface';

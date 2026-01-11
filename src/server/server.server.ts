@@ -3,6 +3,8 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { stream, connectDB } from '../configs';
 
+import { UserRoute } from '../modules/auth/user';
+
 export class Server {
 
     public app: express.Application;
@@ -37,7 +39,7 @@ export class Server {
     }
 
     private routes() {
-
+        this.app.use(this.paths.users, UserRoute);
     }
 
     async dbConnection() {

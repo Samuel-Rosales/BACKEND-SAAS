@@ -44,4 +44,6 @@ router.delete(
   controller.remove
 );
 
+export const UserRoute = router;
+
 export default router;
