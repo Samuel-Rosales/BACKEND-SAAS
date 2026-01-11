@@ -10,15 +10,13 @@ export class UserValidator {
         body('name')
             .trim() // Sanitización: quita espacios al inicio/final
             .notEmpty().withMessage('El nombre es obligatorio')
-            .isString().withMessage('El nombre debe ser texto')
-            .isLength({ min: 3, max: 100 }).withMessage('El nombre debe tener entre 3 y 100 caracteres'),
+            .isString().withMessage('El nombre debe ser texto'),
 
         // 2. EMAIL
         body('email')
             .trim()
             .notEmpty().withMessage('El email es obligatorio')
             .isEmail().withMessage('Formato de email inválido')
-            .normalizeEmail() // Sanitización: convierte a minúsculas, quita puntos en gmail, etc.
             .custom(async (email) => {
                 const exist = await prisma.user.findUnique({ where: { email } });
                 if (exist) throw new Error(`El email ${email} ya está en uso.`);
@@ -49,7 +47,7 @@ export class UserValidator {
 
         // 6. ROL (FK Check) - Reemplazando tu 'validateRoleIdExists' antiguo
         // Asumiendo que al crear usuario le pasas un roleId para asignarlo
-        body('roleId')
+        /*body('roleId')
             .notEmpty().withMessage('El ID del rol es obligatorio')
             .isInt().withMessage('El ID del rol debe ser un número entero')
             .toInt() // Sanitización: convierte "1" (string) a 1 (int) para la DB
@@ -57,7 +55,7 @@ export class UserValidator {
                 const role = await prisma.role.findUnique({ where: { id: roleId } });
                 if (!role) throw new Error(`El rol con ID ${roleId} no existe en el sistema`);
                 return true;
-            })
+            })*/
     ];
 
     public validateUpdate: ValidationChain[] = [
