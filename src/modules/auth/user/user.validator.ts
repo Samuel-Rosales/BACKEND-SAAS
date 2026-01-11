@@ -6,79 +6,89 @@ export class UserValidator {
   
     // VALIDACIONES PARA CREAR USUARIO
     public validateCreate: ValidationChain[] = [
+        // 1. NOMBRE
         body('name')
+            .trim() // Sanitización: quita espacios al inicio/final
             .notEmpty().withMessage('El nombre es obligatorio')
-            .isString().withMessage('El nombre debe ser texto'),
+            .isString().withMessage('El nombre debe ser texto')
+            .isLength({ min: 3, max: 100 }).withMessage('El nombre debe tener entre 3 y 100 caracteres'),
 
+        // 2. EMAIL
         body('email')
+            .trim()
             .notEmpty().withMessage('El email es obligatorio')
             .isEmail().withMessage('Formato de email inválido')
+            .normalizeEmail() // Sanitización: convierte a minúsculas, quita puntos en gmail, etc.
             .custom(async (email) => {
-                // Verificar si el email ya existe en la BD
                 const exist = await prisma.user.findUnique({ where: { email } });
-                if (exist) {
-                    throw new Error(`El email ${email} ya está en uso.`);
-                }
+                if (exist) throw new Error(`El email ${email} ya está en uso.`);
                 return true;
             }),
 
+        // 3. CONTRASEÑA
         body('password')
             .notEmpty().withMessage('La contraseña es obligatoria')
             .isLength({ min: 6 }).withMessage('La contraseña debe tener al menos 6 caracteres'),
 
-        // Validación opcional de CI (Cédula)
+        // 4. CÉDULA (CI) - Integrando tu lógica Regex antigua aquí
         body('ci')
+            .trim()
             .notEmpty().withMessage('La cédula es obligatoria')
-            .isString()
+            .matches(/^\d{6,10}$/).withMessage('La cédula debe contener solo números (entre 6 y 10 dígitos)')
             .custom(async (ci) => {
                 const exist = await prisma.user.findUnique({ where: { ci } });
-                if (exist) {
-                    throw new Error(`La cédula ${ci} ya está registrada.`);
-                }
+                if (exist) throw new Error(`La cédula ${ci} ya está registrada.`);
                 return true;
             }),
-        
-        body('phone').optional().isString(),
+
+        // 5. TELÉFONO (Opcional pero validado)
+        body('phone')
+            .optional()
+            .trim()
+            .isMobilePhone('any').withMessage('El formato del teléfono no es válido'),
+
+        // 6. ROL (FK Check) - Reemplazando tu 'validateRoleIdExists' antiguo
+        // Asumiendo que al crear usuario le pasas un roleId para asignarlo
+        body('roleId')
+            .notEmpty().withMessage('El ID del rol es obligatorio')
+            .isInt().withMessage('El ID del rol debe ser un número entero')
+            .toInt() // Sanitización: convierte "1" (string) a 1 (int) para la DB
+            .custom(async (roleId) => {
+                const role = await prisma.role.findUnique({ where: { id: roleId } });
+                if (!role) throw new Error(`El rol con ID ${roleId} no existe en el sistema`);
+                return true;
+            })
     ];
 
-    // VALIDACIONES PARA ACTUALIZAR (Manejo de ID excluyente)
     public validateUpdate: ValidationChain[] = [
-        param('id').isInt().withMessage('El ID debe ser un número entero'),
+        param('id').isInt().toInt().withMessage('El ID debe ser un número entero'),
 
-        body('name').optional().isString(),
+        body('name').optional().trim().isString().isLength({ min: 3 }),
         
         body('email')
             .optional()
+            .trim()
             .isEmail()
+            .normalizeEmail()
             .custom(async (email, { req }) => {
                 const userId = Number(req.params?.id);
-                // Buscamos si existe OTRO usuario con ese email (excluyendo al actual)
                 const exist = await prisma.user.findFirst({
-                    where: { 
-                        email: email,
-                        NOT: { id: userId } // ¡La clave para editar!
-                    }
+                    where: { email: email, NOT: { id: userId } }
                 });
-                if (exist) {
-                    throw new Error(`El email ${email} ya está siendo usado por otro usuario.`);
-                }
+                if (exist) throw new Error(`El email ya está en uso por otro usuario.`);
                 return true;
             }),
 
         body('ci')
             .optional()
-            .isString()
+            .trim()
+            .matches(/^\d{6,10}$/).withMessage('Formato de cédula inválido')
             .custom(async (ci, { req }) => {
                 const userId = Number(req.params?.id);
                 const exist = await prisma.user.findFirst({
-                    where: { 
-                        ci: ci,
-                        NOT: { id: userId }
-                    }
+                    where: { ci: ci, NOT: { id: userId } }
                 });
-                if (exist) {
-                    throw new Error(`La cédula ${ci} ya está registrada en otro usuario.`);
-                }
+                if (exist) throw new Error(`La cédula ya está registrada en otro usuario.`);
                 return true;
             }),
     ];
