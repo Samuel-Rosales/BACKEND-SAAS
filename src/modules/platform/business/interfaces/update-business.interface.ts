@@ -1,5 +1,5 @@
-import { CreateBusinessDto } from './create-business.interface';
+import { CreateBusinessInterface } from './create-business.interface';
 
-export interface UpdateBusinessDto extends Partial<CreateBusinessDto> {
+export interface UpdateBusinessInterface extends Partial<CreateBusinessInterface> {
   exchangeRate?: number; // Permitimos actualizar la tasa base aquí
 }

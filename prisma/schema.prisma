@@ -80,9 +80,8 @@ model Business {
   businessCategoryId Int
   businessCategory BusinessCategory @relation(fields: [businessCategoryId], references: [id])
 
-  address        String?
-  logoUrl        String?
-  category       String?  // Tipo de negocio (Restaurante, Retail, Servicios)
+  address        String
+  logoUrl        String?  // Logo del negocio
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

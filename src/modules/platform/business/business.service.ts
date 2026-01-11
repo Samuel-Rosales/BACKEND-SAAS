@@ -1,11 +1,11 @@
 import { prisma } from '@/configs';
-import { CreateBusinessDto, UpdateBusinessDto } from './interfaces';
+import { CreateBusinessInterface, UpdateBusinessInterface } from './interfaces';
 import { PlanType, SubStatus } from '@prisma/client'; // Importamos Enums de Prisma
 
 export class BusinessService {
 
   // 1. CREAR NEGOCIO + SUSCRIPCIÓN + MIEMBRO ADMIN
-  async create(userId: number, data: CreateBusinessDto) {
+  async create(userId: number, data: CreateBusinessInterface) {
     
     return await prisma.$transaction(async (tx) => {
       // A. Buscar el rol de ADMIN para asignarlo
