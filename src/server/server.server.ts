@@ -5,6 +5,7 @@ import { stream, connectDB } from '../configs';
 
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } from '../modules/aim';
 import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute } from '../modules/platform';
+import { CategoryRoute, DepotRoute, ProductRoute } from '../modules/inventory';
 
 export class Server {
 
@@ -28,6 +29,9 @@ export class Server {
             businessCategories: `${this.prefix}/platform/business-category`,
             subscriptions: `${this.prefix}/platform/subscription`,
             businesses: `${this.prefix}/platform/business`,
+            categories: `${this.prefix}/inventory/category`,
+            depots: `${this.prefix}/inventory/depot`,
+            products: `${this.prefix}/inventory/product`,
         };
 
         this.dbConnection();
@@ -54,6 +58,9 @@ export class Server {
         this.app.use(this.paths.businessCategories, BusinessCategoryRoute);
         this.app.use(this.paths.subscriptions, SubscriptionRoute);
         this.app.use(this.paths.businesses, BusinessRoute);
+        this.app.use(this.paths.categories, CategoryRoute);
+        this.app.use(this.paths.depots, DepotRoute);
+        this.app.use(this.paths.products, ProductRoute);
     }
 
     async dbConnection() {
