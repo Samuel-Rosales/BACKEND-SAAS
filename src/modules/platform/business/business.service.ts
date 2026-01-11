@@ -88,6 +88,22 @@ export class BusinessService {
         }
       });
 
+      if (!businesses) {
+        return {
+          message: 'No se encontraron negocios.',
+          status: 404,
+          data: null
+        };
+      }
+
+      if (businesses.length === 0) {
+        return {
+          message: 'No hay negocios registrados.',
+          status: 404,
+          data: null
+        };
+      }
+
       return {
         message: 'Negocios obtenidos exitosamente',
         status: 200,
