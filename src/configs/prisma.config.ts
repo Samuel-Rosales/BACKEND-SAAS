@@ -9,7 +9,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 
 // 3. Inicializamos Prisma con el adaptador
-const prisma = new PrismaClient({ adapter });
+export const prisma = new PrismaClient({ adapter });
 
 export const connectDB = async () => {
   try {
@@ -21,5 +21,3 @@ export const connectDB = async () => {
     process.exit(1);
   }
 };
-
-export default prisma;

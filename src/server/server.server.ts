@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import { stream, connectDB } from '../configs/index.config';
+import { stream, connectDB } from '../configs';
 
 export class Server {
 
