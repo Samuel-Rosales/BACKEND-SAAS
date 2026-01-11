@@ -13,15 +13,31 @@ datasource db {
 
 model User {
   id        Int      @id @default(autoincrement())
-  email     String   @unique
+  email     String?   @unique
   ci        String   @unique // Cédula de identidad
   password  String   // Hash de la contraseña (nunca texto plano)
   name      String
   phone     String
-  
+
+  contacts  UserContact?
+
   // Relaciones
   memberships BusinessMember[] // Un usuario puede trabajar en varios negocios
   createdProducts Product[]    // Auditoría: qué productos creó/editó
+}
+
+model UserContact {
+  id        Int      @id @default(autoincrement())
+
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id])
+
+  email     String   @unique
+  phone     String
+  address   String
+  city      String
+  state     String
+
 }
 
 model Role {
@@ -63,6 +79,10 @@ model Business {
   name           String
   currencySymbol String   @default("$") // Símbolo visual ($, Bs)
   exchangeRate   Decimal  @default(1.0) @db.Decimal(10, 4) // Tasa base global actual
+
+  businessCategoryId Int
+  businessCategory BusinessCategory @relation(fields: [businessCategoryId], references: [id])
+
   address        String?
   logoUrl        String?
   category       String?  // Tipo de negocio (Restaurante, Retail, Servicios)
@@ -82,6 +102,14 @@ model Business {
   depots         Depot[]
   stockMovements StockMovement[]
   cashRegisters  CashRegister[]
+}
+
+model BusinessCategory {
+  id         Int    @id @default(autoincrement())
+  name       String
+  description String
+
+  businesses Business[]
 }
 
 model Subscription {
