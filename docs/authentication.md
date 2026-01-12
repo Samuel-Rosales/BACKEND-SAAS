@@ -6,7 +6,7 @@ El sistema utiliza **JWT (JSON Web Tokens)** para la autenticación de usuarios.
 
 ## 📋 Flujo de Autenticación
 
-1. El usuario se autentica con email y contraseña
+1. El usuario se autentica con ci y contraseña
 2. El servidor genera un token JWT
 3. El cliente guarda el token
 4. El cliente incluye el token en cada petición posterior
@@ -21,7 +21,7 @@ POST /api/v1/aim/auth/login
 ### Request Body
 ```json
 {
-  "email": "usuario@ejemplo.com",
+  "ci": "123456789",
   "password": "contraseña123"
 }
 ```
@@ -31,7 +31,6 @@ POST /api/v1/aim/auth/login
 {
   "user": {
     "id": 1,
-    "email": "usuario@ejemplo.com",
     "name": "Juan Pérez",
     "ci": "12345678",
     "memberships": [
