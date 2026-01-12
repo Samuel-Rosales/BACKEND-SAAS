@@ -27,6 +27,12 @@ Documentación completa de la API REST del sistema SaaS.
 - [Stock por Lotes (Stock Lot)](./modules/inventory/stock-lot.md)
 - [Movimientos de Stock (Stock Movement)](./modules/inventory/stock-movement.md)
 
+### Módulo Finance
+- [Tasas de Cambio (Exchange Rate)](./modules/finance/exchange-rate.md)
+- [Métodos de Pago (Payment Method)](./modules/finance/payment-method.md)
+- [Caja Registradora (Cash Register)](./modules/finance/cash-register.md)
+- [Conteo de Caja (Cash Count)](./modules/finance/cash-count.md)
+
 ## 🔗 Base URL
 
 ```

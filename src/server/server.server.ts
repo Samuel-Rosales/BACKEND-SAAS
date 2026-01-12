@@ -6,6 +6,7 @@ import { stream, connectDB } from '../configs';
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } from '../modules/aim';
 import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute } from '../modules/platform';
 import { CategoryRoute, DepotRoute, ProductRoute, StockGeneralRoute, StockLotRoute, StockMovementRoute } from '../modules/inventory';
+import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute } from '../modules/finance';
 
 export class Server {
 
@@ -35,6 +36,10 @@ export class Server {
             stockGeneral: `${this.prefix}/inventory/stock-general`,
             stockLot: `${this.prefix}/inventory/stock-lot`,
             stockMovement: `${this.prefix}/inventory/stock-movement`,
+            exchangeRates: `${this.prefix}/finance/exchange-rate`,
+            paymentMethods: `${this.prefix}/finance/payment-method`,
+            cashRegisters: `${this.prefix}/finance/cash-register`,
+            cashCounts: `${this.prefix}/finance/cash-count`,
         };
 
         this.dbConnection();
@@ -67,6 +72,10 @@ export class Server {
         this.app.use(this.paths.stockGeneral, StockGeneralRoute);
         this.app.use(this.paths.stockLot, StockLotRoute);
         this.app.use(this.paths.stockMovement, StockMovementRoute);
+        this.app.use(this.paths.exchangeRates, ExchangeRateRoute);
+        this.app.use(this.paths.paymentMethods, PaymentMethodRoute);
+        this.app.use(this.paths.cashRegisters, CashRegisterRoute);
+        this.app.use(this.paths.cashCounts, CashCountRoute);
     }
 
     async dbConnection() {
