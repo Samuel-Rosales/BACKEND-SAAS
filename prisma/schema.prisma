@@ -143,7 +143,7 @@ model Depot {
   businessId Int
   name       String
   location   String
-  isActive   Boolean  @default(true) // Recomendado: Soft Delete
+  isActive   Boolean  @default(true)
 
   business Business @relation(fields: [businessId], references: [id])
   purchaseItems PurchaseItem[]

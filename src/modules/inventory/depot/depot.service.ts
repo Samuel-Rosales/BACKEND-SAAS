@@ -33,13 +33,6 @@ export class DepotService {
                             name: true
                         }
                     },
-                    _count: {
-                        select: {
-                            stockGenerals: true,
-                            stockLots: true,
-                            stockMovements: true
-                        }
-                    }
                 }
             });
 
@@ -75,12 +68,11 @@ export class DepotService {
         try {
 
             const depots = await prisma.depot.findMany({
-                where: { businessId },
+                where: { businessId, isActive: true },
                 orderBy: { id: 'asc' },
                 include: {
                     _count: {
                         select: {
-                            stockGenerals: true,
                             stockLots: true,
                             stockMovements: true
                         }
@@ -120,7 +112,8 @@ export class DepotService {
             const depot = await prisma.depot.findFirst({
                 where: { 
                     id,
-                    businessId // Seguridad: solo si pertenece al negocio
+                    businessId, // Seguridad: solo si pertenece al negocio
+                    isActive: true
                 },
                 include: {
                     business: {
@@ -131,7 +124,6 @@ export class DepotService {
                     },
                     _count: {
                         select: {
-                            stockGenerals: true,
                             stockLots: true,
                             stockMovements: true
                         }
@@ -172,7 +164,7 @@ export class DepotService {
 
             // Verificar que el depósito pertenece al negocio
             const existingDepot = await prisma.depot.findFirst({
-                where: { id, businessId }
+                where: { id, businessId, isActive: true }
             });
 
             if (!existingDepot) {
@@ -189,7 +181,6 @@ export class DepotService {
                 include: {
                     _count: {
                         select: {
-                            stockGenerals: true,
                             stockLots: true,
                             stockMovements: true
                         }
@@ -228,11 +219,10 @@ export class DepotService {
         try {
 
             const depot = await prisma.depot.findFirst({
-                where: { id, businessId },
+                where: { id, businessId, isActive: true },
                 include: {
                     _count: {
                         select: {
-                            stockGenerals: true,
                             stockLots: true,
                             stockMovements: true
                         }
@@ -249,7 +239,7 @@ export class DepotService {
             }
 
             // Verificar si hay registros asociados
-            const totalRecords = depot._count.stockGenerals + depot._count.stockLots + depot._count.stockMovements;
+            const totalRecords = depot._count.stockLots + depot._count.stockMovements;
             
             if (totalRecords > 0) {
                 return {
@@ -259,12 +249,13 @@ export class DepotService {
                 };
             }
 
-            await prisma.depot.delete({
-                where: { id }
+            await prisma.depot.update({
+                where: { id },
+                data: { isActive: false }
             });
 
             return {
-                message: 'Depósito eliminado exitosamente',
+                message: 'Depósito marcado como eliminado (soft delete)',
                 status: 200,
                 data: null
             };
