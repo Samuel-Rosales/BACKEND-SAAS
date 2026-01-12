@@ -5,7 +5,7 @@ import { stream, connectDB } from '../configs';
 
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } from '../modules/aim';
 import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute } from '../modules/platform';
-import { CategoryRoute, DepotRoute, ProductRoute, StockGeneralRoute, StockLotRoute, StockMovementRoute } from '../modules/inventory';
+import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute } from '../modules/inventory';
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute } from '../modules/finance';
 import { SupplierRoute } from '@/modules/procurement';
 
@@ -34,7 +34,6 @@ export class Server {
             categories: `${this.prefix}/inventory/category`,
             depots: `${this.prefix}/inventory/depot`,
             products: `${this.prefix}/inventory/product`,
-            stockGeneral: `${this.prefix}/inventory/stock-general`,
             stockLot: `${this.prefix}/inventory/stock-lot`,
             stockMovement: `${this.prefix}/inventory/stock-movement`,
             exchangeRates: `${this.prefix}/finance/exchange-rate`,
@@ -71,7 +70,6 @@ export class Server {
         this.app.use(this.paths.categories, CategoryRoute);
         this.app.use(this.paths.depots, DepotRoute);
         this.app.use(this.paths.products, ProductRoute);
-        this.app.use(this.paths.stockGeneral, StockGeneralRoute);
         this.app.use(this.paths.stockLot, StockLotRoute);
         this.app.use(this.paths.stockMovement, StockMovementRoute);
         this.app.use(this.paths.exchangeRates, ExchangeRateRoute);

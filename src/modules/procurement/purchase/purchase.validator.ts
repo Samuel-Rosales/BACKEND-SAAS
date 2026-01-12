@@ -10,7 +10,7 @@ export class PurchaseValidator {
       .isInt().withMessage('El ID del proveedor debe ser un número entero')
       .toInt()
       .custom(async (id, { req }) => {
-        const businessId = req.user?.businessId;
+        const businessId = req.user.businessId;
         if (!businessId) return true;
 
         const supplier = await prisma.supplier.findFirst({
