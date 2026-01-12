@@ -376,11 +376,11 @@ model PurchaseItem {
   product  Product  @relation(fields: [productId], references: [id])
 
   // Lotes generados por esta compra
-  generatedLots ItemLot[]
+  generatedLots PurchaseItemLot[]
 }
 
 // Histórico: Qué lotes entraron con esta compra específica
-model ItemLot {
+model PurchaseItemLot {
   id             Int       @id @default(autoincrement())
   purchaseItemId Int
   quantity       Int
