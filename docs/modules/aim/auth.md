@@ -14,14 +14,14 @@ Autentica un usuario y genera un token JWT.
 
 ```json
 {
-  "email": "usuario@ejemplo.com",
+  "ci": "123456789",
   "password": "contraseña123"
 }
 ```
 
 #### Validaciones
 
-- `email`: Obligatorio, debe ser un email válido
+- `ci`: Obligatorio, debe ser una cédula válida
 - `password`: Obligatorio, mínimo 6 caracteres
 
 #### Response (200 OK)
@@ -30,7 +30,6 @@ Autentica un usuario y genera un token JWT.
 {
   "user": {
     "id": 1,
-    "email": "usuario@ejemplo.com",
     "name": "Juan Pérez",
     "ci": "12345678",
     "memberships": [
@@ -68,7 +67,7 @@ Autentica un usuario y genera un token JWT.
 curl -X POST http://localhost:3000/api/v1/aim/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "usuario@ejemplo.com",
+    "ci": "123456789",
     "password": "contraseña123"
   }'
 ```
