@@ -12,7 +12,6 @@ declare global {
 }
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
-  // 1. Obtener el header "Authorization: Bearer <token>"
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -22,30 +21,40 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
   const token = authHeader.split(' ')[1];
 
   try {
-    // 2. Verificar el token
     const decoded: any = verifyToken(token);
-    
-    if (!decoded) {
-      return res.status(401).json({ message: 'Token inválido o expirado.' });
-    }
+    if (!decoded) return res.status(401).json({ message: 'Token inválido.' });
 
-    // 3. (Opcional pero recomendado) Verificar que el usuario siga existiendo en DB
     const user = await prisma.user.findUnique({ where: { id: decoded.id } });
-    
-    if (!user) {
-      return res.status(401).json({ message: 'Usuario no encontrado.' });
-    }
+    if (!user) return res.status(401).json({ message: 'Usuario no encontrado.' });
 
-    // 4. Inyectar usuario en la request
     req.user = user;
-    
-    // 5. IMPORTANTE: Manejo del businessId (Header "x-business-id")
-    // En un SaaS, el frontend debe enviar en qué empresa está trabajando el usuario
+
     const businessIdHeader = req.headers['x-business-id'];
-    
+
     if (businessIdHeader) {
-        // Inyectamos el businessId para que los controladores lo usen
-        req.user.businessId = Number(businessIdHeader);
+        const businessId = Number(businessIdHeader);
+
+        // Validamos que sea un número válido
+        if (isNaN(businessId)) {
+             return res.status(400).json({ message: 'Header x-business-id inválido' });
+        }
+
+        // VERIFICAMOS PERTENENCIA: ¿Este usuario trabaja en esta empresa?
+        const membership = await prisma.businessMember.findFirst({
+            where: {
+                userId: user.id,
+                businessId: businessId,
+                isActive: true // Solo si sigue activo
+            }
+        });
+
+        if (!membership) {
+            return res.status(403).json({ message: 'No tienes acceso a esta empresa.' });
+        }
+
+        // Si pasa, inyectamos el ID seguro y el ROL (muy útil para permisos después)
+        req.user.businessId = businessId;
+        req.user.roleId = membership.roleId; 
     }
 
     next();

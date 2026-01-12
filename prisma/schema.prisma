@@ -334,11 +334,13 @@ model SalePayment {
 // ==========================================
 
 model Supplier {
-  id         Int     @id @default(autoincrement())
-  businessId Int
-  name       String
-  contact    String?
-  phone      String?
+  id           Int     @id @default(autoincrement())
+  businessId   Int
+  nameCompany  String
+  contactName  String
+  address      String
+  phone        String
+  isActive     Boolean @default(true)
 
   business  Business   @relation(fields: [businessId], references: [id])
   purchases Purchase[]
