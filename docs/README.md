@@ -12,11 +12,20 @@ Documentación completa de la API REST del sistema SaaS.
 - [Usuarios (User)](./modules/aim/user.md)
 - [Roles (Role)](./modules/aim/role.md)
 - [Miembros de Negocio (Business Member)](./modules/aim/business-member.md)
+- [Contactos de Usuario (Contact)](./modules/aim/contact.md)
 
 ### Módulo Platform
 - [Negocios (Business)](./modules/platform/business.md)
 - [Categorías de Negocio (Business Category)](./modules/platform/business-category.md)
 - [Suscripciones (Subscription)](./modules/platform/subscription.md)
+
+### Módulo Inventory
+- [Categorías de Productos (Category)](./modules/inventory/category.md)
+- [Depósitos (Depot)](./modules/inventory/depot.md)
+- [Productos (Product)](./modules/inventory/product.md)
+- [Stock General (Stock General)](./modules/inventory/stock-general.md)
+- [Stock por Lotes (Stock Lot)](./modules/inventory/stock-lot.md)
+- [Movimientos de Stock (Stock Movement)](./modules/inventory/stock-movement.md)
 
 ## 🔗 Base URL
 
