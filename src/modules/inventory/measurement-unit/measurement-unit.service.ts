@@ -1,0 +1,152 @@
+import { prisma } from '@/configs';
+import { CreateMeasurementUnitInterface, UpdateMeasurementUnitInterface } from './interfaces';
+
+export class MeasurementUnitService {
+
+    // 1. CREAR
+    async create(data: CreateMeasurementUnitInterface) {
+        try {
+            // Opcional: evitar duplicados por nombre o símbolo
+            const exists = await prisma.measurementUnit.findFirst({
+                where: {
+                OR: [
+                    { name: data.name },
+                    { symbol: data.symbol }
+                ]
+                }
+            });
+
+            if (exists) {
+                return {
+                status: 409,
+                message: 'Ya existe una unidad con el mismo nombre o símbolo',
+                data: null
+                };
+            }
+
+            const unit = await prisma.measurementUnit.create({
+                data: {
+                name: data.name,
+                symbol: data.symbol
+                }
+            });
+
+            return {
+                status: 201,
+                message: 'Unidad de medida creada exitosamente',
+                data: unit
+            };
+
+        } catch (error) {
+            console.error('Error al crear unidad de medida:', error);
+            return { status: 500, message: 'Error interno al crear unidad de medida', data: null };
+        }
+    }
+
+    // 2. LISTAR TODAS
+    async findAll() {
+        try {
+            const units = await prisma.measurementUnit.findMany({
+                orderBy: { name: 'asc' }
+            });
+
+            return { status: 200, message: 'Unidades obtenidas exitosamente', data: units };
+        } catch (error) {
+            console.error('Error al listar unidades:', error);
+            return { status: 500, message: 'Error interno al listar unidades', data: null };
+        }
+    }
+
+    // 3. OBTENER UNA
+    async findOne(id: number) {
+        try {
+            const unit = await prisma.measurementUnit.findUnique({ where: { id } });
+
+            if (!unit) {
+                return { status: 404, message: 'Unidad de medida no encontrada', data: null };
+            }
+
+            return { status: 200, message: 'Unidad de medida encontrada', data: unit };
+        } catch (error) {
+
+            console.error('Error al obtener unidad de medida:', error);
+            return { status: 500, message: 'Error interno al obtener unidad de medida', data: null };
+        }
+    }
+
+    // 4. ACTUALIZAR
+    async update(id: number, data: UpdateMeasurementUnitInterface) {
+        try {
+            const exists = await prisma.measurementUnit.findUnique({ where: { id } });
+            
+            if (!exists) {
+                return { status: 404, message: 'Unidad de medida no encontrada', data: null };
+            }
+
+            // Validar duplicados si cambian nombre o símbolo
+            if (data.name || data.symbol) {
+                const duplicate = await prisma.measurementUnit.findFirst({
+                where: {
+                    AND: [
+                    { id: { not: id } },
+                    {
+                        OR: [
+                        data.name ? { name: data.name } : undefined,
+                        data.symbol ? { symbol: data.symbol } : undefined
+                        ].filter(Boolean) as any
+                    }
+                    ]
+                }
+                });
+                if (duplicate) {
+                return { status: 409, message: 'Nombre o símbolo ya en uso por otra unidad', data: null };
+                }
+            }
+
+            const updated = await prisma.measurementUnit.update({
+                where: { id },
+                data
+            });
+
+            return { status: 200, message: 'Unidad de medida actualizada', data: updated };
+        } catch (error) {
+            console.error('Error al actualizar unidad de medida:', error);
+            return { 
+                status: 500,
+                message: 'Error interno al actualizar unidad de medida',
+                data: null
+            }
+        }   
+    }
+
+    // 5. ELIMINAR
+    async remove(id: number) {
+        try {
+            // Proteger integridad: evitar eliminar si hay productos usando la unidad
+            const productsCount = await prisma.product.count({ where: { unitId: id } });
+            if (productsCount > 0) {
+                return {
+                status: 409,
+                message: `No se puede eliminar: Hay ${productsCount} producto(s) usando esta unidad`,
+                data: null
+                };
+            }
+
+            const exists = await prisma.measurementUnit.findUnique({ where: { id } });
+            if (!exists) {
+                return { status: 404, message: 'Unidad de medida no encontrada', data: null };
+            }
+
+            await prisma.measurementUnit.delete({ where: { id } });
+
+            return { 
+                status: 200, 
+                message: 'Unidad de medida eliminada', 
+                data: null 
+            };
+        } catch (error) {
+            console.error('Error al eliminar unidad de medida:', error);
+            return { status: 500, message: 'Error interno al eliminar unidad de medida', data: null };
+        }
+    }
+}
