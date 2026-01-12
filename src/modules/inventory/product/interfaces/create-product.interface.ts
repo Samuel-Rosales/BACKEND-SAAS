@@ -1,12 +1,14 @@
 export interface CreateProductInterface {
   businessId: number;
   categoryId: number;
+  unitId: number;
   name: string;
   sku?: string;
   description: string;
   imageUrl?: string;
   costPrice: number;
   salePrice: number;
+  taxRate: number;
   minStock: number;
   isService: boolean;
   isPerishable: boolean;

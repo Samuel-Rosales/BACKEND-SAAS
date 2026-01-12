@@ -1,135 +1,141 @@
-import { body, param, ValidationChain } from 'express-validator';
+import { body, param, query, ValidationChain } from 'express-validator';
 import { prisma } from '@/configs';
 
 export class ProductValidator {
-  
+
     public validateCreate: ValidationChain[] = [
         
+        // 1. Categoría
         body('categoryId')
-        .isInt().withMessage('El ID de categoría debe ser un número entero')
-        .custom(async (categoryId, { req }) => {
-            const businessId = req.user?.businessId || req.body.businessId;
-            if (businessId) {
-                const category = await prisma.category.findFirst({
-                    where: { 
-                        id: categoryId,
-                        businessId: businessId
-                    }
-                });
-                if (!category) {
-                    throw new Error('La categoría no existe o no pertenece a este negocio');
+            .isInt().withMessage('El ID de categoría debe ser un número entero')
+            .toInt()
+            .custom(async (categoryId, { req }) => {
+                const businessId = req.user?.businessId; // Asumimos que viene del token
+                if (businessId) {
+                    const category = await prisma.category.findFirst({
+                        where: { id: categoryId, businessId }
+                    });
+                    if (!category) throw new Error('La categoría no existe o no pertenece a este negocio');
                 }
-            }
-            return true;
-        }),
+                return true;
+            }),
 
+        // 2. Unidad de Medida (NUEVO OBLIGATORIO)
+        body('unitId')
+            .notEmpty().withMessage('La unidad de medida es obligatoria')
+            .isInt().withMessage('El ID de la unidad debe ser un entero')
+            .toInt()
+            .custom(async (unitId) => {
+                const unit = await prisma.measurementUnit.findUnique({ where: { id: unitId } });
+                if (!unit) throw new Error('La unidad de medida seleccionada no existe');
+                return true;
+            }),
+
+        // 3. Datos Básicos
         body('name')
-        .trim()
-        .notEmpty().withMessage('El nombre es obligatorio')
-        .isString()
-        .isLength({ min: 2, max: 200 }).withMessage('El nombre debe tener entre 2 y 200 caracteres'),
+            .trim()
+            .notEmpty().withMessage('El nombre es obligatorio')
+            .isString()
+            .isLength({ min: 2, max: 200 }).withMessage('El nombre debe tener entre 2 y 200 caracteres'),
 
         body('sku')
-        .optional()
-        .trim()
-        .isString()
-        .isLength({ min: 1, max: 100 }).withMessage('El SKU debe tener entre 1 y 100 caracteres'),
+            .optional({ nullable: true, checkFalsy: true }) // Permite null o string vacío
+            .trim()
+            .isString()
+            .isLength({ min: 1, max: 100 }).withMessage('El SKU debe tener entre 1 y 100 caracteres'),
 
         body('description')
-        .trim()
-        .isString()
-        .isLength({ max: 1000 }).withMessage('La descripción no puede exceder 1000 caracteres'),
+            .trim()
+            .notEmpty().withMessage('La descripción es obligatoria') // Ahora es obligatoria según schema
+            .isString()
+            .isLength({ max: 1000 }).withMessage('La descripción no puede exceder 1000 caracteres'),
 
         body('imageUrl')
-        .optional()
-        .trim()
-        .isURL().withMessage('La URL de la imagen debe ser válida'),
+            .optional({ nullable: true })
+            .trim()
+            .isURL().withMessage('La URL de la imagen debe ser válida'),
 
+        // 4. Datos Financieros
         body('costPrice')
-        .isFloat({ min: 0 }).withMessage('El precio de costo debe ser un número positivo'),
+            .isFloat({ min: 0 }).withMessage('El precio de costo debe ser positivo')
+            .toFloat(),
 
         body('salePrice')
-        .isFloat({ min: 0 }).withMessage('El precio de venta debe ser un número positivo'),
+            .isFloat({ min: 0 }).withMessage('El precio de venta debe ser positivo')
+            .toFloat(),
 
+        body('taxRate') // NUEVO (Opcional)
+            .optional()
+            .isFloat({ min: 0, max: 100 }).withMessage('El impuesto debe ser un porcentaje entre 0 y 100')
+            .toFloat(),
+
+        // 5. Configuración
         body('minStock')
-        .isInt({ min: 0 }).withMessage('El stock mínimo debe ser un número entero positivo'),
+            .optional()
+            .isInt({ min: 0 }).withMessage('El stock mínimo debe ser entero positivo')
+            .toInt(),
 
         body('isService')
-        .isBoolean().withMessage('isService debe ser un valor booleano'),
+            .optional()
+            .isBoolean().withMessage('isService debe ser booleano')
+            .toBoolean(),
 
         body('isPerishable')
-        .isBoolean().withMessage('isPerishable debe ser un valor booleano'),
+            .optional()
+            .isBoolean().withMessage('isPerishable debe ser booleano')
+            .toBoolean(),
     ];
 
     public validateUpdate: ValidationChain[] = [
-
         param('id').isInt().toInt(),
         
+        // Todo opcional para update
         body('categoryId')
-        .optional()
-        .isInt().withMessage('El ID de categoría debe ser un número entero')
-        .custom(async (categoryId, { req }) => {
-            const businessId = req.user?.businessId || req.body.businessId;
-            if (categoryId && businessId) {
-                const category = await prisma.category.findFirst({
-                    where: { 
-                        id: categoryId,
-                        businessId: businessId
-                    }
-                });
-                if (!category) {
-                    throw new Error('La categoría no existe o no pertenece a este negocio');
+            .optional()
+            .isInt()
+            .toInt()
+            .custom(async (categoryId, { req }) => {
+                const businessId = req.user?.businessId;
+                if (categoryId && businessId) {
+                    const category = await prisma.category.findFirst({
+                        where: { id: categoryId, businessId }
+                    });
+                    if (!category) throw new Error('Categoría inválida');
                 }
-            }
-            return true;
-        }),
+                return true;
+            }),
 
-        body('name')
-        .optional()
-        .trim()
-        .isString()
-        .isLength({ min: 2, max: 200 }).withMessage('El nombre debe tener entre 2 y 200 caracteres'),
+        body('unitId')
+            .optional()
+            .isInt()
+            .toInt()
+            .custom(async (unitId) => {
+                const unit = await prisma.measurementUnit.findUnique({ where: { id: unitId } });
+                if (!unit) throw new Error('Unidad de medida inválida');
+                return true;
+            }),
 
-        body('sku')
-        .optional()
-        .trim()
-        .isString()
-        .isLength({ min: 1, max: 100 }).withMessage('El SKU debe tener entre 1 y 100 caracteres'),
+        body('name').optional().trim().isString().isLength({ min: 2, max: 200 }),
+        body('sku').optional({ nullable: true }).trim().isString().isLength({ max: 100 }),
+        body('description').optional().trim().isString().isLength({ max: 1000 }),
+        body('imageUrl').optional({ nullable: true }).trim().isURL(),
+        
+        body('costPrice').optional().isFloat({ min: 0 }).toFloat(),
+        body('salePrice').optional().isFloat({ min: 0 }).toFloat(),
+        body('taxRate').optional().isFloat({ min: 0, max: 100 }).toFloat(),
+        
+        body('minStock').optional().isInt({ min: 0 }).toInt(),
+        body('isService').optional().isBoolean().toBoolean(),
+        body('isPerishable').optional().isBoolean().toBoolean(),
+    ];
 
-        body('description')
-        .optional()
-        .trim()
-        .isString()
-        .isLength({ max: 1000 }).withMessage('La descripción no puede exceder 1000 caracteres'),
-
-        body('imageUrl')
-        .optional()
-        .trim()
-        .isURL().withMessage('La URL de la imagen debe ser válida'),
-
-        body('costPrice')
-        .optional()
-        .isFloat({ min: 0 }).withMessage('El precio de costo debe ser un número positivo'),
-
-        body('salePrice')
-        .optional()
-        .isFloat({ min: 0 }).withMessage('El precio de venta debe ser un número positivo'),
-
-        body('minStock')
-        .optional()
-        .isInt({ min: 0 }).withMessage('El stock mínimo debe ser un número entero positivo'),
-
-        body('isService')
-        .optional()
-        .isBoolean().withMessage('isService debe ser un valor booleano'),
-
-        body('isPerishable')
-        .optional()
-        .isBoolean().withMessage('isPerishable debe ser un valor booleano'),
+    public validateList: ValidationChain[] = [
+        query('page').optional().isInt({ min: 1 }).toInt(),
+        query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+        query('search').optional().trim().isString()
     ];
 
     public validateId: ValidationChain[] = [
-
         param('id').isInt().toInt().withMessage('ID inválido')
     ];
 }

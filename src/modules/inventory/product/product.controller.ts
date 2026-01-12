@@ -1,101 +1,146 @@
 import { Request, Response } from 'express';
 import { ProductService } from './product.service';
 
+const service = new ProductService();
+
 export class ProductController {
-    private service = new ProductService();
 
-    create = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
-        const userId = req.user!.id;
+    // 1. CREAR
+    async create(req: Request, res: Response) {
+        try {
+            // TypeScript necesita saber que user existe. 
+            // Si tienes definido Express.Request, usa req.user. Sino (req as any).user
+            const { businessId, id: userId } = (req as any).user;
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
+            if (!businessId) {
+                return res.status(400).json({
+                    message: 'El ID del negocio es obligatorio',
+                    status: 400,
+                    data: null
+                });
+            }
+
+            const result = await service.create(businessId, userId, req.body);
+            
+            return res.status(result.status).json(result);
+
+        } catch (error) {
+            console.error('Error en ProductController.create:', error);
+            return res.status(500).json({
+                message: 'Error interno del servidor',
+                status: 500,
                 data: null
             });
         }
+    }
 
-        const {status, data, message} = await this.service.create(businessId, userId, req.body);
+    // 2. LISTAR (Con Paginación)
+    async findAll(req: Request, res: Response) {
+        try {
+            const { businessId } = (req as any).user;
+            
+            // Extraer query params
+            const query = {
+                page: req.query.page ? Number(req.query.page) : undefined,
+                limit: req.query.limit ? Number(req.query.limit) : undefined,
+                search: req.query.search ? String(req.query.search) : undefined
+            };
 
-        res.status(status).json({ 
-            message, 
-            data 
-        });
-    };
+            const result = await service.findAll(businessId, query);
 
-    findAll = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+            return res.status(result.status).json(result);
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
+        } catch (error) {
+            console.error('Error en ProductController.findAll:', error);
+            return res.status(500).json({
+                message: 'Error interno al obtener productos',
+                status: 500,
                 data: null
             });
         }
+    }
 
-        const {status, data, message} = await this.service.findAll(businessId);
-        
-        res.status(status).json({ 
-            message, 
-            data 
-        });
-    };
+    // 3. OBTENER UNO
+    async findOne(req: Request, res: Response) {
+        try {
+            const { businessId } = (req as any).user;
+            const id = Number(req.params.id);
 
-    findOne = async (req: Request, res: Response) => {
-        const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+            if (!businessId) {
+                return res.status(400).json({
+                    message: 'El ID del negocio es obligatorio',
+                    status: 400,
+                    data: null
+                });
+            }
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
+            const result = await service.findOne(businessId, id);
+
+            return res.status(result.status).json(result);
+
+        } catch (error) {
+            console.error('Error en ProductController.findOne:', error);
+            return res.status(500).json({
+                message: 'Error interno al buscar producto',
+                status: 500,
                 data: null
             });
         }
+    }
 
-        const {status, data, message} = await this.service.findOne(businessId, +id);
+    // 4. ACTUALIZAR
+    async update(req: Request, res: Response) {
+        try {
+            const { businessId, id: userId } = (req as any).user;
+            const id = Number(req.params.id);
 
-        res.status(status).json({ 
-            message, 
-            data 
-        });
-    };
+            if (!businessId) {
+                return res.status(400).json({
+                    message: 'El ID del negocio es obligatorio',
+                    status: 400,
+                    data: null
+                });
+            }
 
-    update = async (req: Request, res: Response) => {
-        const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
-        const userId = req.user!.id;
+            const result = await service.update(businessId, userId, id, req.body);
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
+            return res.status(result.status).json(result);
+
+        } catch (error) {
+            console.error('Error en ProductController.update:', error);
+            return res.status(500).json({
+                message: 'Error interno al actualizar',
+                status: 500,
                 data: null
             });
         }
+    }
 
-        const {status, data, message} = await this.service.update(businessId, userId, +id, req.body);
-        
-        res.status(status).json({ 
-            message, 
-            data 
-        });
-    };
+    // 5. ELIMINAR
+    async remove(req: Request, res: Response) {
+        try {
+            const { businessId } = (req as any).user;
+            const id = Number(req.params.id);
 
-    remove = async (req: Request, res: Response) => {
-        const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+            if (!businessId) {
+                return res.status(400).json({
+                    message: 'El ID del negocio es obligatorio',
+                    status: 400,
+                    data: null
+                });
+            }
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
+            const result = await service.remove(businessId, id);
+
+            return res.status(result.status).json(result);
+
+        } catch (error) {
+            console.error('Error en ProductController.remove:', error);
+            return res.status(500).json({
+                message: 'Error interno al eliminar',
+                status: 500,
                 data: null
             });
         }
-
-        const {status, data, message} = await this.service.remove(businessId, +id);
-
-        res.status(status).json({ 
-            message, 
-            data 
-        });
-    };
+    }
 }
