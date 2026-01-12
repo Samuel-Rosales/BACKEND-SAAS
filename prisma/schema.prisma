@@ -88,7 +88,6 @@ model Business {
   // Relaciones
   subscription   Subscription?
   members        BusinessMember[]
-  exchangeRates  ExchangeRate[]
   categories     Category[]
   products       Product[]
   clients        Client[]
@@ -122,13 +121,10 @@ model Subscription {
 
 model ExchangeRate {
   id          Int      @id @default(autoincrement())
-  businessId  Int
   currency    String   // Ej: "VES", "USD" (ISO Code)
   rate        Decimal  @db.Decimal(10, 4) // Ej: 54.3000 (4 decimales para precisión)
   createdAt   DateTime @default(now()) // Histórico: permite ver cuánto valía el dólar hace 1 mes
   createdById Int
-
-  business Business @relation(fields: [businessId], references: [id])
 
   // Relaciones inversas: Usadas para saber a qué tasa se pagó una venta antigua
   sales           Sale[]
@@ -145,23 +141,34 @@ model ExchangeRate {
 model Depot {
   id         Int      @id @default(autoincrement())
   businessId Int
-  name       String   // Ej: "Almacén Principal", "Sucursal Centro"
+  name       String
   location   String
+  isActive   Boolean  @default(true) // Recomendado: Soft Delete
 
   business Business @relation(fields: [businessId], references: [id])
-
-  // Relaciones
-  stockGenerals  StockGeneral[]
+  purchaseItems PurchaseItem[]
   stockLots      StockLot[]
   stockMovements StockMovement[]
 }
 
+model MeasurementUnit {
+  id         Int      @id @default(autoincrement())
+  name       String   // "Kilogramo", "Unidad", "Litro"
+  symbol     String   // "kg", "und", "L"
+  
+  products Product[]
+}
+
 model Category {
-  id         Int    @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   businessId Int
   name       String
+  //parentId   Int?     // Recomendado: Para subcategorías (Electrónica -> Celulares)
 
   business Business  @relation(fields: [businessId], references: [id])
+  //parent   Category? @relation("SubCategories", fields: [parentId], references: [id])
+  //children Category[] @relation("SubCategories")
+  
   products Product[]
 }
 
@@ -169,74 +176,82 @@ model Product {
   id           Int      @id @default(autoincrement())
   businessId   Int
   categoryId   Int
+  unitId       Int      // <--- NUEVO: Unidad base (kg, und)
   name         String
-  sku          String?  // Código de barras o identificador único
+  sku          String?
   description  String
   imageUrl     String?
+  
   costPrice    Decimal  @default(0) @db.Decimal(15, 2)
   salePrice    Decimal  @default(0) @db.Decimal(15, 2)
-  minStock     Int      @default(0) // Alerta de stock bajo
-  isService    Boolean  @default(false) // Si es true, no controla stock
+  taxRate      Decimal  @default(0) @db.Decimal(5, 2) // <--- Recomendado: IVA/Impuesto %
+  
+  minStock     Int      @default(0)
+  isService    Boolean  @default(false)
   isPerishable Boolean  @default(false)
+  
   updatedAt    DateTime @updatedAt
   updatedById  Int?
 
-  business  Business  @relation(fields: [businessId], references: [id])
-  category  Category  @relation(fields: [categoryId], references: [id])
-  updatedBy User?     @relation(fields: [updatedById], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+  unit     MeasurementUnit @relation(fields: [unitId], references: [id]) // <--- Relación
+  updatedBy User?    @relation(fields: [updatedById], references: [id])
 
-  // Relaciones
-  stockGenerals  StockGeneral[]
   stockLots      StockLot[]
   saleItems      SaleItem[]
   purchaseItems  PurchaseItem[]
   stockMovements StockMovement[]
+  presentations  ProductPresentation[] // <--- Cajas, Packs
 
-  @@index([businessId, sku]) // Índice para búsquedas rápidas por código de barras
+  @@index([businessId, sku])
 }
 
-// STOCK GENERAL: Cantidad total por almacén (Lectura rápida)
-model StockGeneral {
-  productId Int
-  depotId   Int
-  quantity  Int @default(0)
+// NUEVO: Factores de conversión (Cajas, Bultos)
+model ProductPresentation {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  name        String   // "Caja x12"
+  factor      Decimal  @db.Decimal(10, 4) // 12.0000
+  barCode     String?  // Código de barras de la caja
+  price       Decimal? // Precio especial por caja
 
-  product Product @relation(fields: [productId], references: [id])
-  depot   Depot   @relation(fields: [depotId], references: [id])
-
-  // CLAVE COMPUESTA: Evita duplicados. Solo una fila por Producto+Depósito
-  @@id([productId, depotId])
+  product     Product  @relation(fields: [productId], references: [id])
 }
 
-// STOCK POR LOTES: Control FIFO y Vencimientos
 model StockLot {
-  id             Int       @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   productId      Int
   depotId        Int
-  quantity       Int       // Cantidad ACTUAL disponible en este lote
-  expirationDate DateTime  @db.Date // Solo fecha, sin hora
-  lotCost        Decimal   @db.Decimal(15, 2) // Costo específico de este lote
-  createdAt      DateTime  @default(now())
+  quantity       Int
+  expirationDate DateTime @db.Date
+  lotCost        Decimal  @db.Decimal(15, 2)
+  createdAt      DateTime @default(now())
 
   product Product @relation(fields: [productId], references: [id])
   depot   Depot   @relation(fields: [depotId], references: [id])
   
-  // Relación con ventas (Trazabilidad)
   saleItemLots SaleItemLot[]
 
-  @@index([productId, expirationDate]) // Útil para buscar qué vence pronto
+  // --- ÍNDICES ESTRATÉGICOS (NO LOS OLVIDES) ---
+  @@index([productId, expirationDate]) // FIFO/FEFO (Ventas)
+  @@index([productId, depotId])        // Totales Rápidos (Dashboard)
 }
 
 model StockMovement {
-  id          Int          @id @default(autoincrement())
-  businessId  Int
-  productId   Int
-  memberId    Int
-  depotId     Int
-  type        MovementType // IN, OUT, ADJUSTMENT, TRANSFER
-  quantity    Int          // Positivo o negativo según el tipo
-  reason      String?      // "Venta #123", "Merma", "Compra #45"
-  date        DateTime     @default(now())
+  id         Int          @id @default(autoincrement())
+  businessId Int
+  productId  Int
+  memberId   Int
+  depotId    Int
+  type       MovementType
+  quantity   Int
+  
+  // --- SNAPSHOT FINANCIERO ---
+  historicalCost Decimal @default(0) @db.Decimal(15, 2) // Cuánto costaba unitariamente en ese momento
+  
+  reason     String?
+  date       DateTime     @default(now())
 
   business Business       @relation(fields: [businessId], references: [id])
   product  Product        @relation(fields: [productId], references: [id])
@@ -351,11 +366,22 @@ model Purchase {
   businessId     Int
   supplierId     Int
   memberId       Int            // Quién registró la compra
-  totalCost      Decimal        @db.Decimal(15, 2)
+  
+  // --- 1. LO QUE LE FALTABA: Desglose Financiero ---
+  subTotal       Decimal        @db.Decimal(15, 2) // Suma de items sin impuestos
+  taxAmount      Decimal        @db.Decimal(15, 2) // Monto de Impuestos/IVA
+  totalCost      Decimal        @db.Decimal(15, 2) // Total Final a Pagar (SubTotal + Tax)
+  
   status         PurchaseStatus @default(COMPLETED)
   exchangeRateId Int
+  
+  // --- 2. LO QUE LE FALTABA: Datos Administrativos ---
+  reference      String?        // Nro Factura Física del Proveedor (Ej: "A-00045")
+  observation    String        // Notas: "Caja llegó abierta", "Sin novedad"
+  
   date           DateTime       @default(now())
 
+  // Relaciones
   business     Business       @relation(fields: [businessId], references: [id])
   supplier     Supplier       @relation(fields: [supplierId], references: [id])
   member       BusinessMember @relation(fields: [memberId], references: [id])
@@ -366,40 +392,29 @@ model Purchase {
 }
 
 model PurchaseItem {
-  id         Int     @id @default(autoincrement())
-  purchaseId Int
-  productId  Int
-  quantity   Int
-  unitCost   Decimal @db.Decimal(15, 2)
+  id             Int     @id @default(autoincrement())
+  purchaseId     Int
+  productId      Int
+  depotId        Int
+  quantity       Int
+  unitCost       Decimal @db.Decimal(15, 2)
+  expirationDate DateTime @db.Date
 
   purchase Purchase @relation(fields: [purchaseId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
-
-  // Lotes generados por esta compra
-  generatedLots PurchaseItemLot[]
-}
-
-// Histórico: Qué lotes entraron con esta compra específica
-model PurchaseItemLot {
-  id             Int       @id @default(autoincrement())
-  purchaseItemId Int
-  quantity       Int
-  unitCost       Decimal   @db.Decimal(15, 2)
-  expirationDate DateTime  @db.Date
-
-  purchaseItem PurchaseItem @relation(fields: [purchaseItemId], references: [id])
+  depot    Depot    @relation(fields: [depotId], references: [id])
 }
 
 model PurchasePayment {
-  id             Int      @id @default(autoincrement())
-  purchaseId     Int
+  id                      Int      @id @default(autoincrement())
+  purchaseId              Int
   paymentMethodId         Int
-  paymentMethod  PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
-  amount         Decimal  @db.Decimal(15, 2)
-  currency       String
-  exchangeRateId Int
-  reference      String
-  paymentDate    DateTime @default(now())
+  paymentMethod           PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
+  amount                  Decimal  @db.Decimal(15, 2)
+  currency                String  // Moneda del pago (ej: USD o VES)
+  exchangeRateId          Int
+  reference               String   // Nro de referencia bancaria
+  paymentDate             DateTime @default(now())
 
   purchase     Purchase      @relation(fields: [purchaseId], references: [id])
   exchangeRate ExchangeRate  @relation(fields: [exchangeRateId], references: [id])
