@@ -27,7 +27,8 @@ export class StockMovementService {
             const depot = await prisma.depot.findFirst({
                 where: { 
                     id: data.depotId,
-                    businessId: businessId
+                    businessId: businessId,
+                    isActive: true
                 }
             });
 
@@ -353,7 +354,8 @@ export class StockMovementService {
             const depot = await prisma.depot.findFirst({
                 where: { 
                     id: depotId,
-                    businessId: businessId
+                    businessId: businessId,
+                    isActive: true
                 }
             });
 

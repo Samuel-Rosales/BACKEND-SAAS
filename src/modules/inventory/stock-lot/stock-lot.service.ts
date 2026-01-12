@@ -27,7 +27,8 @@ export class StockLotService {
             const depot = await prisma.depot.findFirst({
                 where: { 
                     id: data.depotId,
-                    businessId: businessId
+                    businessId: businessId,
+                    isActive: true
                 }
             });
 
