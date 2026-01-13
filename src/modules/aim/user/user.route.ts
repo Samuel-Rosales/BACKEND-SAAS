@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { UserController } from './user.controller';
 import { UserValidator } from './user.validator';
-import { handleValidationErrors } from '@/middlewares';
+import { handleValidationErrors, authMiddleware } from '@/middlewares';
 
 const router = Router();
 const controller = new UserController();
@@ -18,11 +18,12 @@ router.post(
 );
 
 // 2. Listar: No requiere validación
-router.get('/', controller.findAll);
+router.get('/', authMiddleware, controller.findAll);
 
 // 3. Obtener uno: Validamos que el ID sea numérico y exista
 router.get(
-  '/:id', 
+  '/:id',
+  authMiddleware, 
   validator.validateId, 
   handleValidationErrors, 
   controller.findOne
@@ -30,7 +31,9 @@ router.get(
 
 // 4. Actualizar: Validamos campos y lógica de duplicados
 router.patch(
-  '/:id', 
+  '/:id',
+  authMiddleware,
+  validator.validateId, 
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
@@ -38,7 +41,8 @@ router.patch(
 
 // 5. Eliminar
 router.delete(
-  '/:id', 
+  '/:id',
+  authMiddleware, 
   validator.validateId, 
   handleValidationErrors, 
   controller.remove

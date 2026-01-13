@@ -6,6 +6,13 @@ export class MemberController {
 
     addMember = async (req: Request, res: Response) => {
         const businessId = req.user.businessId; 
+
+        if (!businessId) {
+            return res.status(400).json({
+                message: 'El ID del negocio es obligatorio',
+                data: null
+            });
+        }
         
         const { status, message, data } = await this.service.addMember(businessId, req.body);
 
@@ -19,6 +26,13 @@ export class MemberController {
 
         const businessId = req.user.businessId;
 
+        if (!businessId) {
+            return res.status(400).json({
+                message: 'El ID del negocio es obligatorio',
+                data: null
+            });
+        }
+
         const { status, message, data } = await this.service.findAll(businessId);
         
         return res.status(status).json({
@@ -29,6 +43,13 @@ export class MemberController {
 
     findOne = async (req: Request, res: Response) => {
         const businessId = req.user.businessId;
+
+        if (!businessId) {
+            return res.status(400).json({
+                message: 'El ID del negocio es obligatorio',
+                data: null
+            });
+        }
 
         const { id } = req.params;
 
@@ -43,6 +64,13 @@ export class MemberController {
     update = async (req: Request, res: Response) => {
         const businessId = req.user.businessId;
 
+        if (!businessId) {
+            return res.status(400).json({
+                message: 'El ID del negocio es obligatorio',
+                data: null
+            });
+        }
+
         const { id } = req.params;
 
         const { status, message, data } = await this.service.update(businessId, +id, req.body);
@@ -55,6 +83,13 @@ export class MemberController {
 
     remove = async (req: Request, res: Response) => {
         const businessId = req.user.businessId;
+
+        if (!businessId) {
+            return res.status(400).json({
+                message: 'El ID del negocio es obligatorio',
+                data: null
+            });
+        }
 
         const { id } = req.params;
         
