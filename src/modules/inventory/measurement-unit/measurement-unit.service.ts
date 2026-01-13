@@ -47,7 +47,8 @@ export class MeasurementUnitService {
     async findAll() {
         try {
             const units = await prisma.measurementUnit.findMany({
-                orderBy: { name: 'asc' }
+                where: { isActive: true },
+                orderBy: { name: 'asc'}
             });
 
             return { status: 200, message: 'Unidades obtenidas exitosamente', data: units };
@@ -60,7 +61,7 @@ export class MeasurementUnitService {
     // 3. OBTENER UNA
     async findOne(id: number) {
         try {
-            const unit = await prisma.measurementUnit.findUnique({ where: { id } });
+            const unit = await prisma.measurementUnit.findUnique({ where: { id, isActive: true } });
 
             if (!unit) {
                 return { status: 404, message: 'Unidad de medida no encontrada', data: null };
@@ -78,7 +79,7 @@ export class MeasurementUnitService {
     async update(id: number, data: UpdateMeasurementUnitInterface) {
         try {
             const exists = await prisma.measurementUnit.findUnique({ where: { id } });
-            
+
             if (!exists) {
                 return { status: 404, message: 'Unidad de medida no encontrada', data: null };
             }
@@ -122,31 +123,53 @@ export class MeasurementUnitService {
     // 5. ELIMINAR
     async remove(id: number) {
         try {
-            // Proteger integridad: evitar eliminar si hay productos usando la unidad
-            const productsCount = await prisma.product.count({ where: { unitId: id } });
-            if (productsCount > 0) {
+            // 1. Buscamos la unidad Y contamos sus productos en un solo viaje a la BD
+            const unit = await prisma.measurementUnit.findUnique({
+                where: { id },
+                include: {
+                    _count: {
+                        select: { products: true }
+                    }
+                }
+            });
+
+            // 2. Validación: ¿Existe?
+            if (!unit) {
                 return {
-                status: 409,
-                message: `No se puede eliminar: Hay ${productsCount} producto(s) usando esta unidad`,
-                data: null
+                    status: 404,
+                    message: 'Unidad de medida no encontrada',
+                    data: null
                 };
             }
 
-            const exists = await prisma.measurementUnit.findUnique({ where: { id } });
-            if (!exists) {
-                return { status: 404, message: 'Unidad de medida no encontrada', data: null };
+            // 3. Validación: ¿Se está usando? (Integridad Referencial)
+            if (unit._count.products > 0) {
+                return {
+                    status: 409, // Conflict
+                    message: `No se puede eliminar: La unidad "${unit.name}" está asignada a ${unit._count.products} producto(s).`,
+                    data: null
+                };
             }
 
-            await prisma.measurementUnit.delete({ where: { id } });
+            // 4. Eliminación Física (Es seguro porque ya validamos que nadie la usa)
+            await prisma.measurementUnit.delete({
+                where: { id }
+            });
 
-            return { 
-                status: 200, 
-                message: 'Unidad de medida eliminada', 
-                data: null 
+            return {
+                status: 200,
+                message: 'Unidad de medida eliminada exitosamente',
+                data: null
             };
+
         } catch (error) {
             console.error('Error al eliminar unidad de medida:', error);
-            return { status: 500, message: 'Error interno al eliminar unidad de medida', data: null };
+            // Capturamos el error específico de Prisma si algo falla en la FK a último momento
+            return { 
+                status: 500, 
+                message: 'Error interno al eliminar unidad de medida', 
+                data: null 
+            };
         }
     }
 }
