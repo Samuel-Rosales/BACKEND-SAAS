@@ -4,7 +4,7 @@
 
 Base URL: `/api/v1/aim/user`
 
-**Autenticación:** No requerida (puede configurarse)
+**Autenticación:** Parcialmente requerida (ver detalles por endpoint)
 
 ---
 
@@ -13,6 +13,8 @@ Base URL: `/api/v1/aim/user`
 Crea un nuevo usuario en el sistema.
 
 **Endpoint:** `POST /api/v1/aim/user`
+
+**Autenticación:** ❌ No requerida
 
 #### Request Body
 
@@ -62,6 +64,13 @@ Obtiene todos los usuarios del sistema.
 
 **Endpoint:** `GET /api/v1/aim/user`
 
+**Autenticación:** ✅ Requerida
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
 #### Response (200 OK)
 
 ```json
@@ -101,6 +110,13 @@ Obtiene un usuario específico por su ID.
 
 **Endpoint:** `GET /api/v1/aim/user/:id`
 
+**Autenticación:** ✅ Requerida
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
 #### Parámetros de URL
 
 - `id` (number): ID del usuario
@@ -137,6 +153,13 @@ Obtiene un usuario específico por su ID.
 Actualiza los datos de un usuario existente.
 
 **Endpoint:** `PATCH /api/v1/aim/user/:id`
+
+**Autenticación:** ✅ Requerida
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
 
 #### Parámetros de URL
 
@@ -178,6 +201,13 @@ Elimina un usuario del sistema.
 
 **Endpoint:** `DELETE /api/v1/aim/user/:id`
 
+**Autenticación:** ✅ Requerida
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
 #### Parámetros de URL
 
 - `id` (number): ID del usuario
@@ -206,9 +236,12 @@ Elimina un usuario del sistema.
 
 ## 🔒 Seguridad
 
+- **Autenticación requerida**: Los endpoints de lectura, actualización y eliminación requieren autenticación mediante JWT
+- **Crear usuario**: El endpoint de creación no requiere autenticación (permite registro público)
 - Las contraseñas se encriptan con bcrypt antes de guardarse
 - La contraseña nunca se retorna en las respuestas
 - Se valida la unicidad de la cédula (CI)
+- El middleware `authMiddleware` verifica el token y la existencia del usuario en cada petición
 
 ## 📝 Notas
 

@@ -81,8 +81,16 @@ x-business-id: <business_id>  // Para operaciones multi-tenant
 ### Comportamiento
 
 1. **Verifica el token**: Valida que el token sea válido y no esté expirado
-2. **Verifica el usuario**: Confirma que el usuario existe en la base de datos
-3. **Inyecta datos**: Agrega `req.user` con los datos del usuario autenticado
+2. **Verifica el usuario**: Confirma que el usuario existe en la base de datos (consulta adicional por seguridad)
+3. **Inyecta datos**: Agrega `req.user` con los datos del usuario autenticado:
+   ```typescript
+   {
+     id: number;           // ID del usuario
+     businessId?: number;  // ID del negocio (si está presente en el header x-business-id)
+     // ... otros campos del usuario
+   }
+   ```
+4. **Valida businessId**: Si se proporciona el header `x-business-id`, se valida que el usuario tenga acceso a ese negocio
 
 ### Respuestas de Error
 
@@ -109,11 +117,28 @@ x-business-id: <business_id>  // Para operaciones multi-tenant
 
 ## 🔒 Rutas Protegidas
 
-Las siguientes rutas requieren autenticación:
+Las siguientes rutas requieren autenticación mediante `authMiddleware`:
 
+### Módulo AIM
+- ✅ `/api/v1/aim/business-member/*` - Todas las rutas de miembros de negocio
+- ✅ `/api/v1/aim/contact/*` - Todas las rutas de contactos
+- ✅ `/api/v1/aim/user/*` - Rutas de lectura, actualización y eliminación (POST no requiere autenticación)
+- ❌ `/api/v1/aim/role/*` - No requiere autenticación (configurable)
+- ❌ `/api/v1/aim/auth/login` - No requiere autenticación (endpoint público)
+
+### Módulo Platform
 - ✅ `/api/v1/platform/business/*` - Todas las rutas de negocios
-- ✅ `/api/v1/aim/business-member/*` - Todas las rutas de miembros
-- ⚠️ Otras rutas pueden requerir autenticación según configuración
+- ✅ `/api/v1/platform/business-category/*` - Todas las rutas de categorías de negocio
+- ✅ `/api/v1/platform/subscription/*` - Todas las rutas de suscripciones
+
+### Módulo Inventory
+- ✅ Todas las rutas requieren autenticación
+
+### Módulo Finance
+- ✅ Todas las rutas requieren autenticación
+
+### Módulo Procurement
+- ✅ Todas las rutas requieren autenticación
 
 ## 📝 Notas
 

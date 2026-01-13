@@ -258,10 +258,12 @@ x-business-id: <business_id>
 
 ## 🔒 Seguridad
 
-- Todas las rutas requieren autenticación
-- El `businessId` se obtiene del header `x-business-id`
-- Solo se pueden ver/modificar miembros del negocio del usuario autenticado
-- Se valida que el miembro pertenezca al negocio antes de actualizar/eliminar
+- **Todas las rutas requieren autenticación**: El middleware `authMiddleware` protege todas las rutas del módulo
+- **Verificación de token**: El middleware valida el token JWT y verifica que el usuario exista en la base de datos
+- **Multi-tenant**: El `businessId` se obtiene del header `x-business-id` y se valida en cada operación
+- **Aislamiento de datos**: Solo se pueden ver/modificar miembros del negocio del usuario autenticado
+- **Validación de pertenencia**: Se valida que el miembro pertenezca al negocio antes de actualizar/eliminar
+- **Transacciones**: Las operaciones críticas (como agregar miembro) se realizan en transacciones para garantizar integridad
 
 ## 📝 Notas
 

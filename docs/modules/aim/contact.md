@@ -189,7 +189,9 @@ Authorization: Bearer <token>
 
 ## 🔒 Seguridad
 
-- Todos los endpoints requieren autenticación
-- El `userId` se obtiene automáticamente del token JWT
-- Un usuario solo puede gestionar su propio contacto
-- El email debe ser único en todo el sistema
+- **Todas las rutas requieren autenticación**: El middleware `authMiddleware` protege todas las rutas del módulo
+- **Verificación de token**: El middleware valida el token JWT y verifica que el usuario exista en la base de datos
+- **Usuario autenticado**: El `userId` se obtiene automáticamente del token JWT (`req.user.id`)
+- **Aislamiento de datos**: Un usuario solo puede gestionar su propio contacto
+- **Unicidad de email**: El email debe ser único en todo el sistema
+- **Relación 1:1**: Un usuario solo puede tener un contacto (validado en el servicio)
