@@ -155,6 +155,7 @@ model MeasurementUnit {
   id         Int      @id @default(autoincrement())
   name       String   // "Kilogramo", "Unidad", "Litro"
   symbol     String   // "kg", "und", "L"
+  isActive   Boolean  @default(true)
   
   products Product[]
 }
@@ -184,7 +185,6 @@ model Product {
   
   costPrice    Decimal  @default(0) @db.Decimal(15, 2)
   salePrice    Decimal  @default(0) @db.Decimal(15, 2)
-  taxRate      Decimal  @default(0) @db.Decimal(5, 2) // <--- Recomendado: IVA/Impuesto %
   
   minStock     Int      @default(0)
   isService    Boolean  @default(false)
@@ -192,6 +192,7 @@ model Product {
   
   updatedAt    DateTime @updatedAt
   updatedById  Int?
+  isActive     Boolean  @default(true)
 
   business Business @relation(fields: [businessId], references: [id])
   category Category @relation(fields: [categoryId], references: [id])
@@ -207,16 +208,21 @@ model Product {
   @@index([businessId, sku])
 }
 
-// NUEVO: Factores de conversión (Cajas, Bultos)
 model ProductPresentation {
-  id          Int      @id @default(autoincrement())
-  productId   Int
-  name        String   // "Caja x12"
-  factor      Decimal  @db.Decimal(10, 4) // 12.0000
-  barCode     String?  // Código de barras de la caja
-  price       Decimal? // Precio especial por caja
+  id        Int     @id @default(autoincrement())
+  productId Int
+  name      String  // "Caja x12"
+  factor    Decimal @db.Decimal(10, 4)
+  barCode   String?
+  price     Decimal?
+  
+  isActive  Boolean @default(true) // <--- NUEVO: Para Soft Delete
 
-  product     Product  @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+  
+  // Relaciones necesarias para verificar uso (Asumiendo que actualizas tus items)
+  saleItems     SaleItem[]      // <--- Debes tener esto en tu modelo SaleItem
+  purchaseItems PurchaseItem[]  // <--- Debes tener esto en tu modelo PurchaseItem
 }
 
 model StockLot {
@@ -307,6 +313,7 @@ model SaleItem {
   id        Int     @id @default(autoincrement())
   saleId    Int
   productId Int
+  productPresentationId Int? // <--- NUEVO: Presentación usada (caja, pack, unidad)
   quantity  Int
   unitPrice Decimal @db.Decimal(15, 2) // Precio al momento de la venta
   subTotal  Decimal @db.Decimal(15, 2)
@@ -316,6 +323,8 @@ model SaleItem {
 
   // Detalle de qué lotes se usaron para esta línea de venta
   lotAllocations SaleItemLot[]
+
+  productPresentation ProductPresentation? @relation(fields: [productPresentationId], references: [id])
 }
 
 // TABLA DE TRAZABILIDAD EXACTA
@@ -396,13 +405,16 @@ model PurchaseItem {
   purchaseId     Int
   productId      Int
   depotId        Int
+  productPresentationId Int? // <--- NUEVO: Presentación usada (caja, pack, unidad)
   quantity       Int
   unitCost       Decimal @db.Decimal(15, 2)
   expirationDate DateTime @db.Date
+  
 
   purchase Purchase @relation(fields: [purchaseId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
   depot    Depot    @relation(fields: [depotId], references: [id])
+  productPresentation ProductPresentation? @relation(fields: [productPresentationId], references: [id])
 }
 
 model PurchasePayment {

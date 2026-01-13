@@ -8,7 +8,6 @@ export interface CreateProductInterface {
   imageUrl?: string;
   costPrice: number;
   salePrice: number;
-  taxRate: number;
   minStock: number;
   isService: boolean;
   isPerishable: boolean;

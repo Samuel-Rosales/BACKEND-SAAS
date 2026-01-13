@@ -48,8 +48,7 @@ export class ProductService {
                     description: data.description,
                     imageUrl: data.imageUrl || null,
                     costPrice: data.costPrice,
-                    salePrice: data.salePrice,
-                    taxRate: data.taxRate || 0, // <--- NUEVO (IVA)
+                    salePrice: data.salePrice, // <--- NUEVO (IVA)
                     minStock: data.minStock || 0,
                     isService: data.isService || false,
                     isPerishable: data.isPerishable || false,
@@ -216,49 +215,100 @@ export class ProductService {
     }
 
     // 5. ELIMINAR
+    // 5. ELIMINAR INTELIGENTE (Híbrido)
     async remove(businessId: number, id: number) {
         try {
+            // 1. Buscar el producto con sus conteos y su Stock actual
             const product = await prisma.product.findFirst({
                 where: { id, businessId },
                 include: {
                     _count: {
                         select: {
-                            stockLots: true,
                             saleItems: true,
                             purchaseItems: true,
                             stockMovements: true,
-                            presentations: true // <--- También chequeamos si tiene presentaciones
+                            stockLots: true // Lotes (pueden estar en 0)
                         }
+                    },
+                    // Traemos los lotes para ver si tienen cantidad > 0
+                    stockLots: {
+                        where: { quantity: { gt: 0 } }, // Solo los que tienen stock real
+                        select: { id: true }
                     }
                 }
             });
             
-            if (!product) return { message: 'Producto no encontrado', status: 404, data: null };
+            if (!product) {
+                return { message: 'Producto no encontrado', status: 404, data: null };
+            }
 
-            const totalRecords = 
-                product._count.stockLots + 
-                product._count.saleItems + 
-                product._count.purchaseItems + 
-                product._count.stockMovements;
-            
-            if (totalRecords > 0) {
+            // 2. REGLA DE ORO: No tocar si hay stock físico
+            if (product.stockLots.length > 0) {
                 return {
-                    message: `No se puede eliminar: El producto tiene ${totalRecords} movimientos históricos.`,
-                    status: 409,
+                    message: 'No puedes eliminar ni archivar un producto con existencia física. Ajusta el inventario a 0 primero.',
+                    status: 409, // Conflict
                     data: null
                 };
             }
 
-            // Nota: Si tiene presentaciones (ProductPresentation), Prisma las borrará en cascada 
-            // si configuraste onDelete: Cascade en el schema. Si no, tendrás que borrarlas manual.
-            
-            await prisma.product.delete({ where: { id } });
+            // 3. Evaluar Historial para decidir el destino
+            const hasHistory = 
+                product._count.saleItems > 0 || 
+                product._count.purchaseItems > 0 || 
+                product._count.stockMovements > 0;
 
-            return { message: 'Producto eliminado exitosamente', status: 200, data: null };
+            if (hasHistory) {
+                // === ESCENARIO A: SOFT DELETE (Archivar) ===
+                // Tiene historia, no podemos borrarlo, lo ocultamos.
+                
+                // Si ya estaba archivado, avisamos
+                if (!product.isActive) {
+                    return { message: 'El producto ya se encuentra archivado', status: 400, data: null };
+                }
+
+                const archivedProduct = await prisma.product.update({
+                    where: { id },
+                    data: { isActive: false }
+                });
+
+                return {
+                    message: 'Producto archivado correctamente (Se mantiene el historial contable)',
+                    status: 200,
+                    data: archivedProduct
+                };
+
+            } else {
+                // === ESCENARIO B: HARD DELETE (Borrado Físico) ===
+                // Es un producto "fantasma" o error de dedo. Limpiamos la BD.
+                
+                // Usamos transacción para borrar sus hijos (Presentations) y luego al padre
+                await prisma.$transaction(async (tx) => {
+                    // 1. Borrar presentaciones asociadas
+                    await tx.productPresentation.deleteMany({
+                        where: { productId: id }
+                    });
+                    
+                    // 2. Borrar lotes vacíos (si existen y están en 0)
+                    await tx.stockLot.deleteMany({
+                        where: { productId: id }
+                    });
+
+                    // 3. Borrar el producto
+                    await tx.product.delete({
+                        where: { id }
+                    });
+                });
+
+                return { 
+                    message: 'Producto eliminado permanentemente (Sin historial previo)', 
+                    status: 200, 
+                    data: null 
+                };
+            }
 
         } catch (error) {
-            console.error('Error al eliminar:', error);
-            return { message: 'Error interno al eliminar', status: 500, data: null };
+            console.error('Error al eliminar producto:', error);
+            return { message: 'Error interno al procesar la eliminación', status: 500, data: null };
         }
     }
 }

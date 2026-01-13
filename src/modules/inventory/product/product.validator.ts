@@ -64,11 +64,6 @@ export class ProductValidator {
             .isFloat({ min: 0 }).withMessage('El precio de venta debe ser positivo')
             .toFloat(),
 
-        body('taxRate') // NUEVO (Opcional)
-            .optional()
-            .isFloat({ min: 0, max: 100 }).withMessage('El impuesto debe ser un porcentaje entre 0 y 100')
-            .toFloat(),
-
         // 5. Configuración
         body('minStock')
             .optional()
@@ -122,7 +117,6 @@ export class ProductValidator {
         
         body('costPrice').optional().isFloat({ min: 0 }).toFloat(),
         body('salePrice').optional().isFloat({ min: 0 }).toFloat(),
-        body('taxRate').optional().isFloat({ min: 0, max: 100 }).toFloat(),
         
         body('minStock').optional().isInt({ min: 0 }).toInt(),
         body('isService').optional().isBoolean().toBoolean(),
