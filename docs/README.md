@@ -23,7 +23,8 @@ Documentación completa de la API REST del sistema SaaS.
 - [Categorías de Productos (Category)](./modules/inventory/category.md)
 - [Depósitos (Depot)](./modules/inventory/depot.md)
 - [Productos (Product)](./modules/inventory/product.md)
-- [Stock General (Stock General)](./modules/inventory/stock-general.md)
+- [Unidades de Medida (Measurement Unit)](./modules/inventory/measurement-unit.md)
+- [Presentaciones de Producto (Product Presentation)](./modules/inventory/product-presentation.md)
 - [Stock por Lotes (Stock Lot)](./modules/inventory/stock-lot.md)
 - [Movimientos de Stock (Stock Movement)](./modules/inventory/stock-movement.md)
 
@@ -32,6 +33,10 @@ Documentación completa de la API REST del sistema SaaS.
 - [Métodos de Pago (Payment Method)](./modules/finance/payment-method.md)
 - [Caja Registradora (Cash Register)](./modules/finance/cash-register.md)
 - [Conteo de Caja (Cash Count)](./modules/finance/cash-count.md)
+
+### Módulo Procurement
+- [Proveedores (Supplier)](./modules/procurement/supplier.md)
+- [Compras (Purchase)](./modules/procurement/purchase.md)
 
 ## 🔗 Base URL
 

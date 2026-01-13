@@ -30,23 +30,29 @@ x-business-id: 1
   "sku": "LAP-DELL-XPS15-001",
   "description": "Laptop de alta gama con procesador Intel i7",
   "categoryId": 1,
-  "price": 1299.99,
-  "cost": 899.99,
+  "unitId": 1,
+  "costPrice": 899.99,
+  "salePrice": 1299.99,
   "minStock": 5,
-  "isService": false
+  "isService": false,
+  "isPerishable": false,
+  "imageUrl": "https://example.com/image.jpg"
 }
 ```
 
 #### Validaciones
 
 - `name`: Obligatorio, string, 2-200 caracteres
-- `sku`: Obligatorio, string, 3-50 caracteres, único por negocio
-- `description`: Opcional, string, máximo 1000 caracteres
 - `categoryId`: Obligatorio, number, debe existir la categoría en el negocio
-- `price`: Obligatorio, number, debe ser >= 0
-- `cost`: Opcional, number, debe ser >= 0
+- `unitId`: Obligatorio, number, debe existir la unidad de medida
+- `costPrice`: Obligatorio, number, debe ser >= 0
+- `salePrice`: Obligatorio, number, debe ser >= 0
+- `sku`: Opcional, string, 3-50 caracteres, único por negocio
+- `description`: Opcional, string, máximo 1000 caracteres
+- `imageUrl`: Opcional, string, URL válida
 - `minStock`: Opcional, number, debe ser >= 0 (default: 0)
-- `isService`: Opcional, boolean (default: false)
+- `isService`: Opcional, boolean (default: false) - Si es true, no se gestiona stock
+- `isPerishable`: Opcional, boolean (default: false) - Si es true, requiere fecha de vencimiento en compras
 
 #### Response (201 Created)
 
@@ -87,9 +93,15 @@ x-business-id: 1
 
 ### 2. Listar Productos
 
-Obtiene todos los productos del negocio.
+Obtiene todos los productos del negocio con paginación y búsqueda opcional.
 
 **Endpoint:** `GET /api/v1/inventory/product`
+
+#### Query Parameters
+
+- `page`: Opcional, number, número de página (default: 1)
+- `limit`: Opcional, number, cantidad de resultados por página (default: 20)
+- `search`: Opcional, string, busca por nombre o SKU
 
 **Headers:**
 ```
@@ -103,27 +115,39 @@ x-business-id: 1
 {
   "message": "Productos obtenidos exitosamente",
   "status": 200,
-  "data": [
-    {
-      "id": 1,
-      "businessId": 1,
-      "categoryId": 1,
-      "name": "Laptop Dell XPS 15",
-      "sku": "LAP-DELL-XPS15-001",
-      "description": "Laptop de alta gama con procesador Intel i7",
-      "price": 1299.99,
-      "cost": 899.99,
-      "minStock": 5,
-      "isService": false,
-      "createdById": 5,
-      "createdAt": "2024-01-15T10:30:00.000Z",
-      "updatedAt": "2024-01-15T10:30:00.000Z",
-      "category": {
+  "data": {
+    "products": [
+      {
         "id": 1,
-        "name": "Electrónica"
+        "businessId": 1,
+        "categoryId": 1,
+        "unitId": 1,
+        "name": "Laptop Dell XPS 15",
+        "sku": "LAP-DELL-XPS15-001",
+        "description": "Laptop de alta gama con procesador Intel i7",
+        "costPrice": 899.99,
+        "salePrice": 1299.99,
+        "minStock": 5,
+        "isService": false,
+        "isPerishable": false,
+        "category": {
+          "id": 1,
+          "name": "Electrónica"
+        },
+        "unit": {
+          "id": 1,
+          "name": "Unidad",
+          "symbol": "u"
+        }
       }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
     }
-  ]
+  }
 }
 ```
 
@@ -204,7 +228,7 @@ x-business-id: 1
 ```json
 {
   "name": "Laptop Dell XPS 15 (Actualizado)",
-  "price": 1199.99,
+  "salePrice": 1199.99,
   "minStock": 10
 }
 ```
@@ -214,13 +238,16 @@ x-business-id: 1
 #### Validaciones
 
 - `name`: Opcional, string, 2-200 caracteres
+- `categoryId`: Opcional, number, debe existir la categoría en el negocio
+- `unitId`: Opcional, number, debe existir la unidad de medida
+- `costPrice`: Opcional, number, debe ser >= 0
+- `salePrice`: Opcional, number, debe ser >= 0
 - `sku`: Opcional, string, 3-50 caracteres, único por negocio
 - `description`: Opcional, string, máximo 1000 caracteres
-- `categoryId`: Opcional, number, debe existir la categoría en el negocio
-- `price`: Opcional, number, debe ser >= 0
-- `cost`: Opcional, number, debe ser >= 0
+- `imageUrl`: Opcional, string, URL válida
 - `minStock`: Opcional, number, debe ser >= 0
 - `isService`: Opcional, boolean
+- `isPerishable`: Opcional, boolean
 
 #### Response (200 OK)
 
@@ -232,11 +259,11 @@ x-business-id: 1
     "id": 1,
     "businessId": 1,
     "categoryId": 1,
+    "unitId": 1,
     "name": "Laptop Dell XPS 15 (Actualizado)",
     "sku": "LAP-DELL-XPS15-001",
-    "price": 1199.99,
+    "salePrice": 1199.99,
     "minStock": 10,
-    "updatedById": 5,
     "updatedAt": "2024-01-15T11:00:00.000Z"
   }
 }
@@ -246,7 +273,8 @@ x-business-id: 1
 
 - `404`: Producto no encontrado o no pertenece a este negocio
 - `400`: El SKU ya existe en este negocio
-- `400`: El costo no puede ser mayor que el precio
+- `404`: Categoría no encontrada o no pertenece a este negocio
+- `404`: Unidad de medida no encontrada
 
 ---
 
