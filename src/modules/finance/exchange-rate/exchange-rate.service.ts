@@ -3,37 +3,20 @@ import { CreateExchangeRateInterface, UpdateExchangeRateInterface } from './inte
 
 export class ExchangeRateService {
 
-    // 1. CREAR
-    async create(businessId: number, userId: number, data: CreateExchangeRateInterface) {
+    async create(userId: number, data: CreateExchangeRateInterface) {
         try {
             
-            // Verificar que el negocio existe
-            const business = await prisma.business.findUnique({
-                where: { id: businessId }
-            });
-
-            if (!business) {
-                return {
-                    message: 'Negocio no encontrado',
-                    status: 404,
-                    data: null
-                };
-            }
-
             const exchangeRate = await prisma.exchangeRate.create({
                 data: {
-                    businessId: businessId,
                     currency: data.currency,
                     rate: data.rate,
                     createdById: userId
                 },
-                include: {
-                    business: {
-                        select: {
-                            id: true,
-                            name: true
-                        }
-                    }
+                select: {
+                    id: true,
+                    currency: true,
+                    rate: true,
+                    createdAt: true,
                 }
             });
 
@@ -64,14 +47,10 @@ export class ExchangeRateService {
         }
     }
 
-    // 2. LISTAR TODOS (de un negocio)
-    async findAll(businessId: number) {
+    async findAll() {
         try {
 
             const exchangeRates = await prisma.exchangeRate.findMany({
-                where: {
-                    businessId: businessId
-                },
                 orderBy: {
                     createdAt: 'desc'
                 }
@@ -104,11 +83,10 @@ export class ExchangeRateService {
     }
 
     // 3. OBTENER LA ÚLTIMA TASA POR MONEDA
-    async findLatestByCurrency(businessId: number, currency: string) {
+    async findLatestByCurrency(currency: string) {
         try {
             const exchangeRate = await prisma.exchangeRate.findFirst({
                 where: {
-                    businessId: businessId,
                     currency: currency
                 },
                 orderBy: {
@@ -143,21 +121,12 @@ export class ExchangeRateService {
     }
 
     // 4. BUSCAR UNO
-    async findOne(businessId: number, id: number) {
+    async findOne(id: number) {
         try {
             const exchangeRate = await prisma.exchangeRate.findFirst({
                 where: { 
                     id,
-                    businessId: businessId
                 },
-                include: {
-                    business: {
-                        select: {
-                            id: true,
-                            name: true
-                        }
-                    }
-                }
             });
 
             if (!exchangeRate) {
@@ -187,15 +156,14 @@ export class ExchangeRateService {
     }
 
     // 5. ACTUALIZAR
-    async update(businessId: number, id: number, data: UpdateExchangeRateInterface) {
+    async update(id: number, data: UpdateExchangeRateInterface) {
 
         try {
 
             // Verificar que la tasa pertenece al negocio
             const existingRate = await prisma.exchangeRate.findFirst({
                 where: { 
-                    id,
-                    businessId: businessId
+                    id
                 }
             });
 
@@ -239,14 +207,11 @@ export class ExchangeRateService {
     }
 
     // 6. ELIMINAR
-    async remove(businessId: number, id: number) {
+    async remove(id: number) {
         try {
-
+            // 1. Buscar la tasa con sus relaciones
             const exchangeRate = await prisma.exchangeRate.findFirst({
-                where: { 
-                    id,
-                    businessId: businessId
-                },
+                where: { id },
                 include: {
                     _count: {
                         select: {
@@ -262,13 +227,13 @@ export class ExchangeRateService {
             
             if (!exchangeRate) {
                 return {
-                    message: 'Tasa de cambio no encontrada o no pertenece a este negocio',
+                    message: 'Tasa de cambio no encontrada',
                     status: 404,
                     data: null
                 };
             }
 
-            // Verificar si hay registros asociados
+            // 2. Verificar si hay registros asociados (Historial)
             const totalAssociations = 
                 exchangeRate._count.sales +
                 exchangeRate._count.salePayments +
@@ -276,30 +241,51 @@ export class ExchangeRateService {
                 exchangeRate._count.purchasePayments +
                 exchangeRate._count.cashCounts;
 
+            // 3. DECISIÓN: ¿Archivar o Borrar?
             if (totalAssociations > 0) {
+                // === ESCENARIO A: SOFT DELETE (Archivar) ===
+                // La tasa se usó en operaciones, no podemos borrarla.
+
+                // Si ya estaba inactiva, avisamos
+                if (!exchangeRate.isActive) {
+                    return {
+                        message: 'La tasa de cambio ya se encuentra archivada',
+                        status: 400,
+                        data: null
+                    };
+                }
+
+                // La desactivamos
+                await prisma.exchangeRate.update({
+                    where: { id },
+                    data: { isActive: false }
+                });
+
                 return {
-                    message: `No se puede eliminar la tasa de cambio porque tiene ${totalAssociations} registro(s) asociado(s) (ventas, compras, pagos, etc.)`,
-                    status: 400,
+                    message: `Tasa archivada correctamente. No se puede eliminar porque tiene ${totalAssociations} operaciones asociadas.`,
+                    status: 200,
+                    data: null
+                };
+
+            } else {
+                // === ESCENARIO B: HARD DELETE (Borrado Físico) ===
+                // Es una tasa creada por error o nunca usada. Limpiamos la BD.
+
+                await prisma.exchangeRate.delete({
+                    where: { id }
+                });
+
+                return {
+                    message: 'Tasa de cambio eliminada permanentemente (Sin historial)',
+                    status: 200,
                     data: null
                 };
             }
 
-            await prisma.exchangeRate.delete({
-                where: { id }
-            });
-
-            return {
-                message: 'Tasa de cambio eliminada exitosamente',
-                status: 200,
-                data: null
-            };
-
         } catch (error) {
-
             console.error('Error al eliminar la tasa de cambio:', error);
-
             return {
-                message: 'Error al eliminar la tasa de cambio',
+                message: 'Error interno al procesar la eliminación',
                 status: 500,
                 data: null
             };

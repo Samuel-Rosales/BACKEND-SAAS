@@ -5,17 +5,9 @@ export class ExchangeRateController {
     private service = new ExchangeRateService();
 
     create = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
         const userId = req.user!.id;
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
-                data: null
-            });
-        }
-
-        const {status, data, message} = await this.service.create(businessId, userId, req.body);
+        const {status, data, message} = await this.service.create(userId, req.body);
 
         res.status(status).json({ 
             message, 
@@ -24,16 +16,8 @@ export class ExchangeRateController {
     };
 
     findAll = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
-                data: null
-            });
-        }
-
-        const {status, data, message} = await this.service.findAll(businessId);
+        const {status, data, message} = await this.service.findAll();
         
         res.status(status).json({ 
             message, 
@@ -43,16 +27,8 @@ export class ExchangeRateController {
 
     findLatestByCurrency = async (req: Request, res: Response) => {
         const { currency } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
-                data: null
-            });
-        }
-
-        const {status, data, message} = await this.service.findLatestByCurrency(businessId, currency);
+        const {status, data, message} = await this.service.findLatestByCurrency(currency);
 
         res.status(status).json({ 
             message, 
@@ -62,16 +38,8 @@ export class ExchangeRateController {
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
-                data: null
-            });
-        }
-
-        const {status, data, message} = await this.service.findOne(businessId, +id);
+        const {status, data, message} = await this.service.findOne( +id);
 
         res.status(status).json({ 
             message, 
@@ -81,16 +49,8 @@ export class ExchangeRateController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
-                data: null
-            });
-        }
-
-        const {status, data, message} = await this.service.update(businessId, +id, req.body);
+        const {status, data, message} = await this.service.update(+id, req.body);
         
         res.status(status).json({ 
             message, 
@@ -100,16 +60,8 @@ export class ExchangeRateController {
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
-                data: null
-            });
-        }
-
-        const {status, data, message} = await this.service.remove(businessId, +id);
+        const {status, data, message} = await this.service.remove(+id);
 
         res.status(status).json({ 
             message, 
