@@ -51,8 +51,11 @@ export class ExchangeRateService {
         try {
 
             const exchangeRates = await prisma.exchangeRate.findMany({
+                where: {
+                    isActive: true
+                },
                 orderBy: {
-                    createdAt: 'desc'
+                    createdAt: 'desc',
                 }
             });
 
@@ -87,7 +90,8 @@ export class ExchangeRateService {
         try {
             const exchangeRate = await prisma.exchangeRate.findFirst({
                 where: {
-                    currency: currency
+                    currency: currency,
+                    isActive: true
                 },
                 orderBy: {
                     createdAt: 'desc'
@@ -126,6 +130,7 @@ export class ExchangeRateService {
             const exchangeRate = await prisma.exchangeRate.findFirst({
                 where: { 
                     id,
+                    isActive: true
                 },
             });
 
@@ -163,7 +168,8 @@ export class ExchangeRateService {
             // Verificar que la tasa pertenece al negocio
             const existingRate = await prisma.exchangeRate.findFirst({
                 where: { 
-                    id
+                    id,
+                    isActive: true
                 }
             });
 

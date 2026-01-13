@@ -72,7 +72,7 @@ export class CategoryService {
         try {
 
             const categories = await prisma.category.findMany({
-                where: { businessId },
+                where: { businessId, isActive: true },
                 orderBy: { id: 'asc' },
                 include: {
                     _count: {
@@ -115,7 +115,8 @@ export class CategoryService {
             const category = await prisma.category.findFirst({
                 where: { 
                     id,
-                    businessId // Seguridad: solo si pertenece al negocio
+                    businessId, // Seguridad: solo si pertenece al negocio
+                    isActive: true
                 },
                 include: {
                     business: {
@@ -165,7 +166,7 @@ export class CategoryService {
 
             // Verificar que la categoría pertenece al negocio
             const existingCategory = await prisma.category.findFirst({
-                where: { id, businessId }
+                where: { id, businessId, isActive: true }
             });
 
             if (!existingCategory) {
@@ -217,7 +218,7 @@ export class CategoryService {
     // 5. ELIMINAR (Con protección de integridad)
     async remove(businessId: number, id: number) {
         try {
-
+            // 1. Buscar la categoría y contar sus productos
             const category = await prisma.category.findFirst({
                 where: { id, businessId },
                 include: {
@@ -231,37 +232,61 @@ export class CategoryService {
             
             if (!category) {
                 return {
-                    message: 'Categoría no encontrada o no pertenece a este negocio',
+                    message: 'Categoría no encontrada',
                     status: 404,
                     data: null
                 };
             }
 
-            // Verificar si hay productos asociados
-            if (category._count.products > 0) {
+            // 2. Verificar dependencias
+            const totalProducts = category._count.products;
+
+            // 3. DECISIÓN: ¿Archivar o Borrar?
+            if (totalProducts > 0) {
+                // === ESCENARIO A: SOFT DELETE (Archivar) ===
+                // Hay productos usando esta categoría. No podemos borrarla físicamente
+                // porque dejaríamos productos "huérfanos" o romperíamos la integridad.
+
+                // Si ya estaba archivada, avisamos
+                if (!category.isActive) {
+                    return {
+                        message: 'La categoría ya se encuentra archivada',
+                        status: 400,
+                        data: null
+                    };
+                }
+
+                // La desactivamos
+                await prisma.category.update({
+                    where: { id },
+                    data: { isActive: false }
+                });
+
                 return {
-                    message: `No se puede eliminar la categoría porque tiene ${category._count.products} producto(s) asociado(s)`,
-                    status: 400,
+                    message: `Categoría archivada correctamente. No se eliminó físicamente porque contiene ${totalProducts} producto(s).`,
+                    status: 200,
+                    data: null
+                };
+
+            } else {
+                // === ESCENARIO B: HARD DELETE (Borrado Físico) ===
+                // La categoría está vacía. Es seguro borrarla por completo.
+
+                await prisma.category.delete({
+                    where: { id }
+                });
+
+                return {
+                    message: 'Categoría eliminada permanentemente (Estaba vacía)',
+                    status: 200,
                     data: null
                 };
             }
 
-            await prisma.category.delete({
-                where: { id }
-            });
-
-            return {
-                message: 'Categoría eliminada exitosamente',
-                status: 200,
-                data: null
-            };
-
         } catch (error) {
-
             console.error('Error al eliminar la categoría:', error);
-
             return {
-                message: 'Error al eliminar la categoría',
+                message: 'Error interno al procesar la eliminación',
                 status: 500,
                 data: null
             };

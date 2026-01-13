@@ -217,55 +217,96 @@ export class DepotService {
     // 5. ELIMINAR (Con protección de integridad)
     async remove(businessId: number, id: number) {
         try {
-
+            // 1. Buscar el depósito, contar historial y VERIFICAR STOCK ACTUAL
             const depot = await prisma.depot.findFirst({
-                where: { id, businessId, isActive: true },
+                where: { id, businessId },
                 include: {
                     _count: {
                         select: {
-                            stockLots: true,
-                            stockMovements: true
+                            stockLots: true,      // Lotes totales (históricos)
+                            stockMovements: true, // Kardex
+                            purchaseItems: true   // Compras recibidas aquí
                         }
+                    },
+                    // IMPORTANTE: Buscar lotes que tengan cantidad positiva
+                    stockLots: {
+                        where: { quantity: { gt: 0 } },
+                        select: { id: true }
                     }
                 }
             });
             
             if (!depot) {
                 return {
-                    message: 'Depósito no encontrado o no pertenece a este negocio',
+                    message: 'Almacén no encontrado',
                     status: 404,
                     data: null
                 };
             }
 
-            // Verificar si hay registros asociados
-            const totalRecords = depot._count.stockLots + depot._count.stockMovements;
-            
-            if (totalRecords > 0) {
+            // 2. REGLA CRÍTICA: No tocar si hay mercadería física adentro
+            if (depot.stockLots.length > 0) {
                 return {
-                    message: `No se puede eliminar el depósito porque tiene ${totalRecords} registro(s) de inventario asociado(s)`,
-                    status: 400,
+                    message: `No puedes eliminar ni archivar el almacén porque contiene existencias físicas (Items > 0). Realiza un traslado o ajuste de salida primero.`,
+                    status: 409, // Conflict
                     data: null
                 };
             }
 
-            await prisma.depot.update({
-                where: { id },
-                data: { isActive: false }
-            });
+            // 3. Evaluar Historial
+            const hasHistory = 
+                depot._count.stockMovements > 0 || 
+                depot._count.purchaseItems > 0 ||
+                depot._count.stockLots > 0; // Tuvo lotes en el pasado (aunque ahora estén en 0)
 
-            return {
-                message: 'Depósito marcado como eliminado (soft delete)',
-                status: 200,
-                data: null
-            };
+            if (hasHistory) {
+                // === ESCENARIO A: SOFT DELETE (Archivar) ===
+                // El almacén está vacío, pero se usó en el pasado. Guardamos la referencia.
+                
+                if (!depot.isActive) {
+                    return {
+                        message: 'El almacén ya se encuentra archivado',
+                        status: 400,
+                        data: null
+                    };
+                }
+
+                await prisma.depot.update({
+                    where: { id },
+                    data: { isActive: false }
+                });
+
+                return {
+                    message: 'Almacén archivado correctamente (Está vacío pero tiene historial)',
+                    status: 200,
+                    data: null
+                };
+
+            } else {
+                // === ESCENARIO B: HARD DELETE (Borrado Físico) ===
+                // Nunca se usó. Es seguro borrarlo.
+
+                // Primero borramos los lotes (que ya sabemos que están en 0 por la validación del paso 2)
+                // para evitar error de Foreign Key
+                await prisma.stockLot.deleteMany({
+                    where: { depotId: id }
+                });
+
+                await prisma.depot.delete({
+                    where: { id }
+                });
+
+                return {
+                    message: 'Almacén eliminado permanentemente (Estaba vacío y sin uso)',
+                    status: 200,
+                    data: null
+                };
+            }
 
         } catch (error) {
-
             console.error('Error al eliminar el depósito:', error);
-
             return {
-                message: 'Error al eliminar el depósito',
+                message: 'Error interno al procesar la eliminación',
                 status: 500,
                 data: null
             };

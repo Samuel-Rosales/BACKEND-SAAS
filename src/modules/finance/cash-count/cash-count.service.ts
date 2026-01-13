@@ -26,8 +26,7 @@ export class CashCountService {
             // Verificar que la tasa de cambio existe y pertenece al negocio
             const exchangeRate = await prisma.exchangeRate.findFirst({
                 where: { 
-                    id: data.exchangeRateId,
-                    businessId: businessId
+                    id: data.exchangeRateId
                 }
             });
 
@@ -237,8 +236,7 @@ export class CashCountService {
             if (data.exchangeRateId) {
                 const exchangeRate = await prisma.exchangeRate.findFirst({
                     where: { 
-                        id: data.exchangeRateId,
-                        businessId: businessId
+                        id: data.exchangeRateId
                     }
                 });
 
