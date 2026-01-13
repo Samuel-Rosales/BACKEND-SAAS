@@ -15,7 +15,7 @@ export class StockMovementValidator {
         .isInt().withMessage('El ID del depósito debe ser un número entero'),
 
         body('type')
-        .isIn(['IN', 'OUT', 'ADJUSTMENT', 'TRANSFER', 'RETURN'])
+        .isIn([MovementType.IN, MovementType.OUT, MovementType.ADJUSTMENT, MovementType.TRANSFER, MovementType.RETURN])
         .withMessage('El tipo de movimiento debe ser: IN, OUT, ADJUSTMENT, TRANSFER o RETURN'),
 
         body('quantity')
