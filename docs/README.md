@@ -37,6 +37,8 @@ Documentación completa de la API REST del sistema SaaS.
 ### Módulo Procurement
 - [Proveedores (Supplier)](./modules/procurement/supplier.md)
 - [Compras (Purchase)](./modules/procurement/purchase.md)
+- [Items de Compra (Purchase Item)](./modules/procurement/purchase-item.md)
+- [Pagos de Compra (Purchase Payment)](./modules/procurement/purchase-payment.md)
 
 ## 🔗 Base URL
 
