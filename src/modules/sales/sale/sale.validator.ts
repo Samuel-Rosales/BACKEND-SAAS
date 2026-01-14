@@ -160,6 +160,36 @@ export class SaleValidator {
       .isIn(['PENDING', 'COMPLETED', 'CANCELLED', 'REFUNDED']).withMessage('El estado debe ser válido')
   ];
 
+  public validateAddPayment: ValidationChain[] = [
+    param('id').isInt().toInt().withMessage('ID inválido'),
+    
+    body('paymentMethodId')
+      .notEmpty().withMessage('El ID del método de pago es obligatorio')
+      .isInt({ min: 1 }).withMessage('El ID del método de pago debe ser un número entero positivo')
+      .toInt(),
+
+    body('exchangeRateId')
+      .notEmpty().withMessage('El ID de la tasa de cambio es obligatorio')
+      .isInt({ min: 1 }).withMessage('El ID de la tasa de cambio debe ser un número entero positivo')
+      .toInt(),
+
+    body('amount')
+      .notEmpty().withMessage('El monto es obligatorio')
+      .isFloat({ min: 0.01 }).withMessage('El monto debe ser un número positivo')
+      .toFloat(),
+    
+    body('currency')
+      .trim()
+      .notEmpty().withMessage('La moneda es obligatoria')
+      .isIn(['USD', 'VES']).withMessage('La moneda debe ser USD o VES'),
+
+    body('reference')
+      .optional()
+      .trim()
+      .isString()
+      .isLength({ max: 200 }).withMessage('La referencia no puede exceder 200 caracteres')
+  ];
+
   public validateId: ValidationChain[] = [
     param('id').isInt().toInt().withMessage('ID inválido')
   ];

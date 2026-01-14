@@ -18,9 +18,12 @@ export class SaleController {
                 });
             }
             
-            const result = await service.create(businessId, memberId, req.body);
+            const {data, message, status} = await service.create(businessId, memberId, req.body);
 
-            return res.status(result.status).json(result);
+            return res.status(status).json({
+                data,
+                message
+            });
 
         } catch (error) {
             console.error('Error en SaleController.create:', error);
@@ -53,9 +56,12 @@ export class SaleController {
                 status: req.query.status as string
             };
 
-            const result = await service.findAll(businessId, query);
+            const {data, message, status} = await service.findAll(businessId, query);
 
-            return res.status(result.status).json(result);
+            return res.status(status).json({
+                data,
+                message
+            });
 
         } catch (error) {
             console.error('Error en SaleController.findAll:', error);
@@ -80,9 +86,12 @@ export class SaleController {
                 });
             }
 
-            const result = await service.findOne(businessId, id);
+            const {data, message, status} = await service.findOne(businessId, id);
 
-            return res.status(result.status).json(result);
+            return res.status(status).json({
+                data,
+                message
+            });
 
         } catch (error) {
             console.error('Error en SaleController.findOne:', error);
@@ -107,15 +116,47 @@ export class SaleController {
                 });
             }
 
-            const result = await service.update(businessId, id, req.body);
+            const {data, message, status} = await service.update(businessId, id, req.body);
 
-            return res.status(result.status).json(result);
+            return res.status(status).json({
+                data,
+                message
+            });
 
         } catch (error) {
             console.error('Error en SaleController.update:', error);
             return res.status(500).json({
                 status: 500,
                 message: 'Error interno al actualizar la venta',
+                data: null
+            });
+        }
+    }
+
+    async addPayment(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user!.businessId;
+            const saleId = Number(req.params.id);
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            const { data, message, status } = await service.addPayment(businessId, saleId, req.body);
+
+            return res.status(status).json({
+                data,
+                message
+            });  
+        } catch (error) {
+            console.error('Error en SaleController.addPayment:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al agregar pago',
                 data: null
             });
         }

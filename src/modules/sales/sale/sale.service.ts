@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { CreateSaleInterface, UpdateSaleInterface } from './interfaces';
+import { CreateSaleInterface, SalePaymentDto, UpdateSaleInterface } from './interfaces';
 import { PaymentStatus, SaleConditions, SaleStatus, SaleType } from '@prisma/client';
 
 export class SaleService {
@@ -459,6 +459,101 @@ export class SaleService {
         } catch (error) {
             console.error('Error al obtener venta:', error);
             return { status: 500, message: 'Error interno al obtener venta', data: null };
+        }
+    }
+
+    async addPayment(businessId: number, saleId: number, data: SalePaymentDto) {
+        try {
+            const result = await prisma.$transaction(async (tx) => {
+                
+                // 1. Buscar la venta y cuánto debe ACTUALMENTE
+                const sale = await tx.sale.findUnique({
+                    where: { id: saleId, businessId }
+                });
+        
+                if (!sale) throw new Error("Venta no encontrada");
+                if (sale.paymentStatus === PaymentStatus.PAID) throw new Error("Esta venta ya está pagada por completo");
+        
+                // 2. Buscar la Tasa del día (Porque puede pagar hoy con una tasa distinta a la de la venta original)
+                const exchangeRate = await tx.exchangeRate.findUnique({
+                    where: { id: data.exchangeRateId }
+                });
+                if (!exchangeRate) throw new Error("Tasa de cambio inválida");
+        
+                // 3. Normalizar el Pago a Dólares (Moneda Base)
+                let paymentInBaseCurrency = data.amount;
+                
+                if (data.currency !== 'USD') {
+                    // Si paga en Bolívares, convertimos a Dólares con la tasa DE HOY
+                    const rate = Number(exchangeRate.rate);
+                    paymentInBaseCurrency = data.amount / rate;
+                }
+        
+                // Redondeo a 2 decimales
+                paymentInBaseCurrency = Math.round(paymentInBaseCurrency * 100) / 100;
+        
+                // 4. Validar que no esté pagando de más
+                // Usamos un pequeño margen de error (0.05) por los decimales
+                if (paymentInBaseCurrency > (Number(sale.remainingBalance) + 0.05)) {
+                    throw new Error(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`);
+                }
+        
+                // 5. Crear el registro del Pago (La "Cuota")
+                const newPayment = await tx.salePayment.create({
+                    data: {
+                        saleId,
+                        paymentMethodId: data.paymentMethodId,
+                        exchangeRateId: exchangeRate.id, // Guardamos la tasa de HOY
+                        amount: data.amount,             // Lo que pagó (ej. 1000 Bs)
+                        currency: data.currency,         // Moneda (VES)
+                        reference: data.reference || "N/A"
+                    }
+                });
+        
+                // 6. Calcular Nuevo Saldo
+                // Restamos lo que pagó (convertido a USD) al saldo anterior
+                const newBalance = Number(sale.remainingBalance) - paymentInBaseCurrency;
+                
+                // Asegurar que no quede negativo por milésimas (ej: -0.00001)
+                const finalBalance = newBalance < 0 ? 0 : newBalance;
+        
+                // 7. Determinar Nuevo Estado
+                let newStatus: PaymentStatus = sale.paymentStatus;
+                if (finalBalance <= 0.05) { // Margen de error
+                    newStatus = PaymentStatus.PAID;
+                } else {
+                    newStatus = PaymentStatus.PARTIAL;
+                }
+        
+                // 8. Actualizar la Venta Principal
+                await tx.sale.update({
+                    where: { id: saleId },
+                    data: {
+                        remainingBalance: finalBalance,
+                        paymentStatus: newStatus
+                    }
+                });
+        
+                return {
+                    payment: newPayment,
+                    newBalance: finalBalance,
+                    status: newStatus,
+                    message: newStatus === PaymentStatus.PAID ? '¡Venta liquidada correctamente!' : 'Abono registrado correctamente'
+                };
+            });
+            
+            return {
+                status: 200,
+                message: 'Pago agregado exitosamente',
+                data: result
+            };
+        } catch (error) {
+            console.error('Error al agregar pago:', error);
+            return {
+                status: 500,
+                message: 'Error interno al agregar pago',
+                data: null
+            };
         }
     }
 

@@ -43,6 +43,14 @@ router.patch(
     controller.update
 );
 
+// 5. Agregar Pago a Venta
+router.post(
+    '/:id/payments', 
+    validator.validateAddPayment,
+    handleValidationErrors,
+    controller.addPayment
+);
+
 export const SaleRoute = router;
 
 export default router;
