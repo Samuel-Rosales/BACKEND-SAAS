@@ -212,80 +212,55 @@ export class PurchaseService {
         }
     }
 
-    async findAll(businessId: number, purchaseId?: number) {
+    async findAll(businessId: number, query: { page?: number; limit?: number; fromDate?: string; toDate?: string }) {
         try {
+            const page = Number(query.page) || 1;
+            const limit = Number(query.limit) || 20; // 20 por página por defecto
+            const skip = (page - 1) * limit;
+
+            // Filtro de fechas (Opcional pero recomendado)
+            const whereClause: any = { businessId };
             
-            const whereClause: any = {
-                purchase: {
-                    businessId: businessId
-                }
-            };
-
-            // Si se proporciona purchaseId, filtrar por compra
-            if (purchaseId) {
-                whereClause.purchaseId = purchaseId;
-            }
-
-            const purchaseItems = await prisma.purchaseItem.findMany({
-                where: whereClause,
-                include: {
-                    product: {
-                        select: {
-                            id: true,
-                            name: true,
-                            sku: true,
-                            imageUrl: true
-                        }
-                    },
-                    depot: {
-                        select: {
-                            id: true,
-                            name: true
-                        }
-                    },
-                    productPresentation: {
-                        select: {
-                            id: true,
-                            name: true,
-                            factor: true
-                        }
-                    },
-                    purchase: {
-                        select: {
-                            id: true,
-                            totalCost: true,
-                            reference: true,
-                            date: true
-                        }
-                    }
-                },
-                orderBy: {
-                    id: 'desc'
-                }
-            });
-
-            if (purchaseItems.length === 0) {
-                return {
-                    message: 'No hay items de compra registrados',
-                    status: 404,
-                    data: []
+            if (query.fromDate && query.toDate) {
+                whereClause.date = {
+                    gte: new Date(query.fromDate), // Desde las 00:00
+                    lte: new Date(new Date(query.toDate).setHours(23, 59, 59)) // Hasta el final del día
                 };
             }
 
+            // Hacemos 2 consultas en paralelo: Datos y Conteo Total
+            const [purchases, total] = await Promise.all([
+                prisma.purchase.findMany({
+                    where: whereClause,
+                    skip: skip,
+                    take: limit,
+                    include: {
+                        supplier: { select: { nameCompany: true } },
+                        member: { include: { user: { select: { name: true } } } },
+                        // Traemos el totalCost y status para mostrar en la tabla
+                        exchangeRate: { select: { rate: true, currency: true } }, 
+                        _count: { select: { items: true } }
+                    },
+                    orderBy: { date: 'desc' }
+                }),
+                
+                prisma.purchase.count({ where: whereClause })
+            ]);
+
             return {
-                message: 'Items de compra obtenidos exitosamente',
                 status: 200,
-                data: purchaseItems
+                message: 'Compras obtenidas',
+                data: purchases,
+                meta: { // Metadata para que el frontend dibuje los botones de paginación
+                    total,
+                    page,
+                    lastPage: Math.ceil(total / limit)
+                }
             };
 
         } catch (error) {
-            console.error('Error al obtener los items de compra:', error);
-            
-            return {
-                message: 'Error al obtener los items de compra',
-                status: 500,
-                data: null
-            };
+            console.error(error);
+            return { status: 500, message: 'Error interno al listar compras', data: null };
         }
     }
 
