@@ -8,6 +8,7 @@ import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute } from '../modu
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute } from '../modules/finance';
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
+import { ClientRoute } from '@/modules/sales';
 
 export class Server {
 
@@ -46,6 +47,7 @@ export class Server {
             purchases: `${this.prefix}/procurement/purchase`,
             purchasePayments: `${this.prefix}/procurement/purchase-payment`,
             purchaseItems: `${this.prefix}/procurement/purchase-item`,
+            clients: `${this.prefix}/sales/client`,
         };
 
         this.dbConnection();
@@ -87,6 +89,7 @@ export class Server {
         this.app.use(this.paths.purchases, PurchaseRoute);
         this.app.use(this.paths.purchasePayments, PurchasePaymentRoute);
         this.app.use(this.paths.purchaseItems, PurchaseItemRoute);
+        this.app.use(this.paths.clients, ClientRoute);
     }
 
     async dbConnection() {
