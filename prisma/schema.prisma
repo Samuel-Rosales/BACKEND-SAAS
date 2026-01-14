@@ -206,7 +206,8 @@ model Product {
   purchaseItems  PurchaseItem[]
   stockMovements StockMovement[]
   presentations  ProductPresentation[] // <--- Cajas, Packs
-
+  creditNotes CreditNoteItem[]
+  
   @@index([businessId, sku])
 }
 
@@ -285,23 +286,42 @@ model Client {
 }
 
 model Sale {
-  id               Int        @id @default(autoincrement())
-  businessId       Int
-  receiptNumber    Int        // Consecutivo visual para el cliente (Factura #001)
-  memberId         Int        // Vendedor
-  clientId         Int
-  type             SaleType   @default(RETAIL)
-  status           SaleStatus @default(COMPLETED)
+  id             Int        @id @default(autoincrement())
+  businessId     Int
+  receiptNumber  Int        // Factura #001
   
-  // Totales
-  totalAmount      Decimal    @db.Decimal(15, 2)
-  remainingBalance Decimal    @default(0) @db.Decimal(15, 2) // Deuda pendiente (si es a crédito)
-  paymentDueDate   DateTime?  // Fecha límite para pagar (si es a crédito)
-  
-  exchangeRateId   Int        // Tasa del día usada para la conversión
-  createdAt        DateTime   @default(now()) 
-  updatedAt        DateTime   @updatedAt
+  // Relaciones
+  memberId       Int
+  clientId       Int
+  exchangeRateId Int
 
+  // Clasificación
+  type           SaleType   @default(RETAIL)
+  status         SaleStatus @default(COMPLETED) // COMPLETED, CANCELLED, DRAFT
+  
+  // --- CONDICIONES DE PAGO ---
+  conditions     SaleConditions @default(CASH) // CASH o CREDIT
+  
+  // Este estado se calcula automáticamente al pagar. 
+  // Eliminé OVERDUE y CANCELLED de aquí porque eso se deduce de otras variables.
+  paymentStatus  PaymentStatus  @default(PAID) 
+  
+  // --- MONTOS (Desglose fiscal) ---
+  subTotal       Decimal    @db.Decimal(15, 2) // Precio antes de impuestos
+  taxAmount      Decimal    @db.Decimal(15, 2) // El monto del IVA
+  discount       Decimal    @default(0) @db.Decimal(15, 2) // Descuentos aplicados
+  totalAmount    Decimal    @db.Decimal(15, 2) // (SubTotal - Desc) + Tax
+  
+  // --- CRÉDITO ---
+  remainingBalance Decimal    @default(0) @db.Decimal(15, 2)
+  paymentDueDate   DateTime?  
+
+  // Auditoría
+  createdAt      DateTime   @default(now()) 
+  updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?  // Soft Delete (Anulación lógica)
+
+  // Relaciones
   business     Business       @relation(fields: [businessId], references: [id])
   member       BusinessMember @relation(fields: [memberId], references: [id])
   client       Client         @relation(fields: [clientId], references: [id])
@@ -309,6 +329,55 @@ model Sale {
 
   items    SaleItem[]
   payments SalePayment[]
+  creditNotes CreditNote[]
+}
+
+model CreditNote {
+  id             Int      @id @default(autoincrement())
+  businessId     Int
+  saleId         Int      // Vinculada a la venta original
+  number         Int      // Consecutivo fiscal (Nota de Crédito #001)
+  
+  totalAmount    Decimal  @db.Decimal(15, 2) // Cuánto dinero se devuelve
+  reason         String   // "Producto defectuoso", "No le quedó", etc.
+  
+  createdAt      DateTime @default(now())
+
+  sale           Sale     @relation(fields: [saleId], references: [id])
+  items          CreditNoteItem[]
+}
+
+// Detalle de qué items específicos se devolvieron
+model CreditNoteItem {
+  id             Int     @id @default(autoincrement())
+  creditNoteId   Int
+  productId      Int
+  quantity       Decimal // Cantidad que entra de vuelta al stock
+  unitPrice      Decimal // Precio al que se vendió originalmente
+  subTotal       Decimal
+
+  creditNote     CreditNote @relation(fields: [creditNoteId], references: [id])
+  product        Product    @relation(fields: [productId], references: [id])
+}
+
+enum SaleConditions {
+  CASH
+  CREDIT
+}
+
+// Renombrado a PaymentStatus para ser más claro
+enum PaymentStatus {
+  PENDING         // No se ha pagado nada (o saldo inicial completo)
+  PARTIAL         // Se ha abonado algo
+  PAID            // Saldo en 0
+  REFUNDED        // Se devolvió el dinero
+  // Nota: "VENCIDO" se calcula en el frontend comparando paymentDueDate vs Hoy
+}
+
+enum SaleStatus {
+  DRAFT       // Aún editando (carrito)
+  COMPLETED   // Venta cerrada y stock descontado
+  CANCELLED   // Venta anulada (requiere devolver stock)
 }
 
 model SaleItem {
@@ -508,13 +577,6 @@ enum MovementType {
 enum SaleType {
   RETAIL
   WHOLESALE
-}
-
-enum SaleStatus {
-  PENDING
-  COMPLETED
-  CANCELLED
-  REFUNDED
 }
 
 enum PurchaseStatus {
