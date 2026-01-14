@@ -212,6 +212,83 @@ export class PurchaseService {
         }
     }
 
+    async findAll(businessId: number, purchaseId?: number) {
+        try {
+            
+            const whereClause: any = {
+                purchase: {
+                    businessId: businessId
+                }
+            };
+
+            // Si se proporciona purchaseId, filtrar por compra
+            if (purchaseId) {
+                whereClause.purchaseId = purchaseId;
+            }
+
+            const purchaseItems = await prisma.purchaseItem.findMany({
+                where: whereClause,
+                include: {
+                    product: {
+                        select: {
+                            id: true,
+                            name: true,
+                            sku: true,
+                            imageUrl: true
+                        }
+                    },
+                    depot: {
+                        select: {
+                            id: true,
+                            name: true
+                        }
+                    },
+                    productPresentation: {
+                        select: {
+                            id: true,
+                            name: true,
+                            factor: true
+                        }
+                    },
+                    purchase: {
+                        select: {
+                            id: true,
+                            totalCost: true,
+                            reference: true,
+                            date: true
+                        }
+                    }
+                },
+                orderBy: {
+                    id: 'desc'
+                }
+            });
+
+            if (purchaseItems.length === 0) {
+                return {
+                    message: 'No hay items de compra registrados',
+                    status: 404,
+                    data: []
+                };
+            }
+
+            return {
+                message: 'Items de compra obtenidos exitosamente',
+                status: 200,
+                data: purchaseItems
+            };
+
+        } catch (error) {
+            console.error('Error al obtener los items de compra:', error);
+            
+            return {
+                message: 'Error al obtener los items de compra',
+                status: 500,
+                data: null
+            };
+        }
+    }
+
     // 3. OBTENER DETALLE COMPLETO
     async findOne(businessId: number, id: number) {
         try {
