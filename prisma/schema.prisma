@@ -427,7 +427,7 @@ model PurchasePayment {
   amount                  Decimal  @db.Decimal(15, 2)
   currency                String  // Moneda del pago (ej: USD o VES)
   exchangeRateId          Int
-  reference               String   // Nro de referencia bancaria
+  reference               String?   // Nro de referencia bancaria
   paymentDate             DateTime @default(now())
 
   purchase     Purchase      @relation(fields: [purchaseId], references: [id])
