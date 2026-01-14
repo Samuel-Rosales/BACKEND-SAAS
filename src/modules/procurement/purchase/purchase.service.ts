@@ -8,98 +8,86 @@ export class PurchaseService {
     async create(businessId: number, userId: number, data: CreatePurchaseInterface) {
         try {
             // =================================================================
-            // FASE 1: VALIDACIONES PARALELAS (Mucho más rápido) ⚡
+            // FASE 1: VALIDACIONES PARALELAS
             // =================================================================
             
             const productIds = [...new Set(data.items.map(i => i.productId))];
             const depotIds = [...new Set(data.items.map(i => i.depotId))];
             const paymentMethodIds = [...new Set(data.payments.map(p => p.paymentMethodId))];
-
-            // LANZAMOS TODAS LAS CONSULTAS DE LECTURA AL MISMO TIEMPO
-            const [exchangeRate, supplier, products, depots, validPaymentMethods] = await Promise.all([
-                // 1. Tasa
+            
+            // CORRECCIÓN 1: Filtrar nulos en vez de usar "|| 1". 
+            // Solo buscamos presentaciones si realmente enviaron un ID.
+            const presentationIds = [...new Set(
+                data.items.map(i => i.productPresentationId).filter((id): id is number => id != null)
+            )];
+    
+            const [exchangeRate, supplier, products, depots, validPaymentMethods, presentations] = await Promise.all([
                 prisma.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
-                // 2. Proveedor
                 prisma.supplier.findUnique({ where: { id: data.supplierId } }),
-                // 3. Productos
                 prisma.product.findMany({ 
                     where: { id: { in: productIds } }, 
                     select: { id: true, name: true, isPerishable: true } 
                 }),
-                // 4. Almacenes
                 prisma.depot.findMany({ where: { id: { in: depotIds } }, select: { id: true } }),
-                // 5. Métodos de Pago (si hay)
+                
                 data.payments.length > 0 
                     ? prisma.paymentMethod.findMany({ where: { id: { in: paymentMethodIds } }, select: { id: true } })
-                    : Promise.resolve([]) 
+                    : Promise.resolve([]),
+                
+                // CORRECCIÓN 2: Manejo seguro de array vacío
+                presentationIds.length > 0 
+                    ? prisma.productPresentation.findMany({ where: { id: { in: presentationIds } }, select: { id: true, factor: true } })
+                    : Promise.resolve([]),
             ]);
-
-            // --- A PARTIR DE AQUÍ HACEMOS LOS CHEQUEOS EN MEMORIA (Es instantáneo) ---
-
-            // Chequeo Tasa
-            if (!exchangeRate) {
-                return { message: 'La tasa de cambio no existe', status: 404, data: null };
-            }
-
-            // Chequeo Proveedor
-            if (!supplier) {
-                return { message: 'El proveedor no existe', status: 404, data: null };
-            }
-            if (!supplier.isActive) {
-                return { message: 'El proveedor está inactivo', status: 400, data: null };
-            }
-
-            // Chequeo Productos
-            if (products.length !== productIds.length) {
-                const foundIds = products.map(p => p.id);
-                const missingIds = productIds.filter(id => !foundIds.includes(id));
-                return { message: `Los productos [${missingIds.join(', ')}] no existen`, status: 404, data: null };
-            }
-
-            // Chequeo Almacenes
-            if (depots.length !== depotIds.length) {
-                return { message: 'Uno o más almacenes no existen', status: 404, data: null };
-            }
-
-            // Chequeo Métodos de Pago
+    
+            // --- VALIDACIONES DE EXISTENCIA ---
+            if (!exchangeRate) return { message: 'Tasa de cambio no encontrada', status: 404, data: null };
+            if (!supplier) return { message: 'Proveedor no encontrado', status: 404, data: null };
+            if (!supplier.isActive) return { message: 'Proveedor inactivo', status: 400, data: null };
+            
+            if (products.length !== productIds.length) return { message: 'Uno o más productos no existen', status: 404, data: null };
+            if (depots.length !== depotIds.length) return { message: 'Uno o más almacenes no existen', status: 404, data: null };
+            if (presentations.length !== presentationIds.length) return { message: 'Una o más presentaciones no existen', status: 404, data: null };
+            
             if (data.payments.length > 0 && validPaymentMethods.length !== paymentMethodIds.length) {
-                return { message: 'Uno o más métodos de pago no existen', status: 404, data: null };
+                return { message: 'Método de pago inválido', status: 404, data: null };
             }
-
-            // 4. Validación Matemática (Backend vs Frontend)
-            const calculatedSubTotal = data.items.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0);
-
-            const difference = Math.abs(calculatedSubTotal - data.subTotal);
-
-            if (difference > 0.05) {
+    
+            // --- VALIDACIONES LÓGICAS ---
+    
+            // 1. Matemática (Subtotal)
+            // Asumimos: quantity (nominal) * unitCost (nominal) = Total Línea
+            let calculatedSubTotal = 0;
+            
+            // 2. Perecederos
+            for (const item of data.items) {
+                const productInfo = products.find(p => p.id === item.productId);
+                
+                // Validar fecha de vencimiento
+                if (productInfo?.isPerishable && !item.expirationDate) {
+                    return { message: `El producto "${productInfo.name}" requiere fecha de vencimiento`, status: 400, data: null };
+                }
+    
+                // Sumar al total calculado
+                calculatedSubTotal += (item.quantity * item.unitCost);
+            }
+    
+            if (Math.abs(calculatedSubTotal - data.subTotal) > 0.05) {
                 return {
-                    message: `Error matemático: La suma de items (${calculatedSubTotal}) no coincide con el SubTotal enviado (${data.subTotal})`,
+                    message: `Error en montos. Calculado: ${calculatedSubTotal}, Enviado: ${data.subTotal}`,
                     status: 400,
                     data: null
                 };
             }
-
-            // 5. Validar Perecederos
-            for (const item of data.items) {
-
-                const productInfo = products.find(p => p.id === item.productId);
-
-                if (productInfo?.isPerishable && !item.expirationDate) {
-                    return {
-                        message: `El producto "${productInfo.name}" es perecedero y requiere fecha de vencimiento`,
-                        status: 400,
-                        data: null
-                    };
-                }
-            }
-
+    
+    
             // =================================================================
-            // FASE 2: TRANSACCIÓN (Escritura segura)
+            // FASE 2: TRANSACCIÓN
             // =================================================================
             
             const result = await prisma.$transaction(async (tx) => {
                 
-                // A. Crear Cabecera
+                // A. Cabecera
                 const purchase = await tx.purchase.create({
                     data: {
                         businessId,
@@ -114,24 +102,80 @@ export class PurchaseService {
                         observation: data.observation || "N/A",
                     }
                 });
-
-                // B. Insertar Items (Bulk)
-                if (data.items.length > 0) {
-                    await tx.purchaseItem.createMany({
-                        data: data.items.map(item => ({
+    
+                // B. Procesar Items e Inventario
+                for (const item of data.items) {
+                    
+                    // 1. Calcular Cantidad Real (Unidades)
+                    let finalQuantity = item.quantity;
+                    if (item.productPresentationId) {
+                        const pres = presentations.find(p => p.id === item.productPresentationId);
+                        if (pres) finalQuantity = item.quantity * Number(pres.factor);
+                    }
+            
+                    const expiration = item.expirationDate ? new Date(item.expirationDate) : NON_PERISHABLE_DATE;
+            
+                    // 2. Crear PurchaseItem (Registro histórico de la compra)
+                    await tx.purchaseItem.create({
+                        data: {
                             purchaseId: purchase.id,
                             productId: item.productId,
-                            depotId: item.depotId,
-                            quantity: item.quantity,
-                            unitCost: item.unitCost,
-                            expirationDate: item.expirationDate 
-                                ? new Date(item.expirationDate) 
-                                : NON_PERISHABLE_DATE
-                        }))
+                            productPresentationId: item.productPresentationId || null,
+                            quantity: finalQuantity, // Guardamos en unidades para estandarizar
+                            unitCost: item.unitCost, // Costo nominal de lo que se compró
+                            depotId: item.depotId || 1,
+                            expirationDate: expiration
+                        }
+                    });
+            
+                    // 3. GESTIÓN DE LOTES (StockLot)
+                    // Estrategia: Si ya tengo un lote del mismo producto, en el mismo almacén, 
+                    // con la misma fecha y MISMO COSTO, lo sumo. Si cambia el costo, creo uno nuevo.
+                    const existingLot = await tx.stockLot.findFirst({
+                        where: {
+                            productId: item.productId,
+                            depotId: item.depotId || 1,
+                            expirationDate: expiration,
+                            // IMPORTANTE: Separar lotes por costo para cálculo real de ganancias luego
+                            // Si tu modelo StockLot no tiene 'lotCost' o 'unitCost', quita esta línea
+                            lotCost: item.unitCost 
+                        }
+                    });
+    
+                    if (existingLot) {
+                        await tx.stockLot.update({
+                            where: { id: existingLot.id },
+                            data: { quantity: { increment: finalQuantity } }
+                        });
+                    } else {
+                        await tx.stockLot.create({
+                            data: {
+                                productId: item.productId,
+                                depotId: item.depotId || 1,
+                                quantity: finalQuantity,
+                                lotCost: item.unitCost, // Costo de este lote
+                                expirationDate: expiration,
+                                createdAt: new Date()
+                            }
+                        });
+                    }
+    
+                    // 4. Kardex (StockMovement)
+                    await tx.stockMovement.create({
+                        data: {
+                            businessId,
+                            productId: item.productId,
+                            memberId: userId,
+                            depotId: item.depotId || 1,
+                            type: 'IN',
+                            quantity: finalQuantity,
+                            historicalCost: item.unitCost, // Costo de entrada
+                            reason: `Compra #${purchase.id}` // O usa purchase.number si tienes consecutivo
+                        }
                     });
                 }
-
-                // C. Insertar Pagos (Bulk)
+    
+                // C. Pagos
                 if (data.payments.length > 0) {
                     await tx.purchasePayment.createMany({
                         data: data.payments.map(pay => ({
@@ -144,135 +188,27 @@ export class PurchaseService {
                         }))
                     });
                 }
-
-                // D. Actualizar Inventario (Loop lógico)
-                for (const item of data.items) {
-                    const finalDate = item.expirationDate 
-                        ? new Date(item.expirationDate) 
-                        : NON_PERISHABLE_DATE;
-
-                    // Buscar lote existente (Mismo producto, almacén, fecha y costo)
-                    const existingLot = await tx.stockLot.findFirst({
-                        where: {
-                            productId: item.productId,
-                            depotId: item.depotId,
-                            expirationDate: finalDate,
-                            lotCost: item.unitCost
-                        }
-                    });
-
-                    // Upsert (Crear o Actualizar)
-                    if (existingLot) {
-                        await tx.stockLot.update({
-                            where: { id: existingLot.id },
-                            data: { quantity: { increment: item.quantity } }
-                        });
-                    } else {
-                        await tx.stockLot.create({
-                            data: {
-                                productId: item.productId,
-                                depotId: item.depotId,
-                                quantity: item.quantity,
-                                expirationDate: finalDate,
-                                lotCost: item.unitCost
-                            }
-                        });
-                    }
-
-                    // Registrar Kardex
-                    await tx.stockMovement.create({
-                        data: {
-                            businessId,
-                            productId: item.productId,
-                            depotId: item.depotId,
-                            memberId: userId,
-                            type: 'IN',
-                            quantity: item.quantity,
-                            historicalCost: item.unitCost,
-                            reason: `Compra #${purchase.id}`,
-                        }
-                    });
-                }
-
-                // Retornar la compra creada con relaciones
+    
+                // Retorno
                 return await tx.purchase.findUnique({
                     where: { id: purchase.id },
                     include: {
-                        items: { include: { product: true } },
-                        payments: true
+                        items: { include: { product: { select: { name: true } } } },
+                        payments: true,
+                        supplier: { select: { nameCompany: true } }
                     }
                 });
             });
-
-            // Si la transacción fue exitosa:
+    
             return {
-                message: 'Compra registrada exitosamente',
                 status: 201,
+                message: 'Compra registrada exitosamente',
                 data: result
             };
-
+    
         } catch (error) {
-            console.error('Error al crear la compra:', error);
-            
-            return {
-                message: 'Error interno al procesar la compra',
-                status: 500,
-                data: null
-            };
-        }
-    }
-
-    // 2. LISTAR COMPRAS (CON PAGINACIÓN Y FILTROS)
-    // Agregamos argumentos opcionales para filtrar
-    async findAll(businessId: number, query: { page?: number; limit?: number; fromDate?: string; toDate?: string }) {
-        try {
-            const page = Number(query.page) || 1;
-            const limit = Number(query.limit) || 20; // 20 por página por defecto
-            const skip = (page - 1) * limit;
-
-            // Filtro de fechas (Opcional pero recomendado)
-            const whereClause: any = { businessId };
-            
-            if (query.fromDate && query.toDate) {
-                whereClause.date = {
-                    gte: new Date(query.fromDate), // Desde las 00:00
-                    lte: new Date(new Date(query.toDate).setHours(23, 59, 59)) // Hasta el final del día
-                };
-            }
-
-            // Hacemos 2 consultas en paralelo: Datos y Conteo Total
-            const [purchases, total] = await Promise.all([
-                prisma.purchase.findMany({
-                    where: whereClause,
-                    skip: skip,
-                    take: limit,
-                    include: {
-                        supplier: { select: { nameCompany: true } },
-                        member: { include: { user: { select: { name: true } } } },
-                        // Traemos el totalCost y status para mostrar en la tabla
-                        exchangeRate: { select: { rate: true, currency: true } }, 
-                        _count: { select: { items: true } }
-                    },
-                    orderBy: { date: 'desc' }
-                }),
-                
-                prisma.purchase.count({ where: whereClause })
-            ]);
-
-            return {
-                status: 200,
-                message: 'Compras obtenidas',
-                data: purchases,
-                meta: { // Metadata para que el frontend dibuje los botones de paginación
-                    total,
-                    page,
-                    lastPage: Math.ceil(total / limit)
-                }
-            };
-
-        } catch (error) {
-            console.error(error);
-            return { status: 500, message: 'Error interno al listar compras', data: null };
+            console.error('Error create purchase:', error);
+            return { status: 500, message: 'Error interno al procesar la compra', data: null };
         }
     }
 

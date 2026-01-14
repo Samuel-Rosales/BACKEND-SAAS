@@ -2,6 +2,7 @@
 export interface CreatePurchaseItemDto {
     productId: number;
     depotId: number;    // <--- NUEVO: Cada producto puede ir a un almacén distinto
+    productPresentationId?: number; // Opcional (si es null, es la unidad base)
     quantity: number;
     unitCost: number;   // Costo unitario según factura
     expirationDate?: string; // "YYYY-MM-DD" (Opcional. Backend pondrá 2099 si falta)
