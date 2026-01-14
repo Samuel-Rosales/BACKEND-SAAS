@@ -7,7 +7,7 @@ import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } fr
 import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute } from '../modules/platform';
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute } from '../modules/finance';
-import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute } from '@/modules/procurement';
+import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
 
 export class Server {
 
@@ -45,6 +45,7 @@ export class Server {
             suppliers: `${this.prefix}/procurement/supplier`,
             purchases: `${this.prefix}/procurement/purchase`,
             purchasePayments: `${this.prefix}/procurement/purchase-payment`,
+            purchaseItems: `${this.prefix}/procurement/purchase-item`,
         };
 
         this.dbConnection();
@@ -85,6 +86,7 @@ export class Server {
         this.app.use(this.paths.suppliers, SupplierRoute);
         this.app.use(this.paths.purchases, PurchaseRoute);
         this.app.use(this.paths.purchasePayments, PurchasePaymentRoute);
+        this.app.use(this.paths.purchaseItems, PurchaseItemRoute);
     }
 
     async dbConnection() {

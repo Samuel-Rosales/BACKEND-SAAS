@@ -411,7 +411,6 @@ model PurchaseItem {
   quantity       Int
   unitCost       Decimal @db.Decimal(15, 2)
   expirationDate DateTime @db.Date
-  
 
   purchase Purchase @relation(fields: [purchaseId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
