@@ -49,8 +49,9 @@ x-business-id: 1
     {
       "productId": 2,
       "depotId": 1,
-      "quantity": 30,
-      "unitCost": 15.00
+      "productPresentationId": 1,
+      "quantity": 5,
+      "unitCost": 25.00
     }
   ],
   "payments": [

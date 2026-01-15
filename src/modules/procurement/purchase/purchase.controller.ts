@@ -32,9 +32,9 @@ export class PurchaseController {
                 });
             }
             
-            const result = await service.create(businessId, Number(membershipId), req.body);
+            const {data, status, message} = await service.create(businessId, Number(membershipId), req.body);
 
-            return res.status(result.status).json(result);
+            return res.status(status).json({ data, status, message });
 
         } catch (error) {
             console.error('Error en PurchaseController.create:', error);
@@ -94,9 +94,9 @@ export class PurchaseController {
                 });
             }
 
-            const result = await service.findOne(businessId, id);
+            const {data, status, message} = await service.findOne(businessId, id);
 
-            return res.status(result.status).json(result);
+            return res.status(status).json({ data, status, message });
 
         } catch (error) {
             console.error('Error en PurchaseController.findOne:', error);

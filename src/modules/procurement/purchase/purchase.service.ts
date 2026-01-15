@@ -1,7 +1,9 @@
 import { prisma } from '@/configs';
 import { CreatePurchaseInterface } from './interfaces';
+import { MovementType } from '@prisma/client';
 
 const NON_PERISHABLE_DATE = new Date('2099-12-31');
+const IVA = 0.16; // 16% de IVA
 
 export class PurchaseService {
 
@@ -11,30 +13,29 @@ export class PurchaseService {
             // FASE 1: VALIDACIONES PARALELAS
             // =================================================================
             
+            // --- RECOLECCIÓN DE IDS ÚNICOS ---
             const productIds = [...new Set(data.items.map(i => i.productId))];
             const depotIds = [...new Set(data.items.map(i => i.depotId))];
             const paymentMethodIds = [...new Set(data.payments.map(p => p.paymentMethodId))];
-            
-            // CORRECCIÓN 1: Filtrar nulos en vez de usar "|| 1". 
-            // Solo buscamos presentaciones si realmente enviaron un ID.
             const presentationIds = [...new Set(
                 data.items.map(i => i.productPresentationId).filter((id): id is number => id != null)
             )];
-    
+
+            // --- CONSULTAS PARALELAS ---
             const [exchangeRate, supplier, products, depots, validPaymentMethods, presentations] = await Promise.all([
+
                 prisma.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
+
                 prisma.supplier.findUnique({ where: { id: data.supplierId } }),
-                prisma.product.findMany({ 
-                    where: { id: { in: productIds } }, 
-                    select: { id: true, name: true, isPerishable: true } 
-                }),
+
+                prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, isPerishable: true } }),
+
                 prisma.depot.findMany({ where: { id: { in: depotIds } }, select: { id: true } }),
                 
                 data.payments.length > 0 
                     ? prisma.paymentMethod.findMany({ where: { id: { in: paymentMethodIds } }, select: { id: true } })
                     : Promise.resolve([]),
                 
-                // CORRECCIÓN 2: Manejo seguro de array vacío
                 presentationIds.length > 0 
                     ? prisma.productPresentation.findMany({ where: { id: { in: presentationIds } }, select: { id: true, factor: true } })
                     : Promise.resolve([]),
@@ -42,11 +43,15 @@ export class PurchaseService {
     
             // --- VALIDACIONES DE EXISTENCIA ---
             if (!exchangeRate) return { message: 'Tasa de cambio no encontrada', status: 404, data: null };
+
             if (!supplier) return { message: 'Proveedor no encontrado', status: 404, data: null };
+
             if (!supplier.isActive) return { message: 'Proveedor inactivo', status: 400, data: null };
             
             if (products.length !== productIds.length) return { message: 'Uno o más productos no existen', status: 404, data: null };
+
             if (depots.length !== depotIds.length) return { message: 'Uno o más almacenes no existen', status: 404, data: null };
+
             if (presentations.length !== presentationIds.length) return { message: 'Una o más presentaciones no existen', status: 404, data: null };
             
             if (data.payments.length > 0 && validPaymentMethods.length !== paymentMethodIds.length) {
@@ -56,11 +61,11 @@ export class PurchaseService {
             // --- VALIDACIONES LÓGICAS ---
     
             // 1. Matemática (Subtotal)
-            // Asumimos: quantity (nominal) * unitCost (nominal) = Total Línea
             let calculatedSubTotal = 0;
             
             // 2. Perecederos
             for (const item of data.items) {
+
                 const productInfo = products.find(p => p.id === item.productId);
                 
                 // Validar fecha de vencimiento
@@ -68,18 +73,55 @@ export class PurchaseService {
                     return { message: `El producto "${productInfo.name}" requiere fecha de vencimiento`, status: 400, data: null };
                 }
     
-                // Sumar al total calculado
+                // Sumar al subtotal calculado
                 calculatedSubTotal += (item.quantity * item.unitCost);
             }
     
-            if (Math.abs(calculatedSubTotal - data.subTotal) > 0.05) {
+            if (Math.abs(calculatedSubTotal - data.subTotal) > 0.01) {
                 return {
-                    message: `Error en montos. Calculado: ${calculatedSubTotal}, Enviado: ${data.subTotal}`,
+                    message: `Error en montos del subtotal. Calculado: ${calculatedSubTotal}, Enviado: ${data.subTotal}`,
                     status: 400,
                     data: null
                 };
             }
-    
+
+            if (Math.abs(calculatedSubTotal * IVA - data.taxAmount) > 0.01) {
+                return {
+                    message: `Error en montos del IVA. Calculado: ${calculatedSubTotal * IVA}, Enviado: ${data.taxAmount}`,
+                    status: 400,
+                    data: null
+                };
+            }
+
+            if (Math.abs(calculatedSubTotal + (calculatedSubTotal * IVA) - data.totalCost) > 0.01) {
+                return {
+                    message: `Error en montos del costo total. Calculado: ${calculatedSubTotal + (calculatedSubTotal * IVA)}, Enviado: ${data.totalCost}`,
+                    status: 400,
+                    data: null
+                }
+            }
+
+            let totalPayments = 0;
+
+            for (const pay of data.payments) {
+
+                if (pay.amount <= 0) {
+                    return { message: 'El monto de pago debe ser mayor a cero', status: 400, data: null };
+                }
+
+                if (pay.currency === 'USD') {
+                    totalPayments += pay.amount;
+                }
+                else if (pay.currency === 'VES') {
+                    totalPayments += pay.amount / Number(exchangeRate.rate);
+                }
+            }
+
+            const totalPaidFinal = Math.round(totalPayments * 100) / 100;
+
+            if (data.payments.length > 0 && Math.abs(totalPaidFinal - data.totalCost) > 0.01) {
+                return { message: `El total de pagos (${totalPaidFinal}) no coincide con el costo total de la compra (${data.totalCost})`, status: 400, data: null };
+            }
     
             // =================================================================
             // FASE 2: TRANSACCIÓN
@@ -92,9 +134,10 @@ export class PurchaseService {
                     data: {
                         businessId,
                         memberId: userId,
+
                         supplierId: data.supplierId,
                         exchangeRateId: data.exchangeRateId,
-                        subTotal: data.subTotal,
+                        subTotal: data.subTotal, // por validación previa (hacer pruebas extensivas aquí)
                         taxAmount: data.taxAmount,
                         totalCost: data.totalCost,
                         status: 'COMPLETED',
@@ -108,8 +151,11 @@ export class PurchaseService {
                     
                     // 1. Calcular Cantidad Real (Unidades)
                     let finalQuantity = item.quantity;
+
                     if (item.productPresentationId) {
+
                         const pres = presentations.find(p => p.id === item.productPresentationId);
+
                         if (pres) finalQuantity = item.quantity * Number(pres.factor);
                     }
             
@@ -121,9 +167,9 @@ export class PurchaseService {
                             purchaseId: purchase.id,
                             productId: item.productId,
                             productPresentationId: item.productPresentationId || null,
-                            quantity: finalQuantity, // Guardamos en unidades para estandarizar
-                            unitCost: item.unitCost, // Costo nominal de lo que se compró
-                            depotId: item.depotId || 1,
+                            quantity: item.quantity, 
+                            unitCost: item.unitCost,
+                            depotId: item.depotId,
                             expirationDate: expiration
                         }
                     });
@@ -134,26 +180,27 @@ export class PurchaseService {
                     const existingLot = await tx.stockLot.findFirst({
                         where: {
                             productId: item.productId,
-                            depotId: item.depotId || 1,
+                            depotId: item.depotId,
                             expirationDate: expiration,
-                            // IMPORTANTE: Separar lotes por costo para cálculo real de ganancias luego
-                            // Si tu modelo StockLot no tiene 'lotCost' o 'unitCost', quita esta línea
                             lotCost: item.unitCost 
                         }
                     });
     
                     if (existingLot) {
+
                         await tx.stockLot.update({
                             where: { id: existingLot.id },
                             data: { quantity: { increment: finalQuantity } }
                         });
+
                     } else {
+
                         await tx.stockLot.create({
                             data: {
                                 productId: item.productId,
-                                depotId: item.depotId || 1,
+                                depotId: item.depotId,
                                 quantity: finalQuantity,
-                                lotCost: item.unitCost, // Costo de este lote
+                                lotCost: item.unitCost,
                                 expirationDate: expiration,
                                 createdAt: new Date()
                             }
@@ -166,8 +213,8 @@ export class PurchaseService {
                             businessId,
                             productId: item.productId,
                             memberId: userId,
-                            depotId: item.depotId || 1,
-                            type: 'IN',
+                            depotId: item.depotId,
+                            type: MovementType.IN,
                             quantity: finalQuantity,
                             historicalCost: item.unitCost, // Costo de entrada
                             reason: `Compra #${purchase.id}` // O usa purchase.number si tienes consecutivo
@@ -177,9 +224,12 @@ export class PurchaseService {
     
                 // C. Pagos
                 if (data.payments.length > 0) {
+
                     await tx.purchasePayment.createMany({
+
                         data: data.payments.map(pay => ({
                             purchaseId: purchase.id,
+
                             paymentMethodId: pay.paymentMethodId,
                             amount: pay.amount,
                             currency: pay.currency,
