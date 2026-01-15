@@ -188,28 +188,40 @@ x-business-id: 1
 
 ```json
 {
-  "message": "Compras obtenidas exitosamente",
+  "message": "Compras obtenidas",
   "status": 200,
-  "data": {
-    "purchases": [
-      {
-        "id": 1,
-        "businessId": 1,
-        "supplierId": 1,
-        "subTotal": 1000.00,
-        "taxAmount": 160.00,
-        "totalCost": 1160.00,
-        "status": "COMPLETED",
-        "reference": "A-00459",
-        "date": "2024-01-15T10:30:00.000Z"
+  "data": [
+    {
+      "id": 1,
+      "businessId": 1,
+      "supplierId": 1,
+      "subTotal": 1000.00,
+      "taxAmount": 160.00,
+      "totalCost": 1160.00,
+      "status": "COMPLETED",
+      "reference": "A-00459",
+      "date": "2024-01-15T10:30:00.000Z",
+      "supplier": {
+        "nameCompany": "Distribuidora ABC S.A."
+      },
+      "member": {
+        "user": {
+          "name": "Carlos Comprador"
+        }
+      },
+      "exchangeRate": {
+        "rate": 36.50,
+        "currency": "USD"
+      },
+      "_count": {
+        "items": 2
       }
-    ],
-    "pagination": {
-      "page": 1,
-      "limit": 20,
-      "total": 1,
-      "totalPages": 1
     }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "lastPage": 1
   }
 }
 ```

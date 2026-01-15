@@ -24,7 +24,7 @@ export class CategoryController {
     };
 
     findAll = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -43,7 +43,7 @@ export class CategoryController {
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -62,7 +62,7 @@ export class CategoryController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user.businessId;
 
         if (!businessId) {
             return res.status(400).json({

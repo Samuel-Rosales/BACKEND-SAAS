@@ -40,6 +40,10 @@ Documentación completa de la API REST del sistema SaaS.
 - [Items de Compra (Purchase Item)](./modules/procurement/purchase-item.md)
 - [Pagos de Compra (Purchase Payment)](./modules/procurement/purchase-payment.md)
 
+### Módulo Sales
+- [Clientes (Client)](./modules/sales/client.md)
+- [Ventas (Sale)](./modules/sales/sale.md)
+
 ## 🔗 Base URL
 
 ```

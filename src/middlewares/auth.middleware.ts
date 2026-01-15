@@ -54,7 +54,8 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
         // Si pasa, inyectamos el ID seguro y el ROL (muy útil para permisos después)
         req.user.businessId = businessId;
-        req.user.roleId = membership.roleId; 
+        req.user.roleId = membership.roleId;
+        req.user.membershipId = membership.id;
     }
 
     next();

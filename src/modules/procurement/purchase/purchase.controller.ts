@@ -8,7 +8,13 @@ export class PurchaseController {
 
     async create(req: Request, res: Response) {
         try {
-            const { businessId, id: userId } = req.user;
+            const { businessId, id: userId, membershipId } = req.user;
+
+            console.log(req.user);
+
+            console.log("businessId: ", businessId);
+            console.log("userId: ", userId);
+            console.log("membershipId: ", membershipId);
 
             if (!businessId) {
                 return res.status(400).json({
@@ -17,8 +23,16 @@ export class PurchaseController {
                     data: null
                 });
             }
+
+            if (!membershipId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la membresía en el header.',
+                    data: null
+                });
+            }
             
-            const result = await service.create(businessId, userId, req.body);
+            const result = await service.create(businessId, Number(membershipId), req.body);
 
             return res.status(result.status).json(result);
 
