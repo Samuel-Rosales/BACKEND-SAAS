@@ -82,9 +82,9 @@ export class BusinessService {
           }
         },
         include: {
-          subscription: {
-            select: { status: true, planType: true, endDate: true }
-          }
+          subscription: { select: { status: true, planType: true, endDate: true } },
+          members: { select: { role: { select: { name: true } } } },
+          businessCategory: { select: { name: true } }    
         }
       });
 

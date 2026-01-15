@@ -66,6 +66,16 @@ Authorization: Bearer <token>
       "status": "ACTIVE",
       "startDate": "2024-01-15T10:30:00Z",
       "endDate": "2024-01-22T10:30:00Z"
+    },
+    "members": [
+      {
+        "role": {
+            "name": "Dueño"
+        }
+      }
+    ],
+    "businessCategory": {
+      "name": "Tecnología y desarollo de sotfware"
     }
   }
 }
