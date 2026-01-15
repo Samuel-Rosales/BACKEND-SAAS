@@ -1,6 +1,7 @@
 import { prisma } from '@/configs';
 import { CreateSaleInterface, SalePaymentDto, UpdateSaleInterface } from './interfaces';
 import { PaymentStatus, SaleConditions, SaleStatus, SaleType } from '@prisma/client';
+import { BusinessError } from '@/utils/catch-errors.util';
 
 const IVA = 0.16;
 
@@ -267,17 +268,17 @@ export class SaleService {
 
                         // Validaciones de seguridad obligatorias para modo manual
                         if (!specificLot) {
-                            throw new Error(`El lote específico ID ${item.stockLotId} no existe.`);
+                            throw new BusinessError(`El lote específico ID ${item.stockLotId} no existe.`, 404);
                         }
                         
                         if (specificLot.productId !== item.productId) {
-                            throw new Error(`El lote ID ${item.stockLotId} no corresponde al producto que se está vendiendo.`);
+                            throw new BusinessError(`Stock insuficiente. Disponible: ${specificLot.quantity}, Requerido: ${remainingQuantity}`, 409); // 409 Conflict es ideal para stock
                         }
                         
                         // Verificamos si alcanza el stock en ese lote específico
                         if (specificLot.quantity < remainingQuantity) {
                             // En modo manual, si no alcanza, solemos fallar y avisar.
-                            throw new Error(`Stock insuficiente en el lote seleccionado. Disponible: ${specificLot.quantity}, Requerido: ${remainingQuantity}`);
+                            throw new BusinessError(`Stock insuficiente en el lote seleccionado. Disponible: ${specificLot.quantity}, Requerido: ${remainingQuantity}`, 409);
                         }
 
                         // Si todo bien, nuestra lista de lotes disponibles es solo este.
@@ -370,7 +371,7 @@ export class SaleService {
 
                     // Validación final de integridad
                     if (remainingQuantity > 0) {
-                        throw new Error(`Inconsistencia: Stock insuficiente para producto ID ${item.productId}`);
+                        throw new BusinessError(`Inconsistencia: Stock insuficiente para producto ID ${item.productId}`, 409);
                     } 
                 }
 
@@ -420,24 +421,22 @@ export class SaleService {
         } catch (error: any) {
             console.error('Error al crear la venta:', error);
 
-            if (
-                error.message.includes("Stock insuficiente") || 
-                error.message.includes("El lote") ||
-                error.message.includes("Inconsistencia")
-            ) {
+            // 1. Si el error es de tipo BusinessError (Lógica de negocio controlada)
+            if (error instanceof BusinessError) {
                 return {
                     message: error.message,
-                    status: 400,
+                    status: error.status, // Usamos el status que definimos al lanzar el error (400, 404, 409)
                     data: null
                 };
             }
-            
+
+            // 2. Si es un error desconocido (Prisma crash, DB connection lost, Bug de código)
             return {
-                message: 'Error interno al procesar la venta',
+                message: 'Error interno crítico al procesar la venta',
                 status: 500,
-                data: null
+                data: null // Opcional: En desarrollo podrías devolver error.message para debug
             };
-        }
+        }   
     }
 
     // 2. LISTAR VENTAS (CON PAGINACIÓN Y FILTROS)
