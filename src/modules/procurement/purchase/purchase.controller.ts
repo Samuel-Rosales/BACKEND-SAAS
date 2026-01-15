@@ -8,13 +8,7 @@ export class PurchaseController {
 
     async create(req: Request, res: Response) {
         try {
-            const { businessId, id: userId, membershipId } = req.user;
-
-            console.log(req.user);
-
-            console.log("businessId: ", businessId);
-            console.log("userId: ", userId);
-            console.log("membershipId: ", membershipId);
+            const { businessId, membershipId } = req.user;
 
             if (!businessId) {
                 return res.status(400).json({
