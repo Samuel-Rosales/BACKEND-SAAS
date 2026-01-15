@@ -7,8 +7,7 @@ export class SaleController {
 
     async create(req: Request, res: Response) {
         try {
-            const { businessId, id: userId } = req.user!;
-            const memberId = req.body.memberId || userId; // Usar el memberId del body o el del usuario autenticado
+            const { businessId, membershipId } = req.user;
 
             if (!businessId) {
                 return res.status(400).json({
@@ -17,8 +16,16 @@ export class SaleController {
                     data: null
                 });
             }
+
+            if (!membershipId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID del miembro (vendedor) en el header.',
+                    data: null
+                });
+            }
             
-            const {data, message, status} = await service.create(businessId, memberId, req.body);
+            const {data, message, status} = await service.create(businessId, membershipId, req.body);
 
             return res.status(status).json({
                 data,

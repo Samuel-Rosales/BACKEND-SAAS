@@ -217,7 +217,7 @@ model ProductPresentation {
   name      String  // "Caja x12"
   factor    Decimal @db.Decimal(10, 4)
   barCode   String?
-  price     Decimal?
+  price     Decimal @db.Decimal(15, 2)
   
   isActive  Boolean @default(true) // <--- NUEVO: Para Soft Delete
 

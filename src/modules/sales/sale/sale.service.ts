@@ -2,6 +2,8 @@ import { prisma } from '@/configs';
 import { CreateSaleInterface, SalePaymentDto, UpdateSaleInterface } from './interfaces';
 import { PaymentStatus, SaleConditions, SaleStatus, SaleType } from '@prisma/client';
 
+const IVA = 0.16;
+
 export class SaleService {
 
     async create(businessId: number, memberId: number, data: CreateSaleInterface) {
@@ -10,49 +12,47 @@ export class SaleService {
             // FASE 1: VALIDACIONES PARALELAS
             // =================================================================
             
+            // --- RECOLECCIÓN DE IDS ÚNICOS ---
             const productIds = [...new Set(data.items.map(i => i.productId))];
             const paymentMethodIds = [...new Set(data.payments.map(p => p.paymentMethodId))];
+            const presentationIds = [...new Set(
+                data.items.map(i => i.productPresentationId).filter((id): id is number => id != null)
+            )];
 
-            // Validaciones paralelas
-            const [exchangeRate, client, member, products, validPaymentMethods] = await Promise.all([
+            // --- CONSULTAS PARALELAS ---
+            const [exchangeRate, client, member, products, validPaymentMethods, presentations] = await Promise.all([
+
                 prisma.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
+
                 prisma.client.findUnique({ where: { id: data.clientId } }),
-                prisma.businessMember.findFirst({ 
-                    where: { id: memberId, businessId },
-                    include: { user: { select: { name: true } } }
-                }),
-                prisma.product.findMany({ 
-                    where: { id: { in: productIds }, businessId, isActive: true },
-                    select: { id: true, name: true, isService: true, businessId: true }
-                }),
+
+                prisma.businessMember.findFirst({ where: { id: memberId, businessId }, include: { user: { select: { name: true } } }}),
+
+                prisma.product.findMany({ where: { id: { in: productIds }, businessId, isActive: true }, select: { id: true, name: true, isService: true, businessId: true, salePrice: true } }),
+
                 data.payments.length > 0 
-                    ? prisma.paymentMethod.findMany({ 
-                        where: { id: { in: paymentMethodIds }, isActive: true },
-                        select: { id: true } 
-                    })
-                    : Promise.resolve([])
+                    ? prisma.paymentMethod.findMany({ where: { id: { in: paymentMethodIds }, isActive: true }, select: { id: true } })
+                    : Promise.resolve([]),
+                
+                presentationIds.length > 0
+                    ? prisma.productPresentation.findMany({ where: { id: { in: presentationIds } }, select: { id: true, productId: true, factor: true, price: true } })
+                    : Promise.resolve([]),
             ]);
 
-            // Validaciones
-            if (!exchangeRate) {
-                return { message: 'La tasa de cambio no existe', status: 404, data: null };
-            }
+            // --- VALIDACIONES DE EXISTENCIA ---
+            if (!exchangeRate) { return { message: 'La tasa de cambio no existe', status: 404, data: null };}
 
-            if (!client) {
-                return { message: 'El cliente no existe', status: 404, data: null };
-            }
+            if (!client) { return { message: 'El cliente no existe', status: 404, data: null }; }
 
-            if (client.businessId !== businessId) {
-                return { message: 'El cliente no pertenece a este negocio', status: 403, data: null };
-            }
-
-            if (!member) {
-                return { message: 'El vendedor no existe o no pertenece a este negocio', status: 404, data: null };
-            }
-
+            if (client.businessId !== businessId) return { message: 'El cliente no pertenece a este negocio', status: 403, data: null };
+            
+            if (!member) return { message: 'El vendedor no existe o no pertenece a este negocio', status: 404, data: null };
+                
             if (products.length !== productIds.length) {
                 const foundIds = products.map(p => p.id);
+
                 const missingIds = productIds.filter(id => !foundIds.includes(id));
+
                 return { message: `Los productos [${missingIds.join(', ')}] no existen o no pertenecen a este negocio`, status: 404, data: null };
             }
 
@@ -60,97 +60,130 @@ export class SaleService {
                 return { message: 'Uno o más métodos de pago no existen o están inactivos', status: 404, data: null };
             }
 
+            // --- VALIDACIONES LÓGICAS ---
 
             // Validar stock disponible (solo para productos no servicios)
             for (const item of data.items) {
                 const product = products.find(p => p.id === item.productId);
                 
-                if (!product) continue;
-                
+                if (!product) {
+                    throw new Error(`Inconsistencia: Producto ID ${item.productId} no encontrado en validaciones previas`);   
+                }
+
                 if (product.isService) continue; // Los servicios no tienen stock
                 
                 // Obtener stock total del producto (suma de todos los lotes)
-                const stockLots = await prisma.stockLot.findMany({
-                    where: { productId: item.productId },
-                    select: { quantity: true }
-                });
+                const stockLots = await prisma.stockLot.findMany({ where: { productId: item.productId }, select: { quantity: true }});
                 
                 const totalStock = stockLots.reduce((sum, lot) => sum + lot.quantity, 0);
                 
                 if (totalStock < item.quantity) {
                     return {
-                        message: `Stock insuficiente para el producto "${product.name}". Disponible: ${totalStock}, Solicitado: ${item.quantity}`,
+                        message: `Stock insuficiente para el producto (${product.name}). Disponible: ${totalStock}, Solicitado: ${item.quantity}`,
                         status: 400,
                         data: null
                     };
                 }
             }
 
-            // -----------------------------------------------------------------
             // 3. CÁLCULO DE TOTALES (La "Autoridad" es el Backend)
-            // -----------------------------------------------------------------
-            const TAX_RATE = 0.16; // ⚠️ OJO: Esto debería venir de config DB
-
             let calculatedSubTotal = 0;
-            let calculatedTax = 0;
 
             // Recorremos los items para calcular montos reales
-            const processedItems = data.items.map(item => {
+            for (const item of data.items) {
+
                 const product = products.find(p => p.id === item.productId);
-                // Aquí podrías validar si el precio coincide con DB, pero asumimos precio libre por ahora.
                 
-                const subTotal = item.quantity * item.unitPrice;
-                const tax = subTotal * TAX_RATE; // Aquí aplicas exenciones si el producto lo requiere
+                if (!product) {
+                    throw new Error(`Inconsistencia: Producto ID ${item.productId} no encontrado en validaciones previas`);
+                }
                 
-                calculatedSubTotal += subTotal;
-                calculatedTax += tax;
+                if (item.productPresentationId) {
+                    const presentation = presentations.find(p => p.id === item.productPresentationId);
 
-                return {
-                    ...item,
-                    isService: product?.isService || false, // Guardamos esto para usarlo luego
-                    calculatedSubTotal: subTotal,
-                    calculatedTax: tax
-                };
-            });
+                    console.log("Precio presentación: ", Number(presentation?.price));
+                    console.log("Precio enviado: ", item.unitPrice);
 
-            const finalTotalAmount = calculatedSubTotal + calculatedTax;
+                    if (!presentation || Number(presentation.price) !== Number(item.unitPrice)) {
+                        return {
+                            status: 400,
+                            message: `El precio de la presentación seleccionada para el producto (${product.name}) es inválido. Diferencia con precio base.`,
+                            data: null
+                        };
+                    }
+                } else {
 
-            // Validación Anti-Hackeo: ¿El frontend calculó bien?
-            if (Math.abs(finalTotalAmount - data.totalAmount) > 0.05) {
+                    if (Number(product.salePrice) !== Number(item.unitPrice)) {
+                        return {
+                            status: 400,
+                            message: `El precio de la presentación seleccionada para el producto (${product.name}) es inválido. Diferencia con precio base.`,
+                            data: null
+                        };
+                    }
+
+                }
+                
+                calculatedSubTotal += (item.quantity * item.unitPrice);
+            }
+
+            // Subtotal
+            if (Math.abs(calculatedSubTotal - data.subTotal) > 0.01) {
                 return {
                     status: 400,
-                    message: `Error en montos. Frontend envió ${data.totalAmount}, pero el cálculo real es ${finalTotalAmount}`,
+                    message: `Error en montos del subtotal. Calculado: ${calculatedSubTotal}, Enviado: ${data.subTotal}`,
                     data: null
                 };
             }
+
+            // Impuesto (IVA)
+            if (Math.abs(calculatedSubTotal * IVA - data.taxAmount) > 0.01) {
+                return {
+                    status: 400,
+                    message: `Error en montos del IVA. Calculado: ${calculatedSubTotal * IVA}, Enviado: ${data.taxAmount}`,
+                    data: null
+                };
+            }
+
+            // Total final
+            if (Math.abs(calculatedSubTotal + (calculatedSubTotal * IVA) - data.totalAmount) > 0.01) {
+                return {
+                    message: `Error en montos del costo total. Calculado: ${calculatedSubTotal + (calculatedSubTotal * IVA)}, Enviado: ${data.totalAmount}`,
+                    status: 400,
+                    data: null
+                }
+            }
+
             // A. Normalizar Pagos a Moneda Base (USD)
             const totalPaidInBaseCurrency = data.payments.reduce((acc, payment) => {
+
                 if (payment.currency === 'USD') {
+
                     return acc + payment.amount;
+
                 } else {
-                    // Validación de seguridad por si la tasa es 0 o null
                     const rate = Number(exchangeRate.rate);
+
                     if (!rate || rate <= 0) throw new Error("Tasa de cambio inválida para conversión");
                     
                     return acc + (payment.amount / rate);
                 }
             }, 0);
 
-            // Redondeo de seguridad
             const totalPaidFinal = Math.round(totalPaidInBaseCurrency * 100) / 100;
 
             // B. Validar Montos según Condición (CASH vs CREDIT)
             let initialPaymentStatus: PaymentStatus = PaymentStatus.PENDING;
 
             if (data.conditions === SaleConditions.CASH) {
-                // Si es Contado, deben pagar TODO (+/- 0.05 por redondeo)
-                if (Math.abs(data.totalAmount - totalPaidFinal) > 0.05) {
+                // Si es Contado, deben pagar TODO (+/- 0.01 por redondeo)
+                if (Math.abs(data.totalAmount - totalPaidFinal) > 0.01) {
                     return {
                         status: 400,
                         message: `Monto incompleto para venta de Contado. Total a pagar: $${data.totalAmount}, Recibido (al cambio): $${totalPaidFinal}`,
                         data: null
                     };
                 }
+
                 initialPaymentStatus = PaymentStatus.PAID;
 
             } else if (data.conditions === SaleConditions.CREDIT) {
@@ -160,7 +193,7 @@ export class SaleService {
                 }
 
                 // Definir estado inicial
-                initialPaymentStatus = totalPaidFinal > 0.5 ? PaymentStatus.PARTIAL : PaymentStatus.PENDING;
+                initialPaymentStatus = totalPaidFinal > 0.1 ? PaymentStatus.PARTIAL : PaymentStatus.PENDING;
                 
                 // Opcional: Evitar que paguen de más
                 if (totalPaidFinal > data.totalAmount) {
@@ -198,12 +231,12 @@ export class SaleService {
                         paymentStatus: initialPaymentStatus,
 
                         subTotal: calculatedSubTotal,
-                        taxAmount: calculatedTax,
+                        taxAmount: data.taxAmount,
                         discount: data.discount || 0,
-                        totalAmount: finalTotalAmount,
+                        totalAmount: data.totalAmount,
 
                         remainingBalance: data.conditions === SaleConditions.CREDIT 
-                        ? finalTotalAmount - totalPaidFinal
+                        ? data.totalAmount - totalPaidFinal
                         : 0,
                         paymentDueDate: data.paymentDueDate ? new Date(data.paymentDueDate) : null
                     }
@@ -211,6 +244,72 @@ export class SaleService {
 
                 // C. Insertar Items y manejar lotes (FIFO)
                 for (const item of data.items) {
+
+                    let remainingQuantity = item.quantity;
+                    let availableLots = []; 
+
+                    if (item.productPresentationId) {
+                        const presentation = presentations.find(p => p.id === item.productPresentationId);
+                        if (presentation) {
+                            // Ajustar cantidad según el factor de la presentación
+                            remainingQuantity = item.quantity * Number(presentation.factor);
+                        }
+                    } 
+
+
+                    // A. DECISIÓN: ¿Selección Manual o Automática (FIFO)?
+                    if (item.stockLotId) {
+                        // === MODO MANUAL (Lote específico) ===
+                        // Buscamos SOLO el lote que pidió el usuario
+                        const specificLot = await tx.stockLot.findUnique({
+                            where: { id: item.stockLotId }
+                        });
+
+                        // Validaciones de seguridad obligatorias para modo manual
+                        if (!specificLot) {
+                            return {
+                                status: 400,
+                                message: `El lote específico ID ${item.stockLotId} no existe.`,
+                                data: null
+                            }
+                        }
+                        
+                        if (specificLot.productId !== item.productId) {
+                            return {
+                                status: 400,
+                                message: `El lote ID ${item.stockLotId} no corresponde al producto que se está vendiendo.`,
+                                data: null
+                            }
+                        }
+                        
+                        // Verificamos si alcanza el stock en ese lote específico
+                        if (specificLot.quantity < remainingQuantity) {
+                            // En modo manual, si no alcanza, solemos fallar y avisar.
+                            return {
+                                status: 400,
+                                message: `Stock insuficiente en el lote seleccionado. Disponible: ${specificLot.quantity}, Requerido: ${remainingQuantity}`,
+                                data: null
+                            }
+                        }
+
+                        // Si todo bien, nuestra lista de lotes disponibles es solo este.
+                        availableLots = [specificLot];
+
+                    } else {
+                        // === MODO AUTOMÁTICO (FIFO) ===
+                        // Comportamiento actual: Traemos todos los lotes con stock, ordenados por fecha
+                        availableLots = await tx.stockLot.findMany({
+                            where: { 
+                                productId: item.productId,
+                                quantity: { gt: 0 } 
+                            },
+                            orderBy: [
+                                { expirationDate: 'asc' }, 
+                                { createdAt: 'asc' }
+                            ]
+                        });
+                    }
+
                     const product = products.find(p => p.id === item.productId);
                     
                     // Si es servicio, no necesita stock
@@ -227,18 +326,6 @@ export class SaleService {
                         });
                         continue;
                     }
-
-                    // Para productos físicos: usar FIFO
-                    let remainingQuantity = item.quantity;
-                    
-                    // Obtener lotes ordenados por fecha de expiración (FIFO/FEFO)
-                    const availableLots = await tx.stockLot.findMany({
-                        where: { productId: item.productId },
-                        orderBy: [
-                            { expirationDate: 'asc' }, // Más antiguos primero
-                            { createdAt: 'asc' } // Si misma fecha, más antiguos primero
-                        ]
-                    });
 
                     // Crear el SaleItem primero
                     const saleItem = await tx.saleItem.create({
@@ -279,16 +366,13 @@ export class SaleService {
                                 businessId,
                                 productId: item.productId,
                                 memberId,
-                                
-                                // CORRECCIÓN: Usamos el depot del lote actual
                                 depotId: lot.depotId, 
                                 
                                 type: 'OUT',
                                 quantity: quantityToTake,
                                 
                                 // CLAVE FINANCIERA: Usamos el costo real de este lote específico
-                                historicalCost: lot.lotCost, // Asegúrate que este campo exista en tu DB
-                                
+                                historicalCost: lot.lotCost,
                                 reason: `Venta #${sale.receiptNumber}`
                             }
                         });
@@ -299,8 +383,7 @@ export class SaleService {
                     // Validación final de integridad
                     if (remainingQuantity > 0) {
                         throw new Error(`Inconsistencia: Stock insuficiente para producto ID ${item.productId}`);
-                    }
-                    
+                    } 
                 }
 
                 // D. Insertar Pagos

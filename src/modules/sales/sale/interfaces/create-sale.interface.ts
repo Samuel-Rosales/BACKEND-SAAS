@@ -10,7 +10,8 @@ export interface CreateSaleItemDto {
     
     // El frontend envía esto para "doble chequeo", 
     // pero el backend debe recalcular (quantity * unitPrice) y validar que coincida.
-    subTotal: number; 
+    subTotal: number;
+    stockLotId?: number; // Opcional: Para ventas con lotes específicos
 }
 
 // =================================================================
