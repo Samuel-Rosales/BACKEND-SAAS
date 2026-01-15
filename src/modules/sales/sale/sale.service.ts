@@ -267,29 +267,17 @@ export class SaleService {
 
                         // Validaciones de seguridad obligatorias para modo manual
                         if (!specificLot) {
-                            return {
-                                status: 400,
-                                message: `El lote específico ID ${item.stockLotId} no existe.`,
-                                data: null
-                            }
+                            throw new Error(`El lote específico ID ${item.stockLotId} no existe.`);
                         }
                         
                         if (specificLot.productId !== item.productId) {
-                            return {
-                                status: 400,
-                                message: `El lote ID ${item.stockLotId} no corresponde al producto que se está vendiendo.`,
-                                data: null
-                            }
+                            throw new Error(`El lote ID ${item.stockLotId} no corresponde al producto que se está vendiendo.`);
                         }
                         
                         // Verificamos si alcanza el stock en ese lote específico
                         if (specificLot.quantity < remainingQuantity) {
                             // En modo manual, si no alcanza, solemos fallar y avisar.
-                            return {
-                                status: 400,
-                                message: `Stock insuficiente en el lote seleccionado. Disponible: ${specificLot.quantity}, Requerido: ${remainingQuantity}`,
-                                data: null
-                            }
+                            throw new Error(`Stock insuficiente en el lote seleccionado. Disponible: ${specificLot.quantity}, Requerido: ${remainingQuantity}`);
                         }
 
                         // Si todo bien, nuestra lista de lotes disponibles es solo este.
@@ -429,8 +417,20 @@ export class SaleService {
                 data: result
             };
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error al crear la venta:', error);
+
+            if (
+                error.message.includes("Stock insuficiente") || 
+                error.message.includes("El lote") ||
+                error.message.includes("Inconsistencia")
+            ) {
+                return {
+                    message: error.message,
+                    status: 400,
+                    data: null
+                };
+            }
             
             return {
                 message: 'Error interno al procesar la venta',
