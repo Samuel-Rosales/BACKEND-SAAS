@@ -10,7 +10,7 @@ const validator = new MemberValidator();
 // Todas las rutas requieren Login y estar dentro de una Empresa
 router.use(authMiddleware);
 
-// POST: Agregar empleado (Por email)
+// POST: Agregar empleado
 router.post(
   '/', 
   validator.validateAdd, 
