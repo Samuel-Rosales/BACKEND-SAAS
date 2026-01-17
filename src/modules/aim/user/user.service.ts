@@ -62,6 +62,7 @@ export class UserService {
                     id: true,
                     name: true,
                     ci: true,
+                    password: true,
                 },
             });
 

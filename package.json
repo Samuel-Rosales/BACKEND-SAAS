@@ -9,7 +9,8 @@
     "start": "node dist/app.js",
     "prisma:format": "npx prisma format",
     "prisma:push": "npx prisma db push",
-    "prisma:studio": "npx prisma studio"
+    "prisma:studio": "npx prisma studio",
+    "prisma:seed": "npx prisma db seed"
   },
   "repository": {
     "type": "git",
@@ -53,5 +54,9 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3"
+  }
+  ,
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }
