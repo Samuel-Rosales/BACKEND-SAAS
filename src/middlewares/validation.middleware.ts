@@ -9,9 +9,15 @@ export const handleValidationErrors = (
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
+    // 1. Obtenemos el array completo de errores
+    const errorsArray = errors.array();
+
+    // 2. Extraemos el mensaje del PRIMER error encontrado
+    const firstErrorMessage = errorsArray[0].msg;
+
     return res.status(400).json({
-      message: 'Error de validación',
-      errors: errors.array(), // Devuelve la lista detallada de qué falló
+      message: firstErrorMessage, // <--- AQUÍ ESTÁ EL CAMBIO: Ahora dice "Ya tienes un proveedor..."
+      errors: errorsArray,        // Mantienes la lista completa por si la necesitas para debugging
     });
   }
 

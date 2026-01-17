@@ -14,7 +14,8 @@ export class ClientValidator {
       .trim()
       .notEmpty().withMessage('La cédula/RIF/DNI es obligatoria')
       .isString().withMessage('La cédula debe ser texto')
-      .isLength({ min: 3, max: 20 }).withMessage('La cédula debe tener entre 3 y 20 caracteres')
+      .matches(/^\d{6,10}$/).withMessage('La cédula debe contener solo números (entre 6 y 10 dígitos)')
+      .isLength({ min: 6, max: 10 }).withMessage('La cédula debe tener entre 6 y 10 caracteres')
       .custom(async (ci, { req }) => {
         // Validar duplicados DENTRO de la misma empresa
         const businessId = req.user?.businessId;
@@ -40,7 +41,19 @@ export class ClientValidator {
         .optional()
         .trim()
         .isEmail().withMessage('El email debe tener un formato válido')
-        .isLength({ max: 255 }).withMessage('El email no puede exceder 255 caracteres'),
+        .isLength({ max: 255 }).withMessage('El email no puede exceder 255 caracteres')
+        .custom(async (email, { req }) => {
+          const businessId = req.user?.businessId;
+          if (!businessId) return true; // Si falla auth, esto no importa
+          const exist = await prisma.client.findFirst({
+              where: { 
+                  email: email,
+                  businessId: Number(businessId)
+              }
+          });
+          if (exist) throw new Error(`Ya tienes un cliente con el email "${email}".`);
+          return true;
+        },),
 
     body('address')
         .optional()
