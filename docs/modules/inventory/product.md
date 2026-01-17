@@ -138,7 +138,8 @@ x-business-id: 1
           "id": 1,
           "name": "Unidad",
           "symbol": "u"
-        }
+        },
+        "currentStock": 200
       }
     ],
     "pagination": {

@@ -100,16 +100,28 @@ export class ProductService {
                         category: { select: { id: true, name: true } },
                         unit: { select: { id: true, symbol: true } }, // <--- ÚTIL PARA EL FRONTEND
                         // Opcional: Traer stock total sumado de los lotes
-                        // stockLots: { select: { quantity: true } } 
+                        stockLots: { select: { quantity: true } } 
                     }
                 }),
                 prisma.product.count({ where: whereClause })
             ]);
 
+            const formattedProducts = products.map(product => {
+                // 1. Calculamos la suma
+                const totalStock = product.stockLots.reduce((acc, lot) => acc + lot.quantity, 0);
+
+                // 2. Retornamos un nuevo objeto limpio (sin el array stockLots si no es necesario)
+                return {
+                    ...product,
+                    stockLots: undefined, // Opcional: Eliminamos la lista de lotes para no ensuciar el payload
+                    currentStock: totalStock // Agregamos la propiedad calculada
+                };
+            });
+
             return {
                 message: 'Productos obtenidos exitosamente',
                 status: 200,
-                data: products,
+                data: formattedProducts,
                 meta: { total, page, lastPage: Math.ceil(total / limit), limit }
             };
 
