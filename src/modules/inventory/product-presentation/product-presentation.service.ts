@@ -18,9 +18,9 @@ export class ProductPresentationService {
             // B. Validar duplicados de nombre para ese mismo producto
             // (No queremos dos presentaciones llamadas "Caja" para el mismo producto)
             const duplicate = await prisma.productPresentation.findFirst({
-                where: { 
-                    productId: data.productId, 
-                    name: { equals: data.name, mode: 'insensitive' } 
+                where: {
+                    productId: data.productId,
+                    name: { equals: data.name, mode: 'insensitive' }
                 }
             });
 
@@ -35,7 +35,7 @@ export class ProductPresentationService {
                     name: data.name,
                     factor: data.factor,
                     barCode: data.barCode || null,
-                    price: data.price || null
+                    price: data.price || 0
                 }
             });
 
@@ -63,7 +63,7 @@ export class ProductPresentationService {
                 return { message: 'Producto no encontrado', status: 404, data: null };
             }
 
-            const whereClause: any = { 
+            const whereClause: any = {
                 productId,
                 isActive: true // Por defecto solo activas
             };
@@ -93,10 +93,10 @@ export class ProductPresentationService {
         try {
             // A. Buscar la presentación y verificar que su producto padre sea de mi negocio
             const presentation = await prisma.productPresentation.findFirst({
-                where: { 
-                    id, 
+                where: {
+                    id,
                     product: { businessId } // <--- EL TRUCO DE SEGURIDAD
-                } 
+                }
             });
 
             if (!presentation) {
@@ -131,9 +131,9 @@ export class ProductPresentationService {
         try {
             // 1. Verificar propiedad y buscar uso
             const presentation = await prisma.productPresentation.findFirst({
-                where: { 
-                    id, 
-                    product: { businessId } 
+                where: {
+                    id,
+                    product: { businessId }
                 },
                 include: {
                     _count: {
@@ -150,14 +150,14 @@ export class ProductPresentationService {
             }
 
             // 2. Verificar Historial
-            const hasHistory = 
-                presentation._count.saleItems > 0 || 
+            const hasHistory =
+                presentation._count.saleItems > 0 ||
                 presentation._count.purchaseItems > 0;
 
             if (hasHistory) {
                 // === ESCENARIO A: SOFT DELETE (Archivar) ===
                 // Se usó en facturas, no podemos borrarla o rompemos el historial.
-                
+
                 if (!presentation.isActive) {
                     return { message: 'La presentación ya está archivada', status: 400, data: null };
                 }
@@ -167,21 +167,21 @@ export class ProductPresentationService {
                     data: { isActive: false }
                 });
 
-                return { 
-                    message: 'Presentación archivada (Tiene historial de ventas/compras)', 
-                    status: 200, 
-                    data: archived 
+                return {
+                    message: 'Presentación archivada (Tiene historial de ventas/compras)',
+                    status: 200,
+                    data: archived
                 };
 
             } else {
                 // === ESCENARIO B: HARD DELETE (Físico) ===
-                
+
                 await prisma.productPresentation.delete({ where: { id } });
 
-                return { 
-                    message: 'Presentación eliminada permanentemente', 
-                    status: 200, 
-                    data: null 
+                return {
+                    message: 'Presentación eliminada permanentemente',
+                    status: 200,
+                    data: null
                 };
             }
 
