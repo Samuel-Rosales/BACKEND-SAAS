@@ -5,7 +5,7 @@ export class StockMovementController {
     private service = new StockMovementService();
 
     create = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+        const {businessId, membershipId} = req.user;
 
         if (!businessId) {
             return res.status(400).json({
@@ -14,7 +14,14 @@ export class StockMovementController {
             });
         }
 
-        const {status, data, message} = await this.service.create(businessId, req.body);
+        if (!membershipId) {
+            return res.status(403).json({
+                message: 'Membresía de negocio requerida para crear un movimiento de stock',
+                data: null
+            });
+        }
+
+        const {status, data, message} = await this.service.create(businessId, membershipId, req.body);
 
         res.status(status).json({ 
             message, 

@@ -4,7 +4,7 @@ import { CreateStockMovementInterface, UpdateStockMovementInterface } from './in
 export class StockMovementService {
 
     // 1. CREAR
-    async create(businessId: number, data: CreateStockMovementInterface) {
+    async create(businessId: number, membershipId: number, data: CreateStockMovementInterface) {
         try {
             
             // Verificar que el producto existe y pertenece al negocio
@@ -43,7 +43,7 @@ export class StockMovementService {
             // Verificar que el miembro existe y pertenece al negocio
             const member = await prisma.businessMember.findFirst({
                 where: { 
-                    id: data.memberId,
+                    id: membershipId,
                     businessId: businessId,
                     isActive: true
                 }

@@ -8,9 +8,6 @@ export class StockMovementValidator {
         body('productId')
         .isInt().withMessage('El ID del producto debe ser un número entero'),
 
-        body('memberId')
-        .isInt().withMessage('El ID del miembro debe ser un número entero'),
-
         body('depotId')
         .isInt().withMessage('El ID del depósito debe ser un número entero'),
 
