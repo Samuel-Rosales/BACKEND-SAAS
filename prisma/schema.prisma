@@ -12,30 +12,29 @@ datasource db {
 // ==========================================
 
 model User {
-  id        Int      @id @default(autoincrement())
-  ci        String   @unique // Cédula de identidad
-  password  String   // Hash de la contraseña (nunca texto plano)
-  name      String
+  id       Int    @id @default(autoincrement())
+  ci       String @unique // Cédula de identidad
+  password String // Hash de la contraseña (nunca texto plano)
+  name     String
 
-  contacts  UserContact?
+  contacts UserContact?
 
   // Relaciones
-  memberships BusinessMember[] // Un usuario puede trabajar en varios negocios
-  createdProducts Product[]    // Auditoría: qué productos creó/editó
+  memberships     BusinessMember[] // Un usuario puede trabajar en varios negocios
+  createdProducts Product[] // Auditoría: qué productos creó/editó
 }
 
 model UserContact {
-  id        Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  userId    Int      @unique
-  user      User     @relation(fields: [userId], references: [id])
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
 
-  email     String   @unique
-  phone     String
-  address   String
-  city      String
-  state     String
-
+  email   String @unique
+  phone   String
+  address String
+  city    String
+  state   String
 }
 
 model Role {
@@ -54,9 +53,9 @@ model BusinessMember {
   isActive   Boolean  @default(true) // Si se despide al empleado, se pasa a false
   joinedAt   DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id])
-  business   Business @relation(fields: [businessId], references: [id])
-  role       Role     @relation(fields: [roleId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+  role     Role     @relation(fields: [roleId], references: [id])
 
   // Relaciones de auditoría y operación
   sales          Sale[]
@@ -73,17 +72,17 @@ model BusinessMember {
 // ==========================================
 
 model Business {
-  id             Int      @id @default(autoincrement())
-  name           String
-  exchangeRate   Decimal  @default(1.0) @db.Decimal(10, 4) // Tasa base global actual
+  id           Int     @id @default(autoincrement())
+  name         String
+  exchangeRate Decimal @default(1.0) @db.Decimal(10, 4) // Tasa base global actual
 
   businessCategoryId Int
-  businessCategory BusinessCategory @relation(fields: [businessCategoryId], references: [id])
+  businessCategory   BusinessCategory @relation(fields: [businessCategoryId], references: [id])
 
-  address        String
-  logoUrl        String?  // Logo del negocio
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  address   String
+  logoUrl   String? // Logo del negocio
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relaciones
   subscription   Subscription?
@@ -100,8 +99,8 @@ model Business {
 }
 
 model BusinessCategory {
-  id         Int    @id @default(autoincrement())
-  name       String
+  id          Int    @id @default(autoincrement())
+  name        String
   description String
 
   businesses Business[]
@@ -121,18 +120,18 @@ model Subscription {
 
 model ExchangeRate {
   id          Int      @id @default(autoincrement())
-  currency    String   // Ej: "VES", "USD" (ISO Code)
+  currency    String // Ej: "VES", "USD" (ISO Code)
   rate        Decimal  @db.Decimal(10, 4) // Ej: 54.3000 (4 decimales para precisión)
   createdAt   DateTime @default(now()) // Histórico: permite ver cuánto valía el dólar hace 1 mes
   createdById Int
   isActive    Boolean  @default(true)
 
   // Relaciones inversas: Usadas para saber a qué tasa se pagó una venta antigua
-  sales           Sale[]
-  salePayments    SalePayment[]
-  purchases       Purchase[]
+  sales            Sale[]
+  salePayments     SalePayment[]
+  purchases        Purchase[]
   purchasePayments PurchasePayment[]
-  cashCounts      CashCount[]
+  cashCounts       CashCount[]
 }
 
 // ==========================================
@@ -140,92 +139,92 @@ model ExchangeRate {
 // ==========================================
 
 model Depot {
-  id         Int      @id @default(autoincrement())
+  id         Int     @id @default(autoincrement())
   businessId Int
   name       String
   location   String
-  isActive   Boolean  @default(true)
+  isActive   Boolean @default(true)
 
-  business Business @relation(fields: [businessId], references: [id])
-  purchaseItems PurchaseItem[]
+  business       Business        @relation(fields: [businessId], references: [id])
+  purchaseItems  PurchaseItem[]
   stockLots      StockLot[]
   stockMovements StockMovement[]
 }
 
 model MeasurementUnit {
-  id         Int      @id @default(autoincrement())
-  name       String   // "Kilogramo", "Unidad", "Litro"
-  symbol     String   // "kg", "und", "L"
-  isActive   Boolean  @default(true)
-  
+  id       Int     @id @default(autoincrement())
+  name     String // "Kilogramo", "Unidad", "Litro"
+  symbol   String // "kg", "und", "L"
+  isActive Boolean @default(true)
+
   products Product[]
 }
 
 model Category {
-  id         Int      @id @default(autoincrement())
+  id         Int     @id @default(autoincrement())
   businessId Int
   name       String
-  isActive   Boolean  @default(true)
+  isActive   Boolean @default(true)
   //parentId   Int?     // Recomendado: Para subcategorías (Electrónica -> Celulares)
 
-  business Business  @relation(fields: [businessId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
   //parent   Category? @relation("SubCategories", fields: [parentId], references: [id])
   //children Category[] @relation("SubCategories")
-  
+
   products Product[]
 }
 
 model Product {
-  id           Int      @id @default(autoincrement())
-  businessId   Int
-  categoryId   Int
-  unitId       Int      // <--- NUEVO: Unidad base (kg, und)
-  name         String
-  sku          String?
-  description  String
-  imageUrl     String?
-  
-  costPrice    Decimal  @default(0) @db.Decimal(15, 2)
-  salePrice    Decimal  @default(0) @db.Decimal(15, 2)
-  
-  minStock     Int      @default(0)
-  isService    Boolean  @default(false)
-  isPerishable Boolean  @default(false)
-  
-  updatedAt    DateTime @updatedAt
-  updatedById  Int?
-  isActive     Boolean  @default(true)
+  id          Int     @id @default(autoincrement())
+  businessId  Int
+  categoryId  Int
+  unitId      Int // <--- NUEVO: Unidad base (kg, und)
+  name        String
+  sku         String?
+  description String
+  imageUrl    String?
 
-  business Business @relation(fields: [businessId], references: [id])
-  category Category @relation(fields: [categoryId], references: [id])
-  unit     MeasurementUnit @relation(fields: [unitId], references: [id]) // <--- Relación
-  updatedBy User?    @relation(fields: [updatedById], references: [id])
+  costPrice Decimal @default(0) @db.Decimal(15, 2)
+  salePrice Decimal @default(0) @db.Decimal(15, 2)
+
+  minStock     Int     @default(0)
+  isService    Boolean @default(false)
+  isPerishable Boolean @default(false)
+
+  updatedAt   DateTime @updatedAt
+  updatedById Int?
+  isActive    Boolean  @default(true)
+
+  business  Business        @relation(fields: [businessId], references: [id])
+  category  Category        @relation(fields: [categoryId], references: [id])
+  unit      MeasurementUnit @relation(fields: [unitId], references: [id]) // <--- Relación
+  updatedBy User?           @relation(fields: [updatedById], references: [id])
 
   stockLots      StockLot[]
   saleItems      SaleItem[]
   purchaseItems  PurchaseItem[]
   stockMovements StockMovement[]
   presentations  ProductPresentation[] // <--- Cajas, Packs
-  creditNotes CreditNoteItem[]
-  
+  creditNotes    CreditNoteItem[]
+
   @@index([businessId, sku])
 }
 
 model ProductPresentation {
   id        Int     @id @default(autoincrement())
   productId Int
-  name      String  // "Caja x12"
+  name      String // "Caja x12"
   factor    Decimal @db.Decimal(10, 4)
   barCode   String?
   price     Decimal @db.Decimal(15, 2)
-  
-  isActive  Boolean @default(true) // <--- NUEVO: Para Soft Delete
 
-  product   Product @relation(fields: [productId], references: [id])
-  
+  isActive Boolean @default(true) // <--- NUEVO: Para Soft Delete
+
+  product Product @relation(fields: [productId], references: [id])
+
   // Relaciones necesarias para verificar uso (Asumiendo que actualizas tus items)
-  saleItems     SaleItem[]      // <--- Debes tener esto en tu modelo SaleItem
-  purchaseItems PurchaseItem[]  // <--- Debes tener esto en tu modelo PurchaseItem
+  saleItems     SaleItem[] // <--- Debes tener esto en tu modelo SaleItem
+  purchaseItems PurchaseItem[] // <--- Debes tener esto en tu modelo PurchaseItem
 }
 
 model StockLot {
@@ -239,12 +238,12 @@ model StockLot {
 
   product Product @relation(fields: [productId], references: [id])
   depot   Depot   @relation(fields: [depotId], references: [id])
-  
+
   saleItemLots SaleItemLot[]
 
   // --- ÍNDICES ESTRATÉGICOS (NO LOS OLVIDES) ---
   @@index([productId, expirationDate]) // FIFO/FEFO (Ventas)
-  @@index([productId, depotId])        // Totales Rápidos (Dashboard)
+  @@index([productId, depotId]) // Totales Rápidos (Dashboard)
 }
 
 model StockMovement {
@@ -255,12 +254,12 @@ model StockMovement {
   depotId    Int
   type       MovementType
   quantity   Int
-  
+
   // --- SNAPSHOT FINANCIERO ---
   historicalCost Decimal @default(0) @db.Decimal(15, 2) // Cuánto costaba unitariamente en ese momento
-  
-  reason     String?
-  date       DateTime     @default(now())
+
+  reason String?
+  date   DateTime @default(now())
 
   business Business       @relation(fields: [businessId], references: [id])
   product  Product        @relation(fields: [productId], references: [id])
@@ -280,46 +279,47 @@ model Client {
   phone      String?
   email      String?
   address    String?
+  isActive   Boolean @default(true)
 
   business Business @relation(fields: [businessId], references: [id])
   sales    Sale[]
 }
 
 model Sale {
-  id             Int        @id @default(autoincrement())
-  businessId     Int
-  receiptNumber  Int        // Factura #001
-  
+  id            Int @id @default(autoincrement())
+  businessId    Int
+  receiptNumber Int // Factura #001
+
   // Relaciones
   memberId       Int
   clientId       Int
   exchangeRateId Int
 
   // Clasificación
-  type           SaleType   @default(RETAIL)
-  status         SaleStatus @default(COMPLETED) // COMPLETED, CANCELLED, DRAFT
-  
+  type   SaleType   @default(RETAIL)
+  status SaleStatus @default(COMPLETED) // COMPLETED, CANCELLED, DRAFT
+
   // --- CONDICIONES DE PAGO ---
-  conditions     SaleConditions @default(CASH) // CASH o CREDIT
-  
+  conditions SaleConditions @default(CASH) // CASH o CREDIT
+
   // Este estado se calcula automáticamente al pagar. 
   // Eliminé OVERDUE y CANCELLED de aquí porque eso se deduce de otras variables.
-  paymentStatus  PaymentStatus  @default(PAID) 
-  
+  paymentStatus PaymentStatus @default(PAID)
+
   // --- MONTOS (Desglose fiscal) ---
-  subTotal       Decimal    @db.Decimal(15, 2) // Precio antes de impuestos
-  taxAmount      Decimal    @db.Decimal(15, 2) // El monto del IVA
-  discount       Decimal    @default(0) @db.Decimal(15, 2) // Descuentos aplicados
-  totalAmount    Decimal    @db.Decimal(15, 2) // (SubTotal - Desc) + Tax
-  
+  subTotal    Decimal @db.Decimal(15, 2) // Precio antes de impuestos
+  taxAmount   Decimal @db.Decimal(15, 2) // El monto del IVA
+  discount    Decimal @default(0) @db.Decimal(15, 2) // Descuentos aplicados
+  totalAmount Decimal @db.Decimal(15, 2) // (SubTotal - Desc) + Tax
+
   // --- CRÉDITO ---
-  remainingBalance Decimal    @default(0) @db.Decimal(15, 2)
-  paymentDueDate   DateTime?  
+  remainingBalance Decimal   @default(0) @db.Decimal(15, 2)
+  paymentDueDate   DateTime?
 
   // Auditoría
-  createdAt      DateTime   @default(now()) 
-  updatedAt      DateTime   @updatedAt
-  deletedAt      DateTime?  // Soft Delete (Anulación lógica)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft Delete (Anulación lógica)
 
   // Relaciones
   business     Business       @relation(fields: [businessId], references: [id])
@@ -327,37 +327,37 @@ model Sale {
   client       Client         @relation(fields: [clientId], references: [id])
   exchangeRate ExchangeRate   @relation(fields: [exchangeRateId], references: [id])
 
-  items    SaleItem[]
-  payments SalePayment[]
+  items       SaleItem[]
+  payments    SalePayment[]
   creditNotes CreditNote[]
 }
 
 model CreditNote {
-  id             Int      @id @default(autoincrement())
-  businessId     Int
-  saleId         Int      // Vinculada a la venta original
-  number         Int      // Consecutivo fiscal (Nota de Crédito #001)
-  
-  totalAmount    Decimal  @db.Decimal(15, 2) // Cuánto dinero se devuelve
-  reason         String   // "Producto defectuoso", "No le quedó", etc.
-  
-  createdAt      DateTime @default(now())
+  id         Int @id @default(autoincrement())
+  businessId Int
+  saleId     Int // Vinculada a la venta original
+  number     Int // Consecutivo fiscal (Nota de Crédito #001)
 
-  sale           Sale     @relation(fields: [saleId], references: [id])
-  items          CreditNoteItem[]
+  totalAmount Decimal @db.Decimal(15, 2) // Cuánto dinero se devuelve
+  reason      String // "Producto defectuoso", "No le quedó", etc.
+
+  createdAt DateTime @default(now())
+
+  sale  Sale             @relation(fields: [saleId], references: [id])
+  items CreditNoteItem[]
 }
 
 // Detalle de qué items específicos se devolvieron
 model CreditNoteItem {
-  id             Int     @id @default(autoincrement())
-  creditNoteId   Int
-  productId      Int
-  quantity       Decimal // Cantidad que entra de vuelta al stock
-  unitPrice      Decimal // Precio al que se vendió originalmente
-  subTotal       Decimal
+  id           Int     @id @default(autoincrement())
+  creditNoteId Int
+  productId    Int
+  quantity     Decimal // Cantidad que entra de vuelta al stock
+  unitPrice    Decimal // Precio al que se vendió originalmente
+  subTotal     Decimal
 
-  creditNote     CreditNote @relation(fields: [creditNoteId], references: [id])
-  product        Product    @relation(fields: [productId], references: [id])
+  creditNote CreditNote @relation(fields: [creditNoteId], references: [id])
+  product    Product    @relation(fields: [productId], references: [id])
 }
 
 enum SaleConditions {
@@ -367,27 +367,27 @@ enum SaleConditions {
 
 // Renombrado a PaymentStatus para ser más claro
 enum PaymentStatus {
-  PENDING         // No se ha pagado nada (o saldo inicial completo)
-  PARTIAL         // Se ha abonado algo
-  PAID            // Saldo en 0
-  REFUNDED        // Se devolvió el dinero
+  PENDING // No se ha pagado nada (o saldo inicial completo)
+  PARTIAL // Se ha abonado algo
+  PAID // Saldo en 0
+  REFUNDED // Se devolvió el dinero
   // Nota: "VENCIDO" se calcula en el frontend comparando paymentDueDate vs Hoy
 }
 
 enum SaleStatus {
-  DRAFT       // Aún editando (carrito)
-  COMPLETED   // Venta cerrada y stock descontado
-  CANCELLED   // Venta anulada (requiere devolver stock)
+  DRAFT // Aún editando (carrito)
+  COMPLETED // Venta cerrada y stock descontado
+  CANCELLED // Venta anulada (requiere devolver stock)
 }
 
 model SaleItem {
-  id        Int     @id @default(autoincrement())
-  saleId    Int
-  productId Int
+  id                    Int     @id @default(autoincrement())
+  saleId                Int
+  productId             Int
   productPresentationId Int? // <--- NUEVO: Presentación usada (caja, pack, unidad)
-  quantity  Int
-  unitPrice Decimal @db.Decimal(15, 2) // Precio al momento de la venta
-  subTotal  Decimal @db.Decimal(15, 2)
+  quantity              Int
+  unitPrice             Decimal @db.Decimal(15, 2) // Precio al momento de la venta
+  subTotal              Decimal @db.Decimal(15, 2)
 
   sale    Sale    @relation(fields: [saleId], references: [id])
   product Product @relation(fields: [productId], references: [id])
@@ -400,28 +400,28 @@ model SaleItem {
 
 // TABLA DE TRAZABILIDAD EXACTA
 model SaleItemLot {
-  id          Int @id @default(autoincrement())
-  saleItemId  Int
-  stockLotId  Int
-  quantity    Int // Cuántos items se sacaron de ESTE lote específico
+  id         Int @id @default(autoincrement())
+  saleItemId Int
+  stockLotId Int
+  quantity   Int // Cuántos items se sacaron de ESTE lote específico
 
   saleItem SaleItem @relation(fields: [saleItemId], references: [id])
   stockLot StockLot @relation(fields: [stockLotId], references: [id])
 }
 
 model SalePayment {
-  id             Int      @id @default(autoincrement())
-  saleId         Int
+  id              Int           @id @default(autoincrement())
+  saleId          Int
   paymentMethodId Int
-  paymentMethod  PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
-  amount         Decimal  @db.Decimal(15, 2)
-  currency       String   // Moneda del pago (ej: USD)
-  exchangeRateId Int      // Si pagaron en Bs, qué tasa se usó
-  reference      String   // Nro de referencia bancaria
-  date           DateTime @default(now())
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
+  amount          Decimal       @db.Decimal(15, 2)
+  currency        String // Moneda del pago (ej: USD)
+  exchangeRateId  Int // Si pagaron en Bs, qué tasa se usó
+  reference       String // Nro de referencia bancaria
+  date            DateTime      @default(now())
 
-  sale         Sale          @relation(fields: [saleId], references: [id])
-  exchangeRate ExchangeRate  @relation(fields: [exchangeRateId], references: [id])
+  sale         Sale         @relation(fields: [saleId], references: [id])
+  exchangeRate ExchangeRate @relation(fields: [exchangeRateId], references: [id])
 }
 
 // ==========================================
@@ -429,37 +429,37 @@ model SalePayment {
 // ==========================================
 
 model Supplier {
-  id           Int     @id @default(autoincrement())
-  businessId   Int
-  nameCompany  String
-  contactName  String
-  address      String
-  phone        String
-  isActive     Boolean @default(true)
+  id          Int     @id @default(autoincrement())
+  businessId  Int
+  nameCompany String
+  contactName String
+  address     String
+  phone       String
+  isActive    Boolean @default(true)
 
   business  Business   @relation(fields: [businessId], references: [id])
   purchases Purchase[]
 }
 
 model Purchase {
-  id             Int            @id @default(autoincrement())
-  businessId     Int
-  supplierId     Int
-  memberId       Int            // Quién registró la compra
-  
+  id         Int @id @default(autoincrement())
+  businessId Int
+  supplierId Int
+  memberId   Int // Quién registró la compra
+
   // --- 1. LO QUE LE FALTABA: Desglose Financiero ---
-  subTotal       Decimal        @db.Decimal(15, 2) // Suma de items sin impuestos
-  taxAmount      Decimal        @db.Decimal(15, 2) // Monto de Impuestos/IVA
-  totalCost      Decimal        @db.Decimal(15, 2) // Total Final a Pagar (SubTotal + Tax)
-  
+  subTotal  Decimal @db.Decimal(15, 2) // Suma de items sin impuestos
+  taxAmount Decimal @db.Decimal(15, 2) // Monto de Impuestos/IVA
+  totalCost Decimal @db.Decimal(15, 2) // Total Final a Pagar (SubTotal + Tax)
+
   status         PurchaseStatus @default(COMPLETED)
   exchangeRateId Int
-  
+
   // --- 2. LO QUE LE FALTABA: Datos Administrativos ---
-  reference      String?        // Nro Factura Física del Proveedor (Ej: "A-00045")
-  observation    String        // Notas: "Caja llegó abierta", "Sin novedad"
-  
-  date           DateTime       @default(now())
+  reference   String? // Nro Factura Física del Proveedor (Ej: "A-00045")
+  observation String // Notas: "Caja llegó abierta", "Sin novedad"
+
+  date DateTime @default(now())
 
   // Relaciones
   business     Business       @relation(fields: [businessId], references: [id])
@@ -472,34 +472,34 @@ model Purchase {
 }
 
 model PurchaseItem {
-  id             Int     @id @default(autoincrement())
-  purchaseId     Int
-  productId      Int
-  depotId        Int
+  id                    Int      @id @default(autoincrement())
+  purchaseId            Int
+  productId             Int
+  depotId               Int
   productPresentationId Int? // <--- NUEVO: Presentación usada (caja, pack, unidad)
-  quantity       Int
-  unitCost       Decimal @db.Decimal(15, 2)
-  expirationDate DateTime @db.Date
+  quantity              Int
+  unitCost              Decimal  @db.Decimal(15, 2)
+  expirationDate        DateTime @db.Date
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id])
-  product  Product  @relation(fields: [productId], references: [id])
-  depot    Depot    @relation(fields: [depotId], references: [id])
+  purchase            Purchase             @relation(fields: [purchaseId], references: [id])
+  product             Product              @relation(fields: [productId], references: [id])
+  depot               Depot                @relation(fields: [depotId], references: [id])
   productPresentation ProductPresentation? @relation(fields: [productPresentationId], references: [id])
 }
 
 model PurchasePayment {
-  id                      Int      @id @default(autoincrement())
-  purchaseId              Int
-  paymentMethodId         Int
-  paymentMethod           PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
-  amount                  Decimal  @db.Decimal(15, 2)
-  currency                String  // Moneda del pago (ej: USD o VES)
-  exchangeRateId          Int
-  reference               String?   // Nro de referencia bancaria
-  paymentDate             DateTime @default(now())
+  id              Int           @id @default(autoincrement())
+  purchaseId      Int
+  paymentMethodId Int
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
+  amount          Decimal       @db.Decimal(15, 2)
+  currency        String // Moneda del pago (ej: USD o VES)
+  exchangeRateId  Int
+  reference       String? // Nro de referencia bancaria
+  paymentDate     DateTime      @default(now())
 
-  purchase     Purchase      @relation(fields: [purchaseId], references: [id])
-  exchangeRate ExchangeRate  @relation(fields: [exchangeRateId], references: [id])
+  purchase     Purchase     @relation(fields: [purchaseId], references: [id])
+  exchangeRate ExchangeRate @relation(fields: [exchangeRateId], references: [id])
 }
 
 // ==========================================
@@ -522,25 +522,24 @@ model CashRegister {
 }
 
 model CashCount {
-  id             Int     @id @default(autoincrement())
+  id             Int           @id @default(autoincrement())
   cashRegisterId Int
-  denomination   Decimal @db.Decimal(10, 2) // Ej: Billete de 10, de 20...
-  quantity       Int     // Cuántos billetes de esa denominación
-  currency       String  // USD, VES
+  denomination   Decimal       @db.Decimal(10, 2) // Ej: Billete de 10, de 20...
+  quantity       Int // Cuántos billetes de esa denominación
+  currency       String // USD, VES
   exchangeRateId Int
   type           CashCountType // INITIAL (apertura) o FINAL (cierre)
 
-  cashRegister CashRegister  @relation(fields: [cashRegisterId], references: [id])
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id])
   exchangeRate ExchangeRate @relation(fields: [exchangeRateId], references: [id])
 }
 
 model PaymentMethod {
-  id         Int      @id @default(autoincrement())
-  name       String   // Ej: "Zelle Banesco", "Caja Chica", "Punto de Venta"
-  type       PaymentType // El tipo "interno" para que el sistema sepa cómo comportarse
-  isActive   Boolean  @default(true) // Para ocultar cuentas viejas sin borrar historial
+  id       Int         @id @default(autoincrement())
+  name     String // Ej: "Zelle Banesco", "Caja Chica", "Punto de Venta"
+  type     PaymentType // El tipo "interno" para que el sistema sepa cómo comportarse
+  isActive Boolean     @default(true) // Para ocultar cuentas viejas sin borrar historial
 
-  
   // Relaciones con los pagos realizados
   salePayments     SalePayment[]
   purchasePayments PurchasePayment[]
@@ -567,11 +566,11 @@ enum SubStatus {
 }
 
 enum MovementType {
-  IN          // Entrada (Compra)
-  OUT         // Salida (Venta)
-  ADJUSTMENT  // Ajuste manual (Inventario físico)
-  TRANSFER    // Movimiento entre bodegas
-  RETURN      // Devolución
+  IN // Entrada (Compra)
+  OUT // Salida (Venta)
+  ADJUSTMENT // Ajuste manual (Inventario físico)
+  TRANSFER // Movimiento entre bodegas
+  RETURN // Devolución
 }
 
 enum SaleType {

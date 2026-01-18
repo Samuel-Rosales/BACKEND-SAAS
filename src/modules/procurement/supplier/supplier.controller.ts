@@ -15,9 +15,9 @@ export class SupplierController {
 
         const { status, data, message } = await this.service.create(businessId, req.body);
 
-        res.status(status).json({ 
-            message, 
-            data 
+        res.status(status).json({
+            message,
+            data
         });
     };
 
@@ -28,11 +28,16 @@ export class SupplierController {
             return res.status(400).json({ message: 'Falta el ID de la empresa en el header.' });
         }
 
-        const { status, data, message } = await this.service.findAll(businessId);
-        
-        res.status(status).json({ 
-            message, 
-            data 
+        const query = {
+            search: req.query.search ? String(req.query.search) : undefined,
+            status: req.query.status ? String(req.query.status) : undefined
+        };
+
+        const { status, data, message } = await this.service.findAll(businessId, query);
+
+        res.status(status).json({
+            message,
+            data
         });
     };
 
@@ -46,9 +51,9 @@ export class SupplierController {
 
         const { status, data, message } = await this.service.findOne(businessId, +id);
 
-        res.status(status).json({ 
-            message, 
-            data 
+        res.status(status).json({
+            message,
+            data
         });
     };
 
@@ -61,10 +66,10 @@ export class SupplierController {
         }
 
         const { status, data, message } = await this.service.update(businessId, +id, req.body);
-        
-        res.status(status).json({ 
-            message, 
-            data 
+
+        res.status(status).json({
+            message,
+            data
         });
     };
 
@@ -78,9 +83,9 @@ export class SupplierController {
 
         const { status, data, message } = await this.service.remove(businessId, +id);
 
-        res.status(status).json({ 
-            message, 
-            data 
+        res.status(status).json({
+            message,
+            data
         });
     };
 }

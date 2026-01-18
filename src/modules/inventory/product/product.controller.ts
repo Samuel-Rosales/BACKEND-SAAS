@@ -21,7 +21,7 @@ export class ProductController {
             }
 
             const result = await service.create(businessId, userId, req.body);
-            
+
             return res.status(result.status).json(result);
 
         } catch (error) {
@@ -38,12 +38,13 @@ export class ProductController {
     async findAll(req: Request, res: Response) {
         try {
             const { businessId } = (req as any).user;
-            
+
             // Extraer query params
             const query = {
                 page: req.query.page ? Number(req.query.page) : undefined,
                 limit: req.query.limit ? Number(req.query.limit) : undefined,
-                search: req.query.search ? String(req.query.search) : undefined
+                search: req.query.search ? String(req.query.search) : undefined,
+                categoryId: req.query.categoryId ? Number(req.query.categoryId) : undefined
             };
 
             const result = await service.findAll(businessId, query);

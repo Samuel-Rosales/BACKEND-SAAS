@@ -29,19 +29,42 @@ export class SupplierService {
     }
   }
 
-  // 2. LISTAR (Tenant Scoped)
-  async findAll(businessId: number) {
+  // 2. LISTAR (Tenant Scoped + Search + Status)
+  async findAll(businessId: number, query?: { search?: string, status?: string }) {
     try {
+      const search = query?.search ? String(query.search).trim() : undefined;
+      const statusParam = query?.status ? String(query.status).toLowerCase() : undefined;
+
+      const whereClause: any = { businessId };
+
+      if (search) {
+        whereClause.OR = [
+          { nameCompany: { contains: search, mode: 'insensitive' } },
+          { contactName: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search, mode: 'insensitive' } },
+          { address: { contains: search, mode: 'insensitive' } },
+          // { email: { contains: search, mode: 'insensitive' } } 
+        ];
+      }
+
+      if (statusParam) {
+        if (statusParam === 'true' || statusParam === 'active') {
+          whereClause.isActive = true;
+        } else if (statusParam === 'false' || statusParam === 'inactive') {
+          whereClause.isActive = false;
+        }
+      }
+
       const suppliers = await prisma.supplier.findMany({
-        where: { businessId, isActive: true },
+        where: whereClause,
         orderBy: { nameCompany: 'asc' }
       });
 
       if (suppliers.length === 0) {
         return {
           status: 200,
-            message: 'No hay proveedores registrados aún',
-            data: []
+          message: 'No hay proveedores registrados aún',
+          data: []
         };
       }
 
@@ -96,7 +119,7 @@ export class SupplierService {
     try {
       // Verificar existencia primero
       const exists = await prisma.supplier.findFirst({ where: { id, businessId, isActive: true } });
-      
+
       if (!exists) {
         return {
           status: 404,
@@ -129,78 +152,78 @@ export class SupplierService {
   // 5. ELIMINAR (Con validación de compras previas)
   async remove(businessId: number, id: number) {
     try {
-        // 1. Buscar el proveedor y contar sus compras asociadas
-        // (Usamos include _count para hacerlo en una sola consulta eficiente)
-        const supplier = await prisma.supplier.findFirst({
-            where: { id, businessId },
-            include: {
-                _count: {
-                    select: {
-                        purchases: true // Relación con la tabla de compras
-                    }
-                }
+      // 1. Buscar el proveedor y contar sus compras asociadas
+      // (Usamos include _count para hacerlo en una sola consulta eficiente)
+      const supplier = await prisma.supplier.findFirst({
+        where: { id, businessId },
+        include: {
+          _count: {
+            select: {
+              purchases: true // Relación con la tabla de compras
             }
+          }
+        }
+      });
+
+      if (!supplier) {
+        return {
+          message: 'Proveedor no encontrado',
+          status: 404,
+          data: null
+        };
+      }
+
+      // 2. Extraer cantidad de dependencias
+      const totalPurchases = supplier._count.purchases;
+
+      // 3. DECISIÓN: ¿Archivar o Borrar?
+      if (totalPurchases > 0) {
+        // === ESCENARIO A: SOFT DELETE (Archivar) ===
+        // El proveedor tiene historial de compras. No se debe borrar para no perder datos contables.
+
+        // Si ya estaba archivado (inactivo), avisamos para no procesar de más
+        if (!supplier.isActive) {
+          return {
+            message: 'El proveedor ya se encuentra archivado',
+            status: 400,
+            data: null
+          };
+        }
+
+        // Lo desactivamos
+        await prisma.supplier.update({
+          where: { id },
+          data: { isActive: false }
         });
 
-        if (!supplier) {
-            return {
-                message: 'Proveedor no encontrado',
-                status: 404,
-                data: null
-            };
-        }
+        return {
+          message: `Proveedor archivado correctamente. No se eliminó físicamente porque tiene ${totalPurchases} compra(s) registrada(s).`,
+          status: 200,
+          data: null
+        };
 
-        // 2. Extraer cantidad de dependencias
-        const totalPurchases = supplier._count.purchases;
+      } else {
+        // === ESCENARIO B: HARD DELETE (Borrado Físico) ===
+        // El proveedor no tiene historial. Es seguro borrarlo de la base de datos. 
 
-        // 3. DECISIÓN: ¿Archivar o Borrar?
-        if (totalPurchases > 0) {
-            // === ESCENARIO A: SOFT DELETE (Archivar) ===
-            // El proveedor tiene historial de compras. No se debe borrar para no perder datos contables.
+        await prisma.supplier.delete({
+          where: { id }
+        });
 
-            // Si ya estaba archivado (inactivo), avisamos para no procesar de más
-            if (!supplier.isActive) {
-                return {
-                    message: 'El proveedor ya se encuentra archivado',
-                    status: 400,
-                    data: null
-                };
-            }
-
-            // Lo desactivamos
-            await prisma.supplier.update({
-                where: { id },
-                data: { isActive: false }
-            });
-
-            return {
-                message: `Proveedor archivado correctamente. No se eliminó físicamente porque tiene ${totalPurchases} compra(s) registrada(s).`,
-                status: 200,
-                data: null
-            };
-
-        } else {
-            // === ESCENARIO B: HARD DELETE (Borrado Físico) ===
-            // El proveedor no tiene historial. Es seguro borrarlo de la base de datos. 
-
-            await prisma.supplier.delete({
-                where: { id }
-            });
-
-            return {
-                message: 'Proveedor eliminado permanentemente (No tenía historial de compras)',
-                status: 200,
-                data: null
-            };
-        }
+        return {
+          message: 'Proveedor eliminado permanentemente (No tenía historial de compras)',
+          status: 200,
+          data: null
+        };
+      }
 
     } catch (error) {
-        console.error('Error al eliminar el proveedor:', error);
-        return {
-            message: 'Error interno al procesar la eliminación',
-            status: 500,
-            data: null
-        };
+      console.error('Error al eliminar el proveedor:', error);
+      return {
+        message: 'Error interno al procesar la eliminación',
+        status: 500,
+        data: null
+      };
     }
   }
 }

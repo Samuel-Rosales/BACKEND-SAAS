@@ -12,10 +12,10 @@ export class ProductService {
             const [business, category, unit, existingSku] = await Promise.all([
                 // 1. Negocio
                 prisma.business.findUnique({ where: { id: businessId } }),
-                
+
                 // 2. Categoría (Debe ser mía)
-                prisma.category.findFirst({ 
-                    where: { id: data.categoryId, businessId } 
+                prisma.category.findFirst({
+                    where: { id: data.categoryId, businessId }
                 }),
 
                 // 3. Unidad de Medida (Es global, no tiene businessId)
@@ -24,8 +24,8 @@ export class ProductService {
                 }),
 
                 // 4. SKU Único (Opcional)
-                data.sku 
-                    ? prisma.product.findFirst({ where: { sku: data.sku, businessId } }) 
+                data.sku
+                    ? prisma.product.findFirst({ where: { sku: data.sku, businessId } })
                     : Promise.resolve(null)
             ]);
 
@@ -74,14 +74,19 @@ export class ProductService {
     }
 
     // 2. LISTAR TODOS
-    async findAll(businessId: number, query: { page?: number, limit?: number, search?: string }) {
+    async findAll(businessId: number, query: { page?: number, limit?: number, search?: string, categoryId?: number }) {
         try {
             const page = Number(query.page) || 1;
             const limit = Number(query.limit) || 20;
             const skip = (page - 1) * limit;
             const search = query.search ? String(query.search).trim() : undefined;
+            const categoryId = query.categoryId ? Number(query.categoryId) : undefined;
 
             const whereClause: any = { businessId };
+
+            if (categoryId) {
+                whereClause.categoryId = categoryId;
+            }
 
             if (search) {
                 whereClause.OR = [
@@ -100,7 +105,7 @@ export class ProductService {
                         category: { select: { id: true, name: true } },
                         unit: { select: { id: true, symbol: true } }, // <--- ÚTIL PARA EL FRONTEND
                         // Opcional: Traer stock total sumado de los lotes
-                        stockLots: { select: { quantity: true } } 
+                        stockLots: { select: { quantity: true } }
                     }
                 }),
                 prisma.product.count({ where: whereClause })
@@ -188,8 +193,8 @@ export class ProductService {
             // C. Cambio de SKU
             if (data.sku && data.sku !== existingProduct.sku) {
                 validations.push(
-                    prisma.product.findFirst({ 
-                        where: { sku: data.sku, businessId, NOT: { id } } 
+                    prisma.product.findFirst({
+                        where: { sku: data.sku, businessId, NOT: { id } }
                     }).then(prod => { if (prod) throw new Error(`El SKU ${data.sku} ya está en uso`); })
                 );
             }
@@ -249,7 +254,7 @@ export class ProductService {
                     }
                 }
             });
-            
+
             if (!product) {
                 return { message: 'Producto no encontrado', status: 404, data: null };
             }
@@ -264,15 +269,15 @@ export class ProductService {
             }
 
             // 3. Evaluar Historial para decidir el destino
-            const hasHistory = 
-                product._count.saleItems > 0 || 
-                product._count.purchaseItems > 0 || 
+            const hasHistory =
+                product._count.saleItems > 0 ||
+                product._count.purchaseItems > 0 ||
                 product._count.stockMovements > 0;
 
             if (hasHistory) {
                 // === ESCENARIO A: SOFT DELETE (Archivar) ===
                 // Tiene historia, no podemos borrarlo, lo ocultamos.
-                
+
                 // Si ya estaba archivado, avisamos
                 if (!product.isActive) {
                     return { message: 'El producto ya se encuentra archivado', status: 400, data: null };
@@ -292,14 +297,14 @@ export class ProductService {
             } else {
                 // === ESCENARIO B: HARD DELETE (Borrado Físico) ===
                 // Es un producto "fantasma" o error de dedo. Limpiamos la BD.
-                
+
                 // Usamos transacción para borrar sus hijos (Presentations) y luego al padre
                 await prisma.$transaction(async (tx) => {
                     // 1. Borrar presentaciones asociadas
                     await tx.productPresentation.deleteMany({
                         where: { productId: id }
                     });
-                    
+
                     // 2. Borrar lotes vacíos (si existen y están en 0)
                     await tx.stockLot.deleteMany({
                         where: { productId: id }
@@ -311,10 +316,10 @@ export class ProductService {
                     });
                 });
 
-                return { 
-                    message: 'Producto eliminado permanentemente (Sin historial previo)', 
-                    status: 200, 
-                    data: null 
+                return {
+                    message: 'Producto eliminado permanentemente (Sin historial previo)',
+                    status: 200,
+                    data: null
                 };
             }
 
