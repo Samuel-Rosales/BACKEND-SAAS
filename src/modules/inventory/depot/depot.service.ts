@@ -6,7 +6,7 @@ export class DepotService {
     // 1. CREAR
     async create(businessId: number, data: CreateDepotInterface) {
         try {
-            
+
             // Verificar que el negocio existe
             const business = await prisma.business.findUnique({
                 where: { id: businessId }
@@ -88,10 +88,26 @@ export class DepotService {
                 };
             }
 
+            // Calculate stockGenerals (Unique products with quantity > 0)
+            const depotsWithCounts = await Promise.all(depots.map(async (d) => {
+                const uniqueProducts = await prisma.stockLot.groupBy({
+                    by: ['productId'],
+                    where: { depotId: d.id, quantity: { gt: 0 } }
+                });
+
+                return {
+                    ...d,
+                    _count: {
+                        ...d._count,
+                        stockGenerals: uniqueProducts.length
+                    }
+                };
+            }));
+
             return {
                 message: 'Depósitos obtenidos exitosamente',
                 status: 200,
-                data: depots
+                data: depotsWithCounts
             };
 
         } catch (error) {
@@ -110,7 +126,7 @@ export class DepotService {
     async findOne(businessId: number, id: number) {
         try {
             const depot = await prisma.depot.findFirst({
-                where: { 
+                where: {
                     id,
                     businessId, // Seguridad: solo si pertenece al negocio
                     isActive: true
@@ -139,13 +155,27 @@ export class DepotService {
                 };
             }
 
+            // Calculate stockGenerals
+            const uniqueProducts = await prisma.stockLot.groupBy({
+                by: ['productId'],
+                where: { depotId: depot.id, quantity: { gt: 0 } }
+            });
+
+            const depotWithCount = {
+                ...depot,
+                _count: {
+                    ...depot._count,
+                    stockGenerals: uniqueProducts.length
+                }
+            };
+
             return {
                 message: 'Depósito obtenido exitosamente',
                 status: 200,
-                data: depot
+                data: depotWithCount
             };
 
-         } catch (error) {
+        } catch (error) {
 
             console.error('Error al obtener el depósito:', error);
 
@@ -205,7 +235,7 @@ export class DepotService {
         } catch (error) {
 
             console.error('Error al actualizar el depósito:', error);
-            
+
             return {
                 message: 'Error al actualizar el depósito',
                 status: 500,
@@ -235,7 +265,7 @@ export class DepotService {
                     }
                 }
             });
-            
+
             if (!depot) {
                 return {
                     message: 'Almacén no encontrado',
@@ -254,15 +284,15 @@ export class DepotService {
             }
 
             // 3. Evaluar Historial
-            const hasHistory = 
-                depot._count.stockMovements > 0 || 
+            const hasHistory =
+                depot._count.stockMovements > 0 ||
                 depot._count.purchaseItems > 0 ||
                 depot._count.stockLots > 0; // Tuvo lotes en el pasado (aunque ahora estén en 0)
 
             if (hasHistory) {
                 // === ESCENARIO A: SOFT DELETE (Archivar) ===
                 // El almacén está vacío, pero se usó en el pasado. Guardamos la referencia.
-                
+
                 if (!depot.isActive) {
                     return {
                         message: 'El almacén ya se encuentra archivado',
