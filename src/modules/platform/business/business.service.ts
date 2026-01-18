@@ -83,7 +83,7 @@ export class BusinessService {
         },
         include: {
           subscription: { select: { status: true, planType: true, endDate: true } },
-          members: { select: { role: { select: { name: true } } } },
+          members: { where: { userId: userId }, select: { role: { select: { name: true } } } },
           businessCategory: { select: { name: true } }    
         }
       });
@@ -104,10 +104,18 @@ export class BusinessService {
         };
       }
 
+      const formattedBusinesses = businesses.map(business => {
+        const memberRole = business.members[0]?.role?.name || 'Miembro';
+        return {  
+          ...business,
+          memberRole: memberRole
+        };
+      });
+
       return {
         message: 'Negocios obtenidos exitosamente',
         status: 200,
-        data: businesses
+        data: formattedBusinesses
       };
 
     } catch (error) {
@@ -131,7 +139,7 @@ export class BusinessService {
         where: {
           id: businessId,
           members: {
-            some: { userId: userId } // Seguridad: Solo si pertenezco a ella
+            some: { userId: userId, isActive: true } // Seguridad: Solo si pertenezco a ella
           }
         },
         include: {
