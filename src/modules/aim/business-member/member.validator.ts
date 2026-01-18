@@ -17,13 +17,6 @@ export class MemberValidator {
         .notEmpty().withMessage('El nombre es obligatorio')
         .isString().withMessage('El nombre debe ser texto'),
 
-        // 3. CONTRASEÑA
-        body('password')
-        .trim()
-        .notEmpty().withMessage('La contraseña es obligatoria')
-        .isString().withMessage('La contraseña debe ser texto')
-        .isLength({ min: 6 }).withMessage('La contraseña debe tener al menos 6 caracteres'),
-
         // 4. ROL
         body('roleId')
         .notEmpty().withMessage('El Rol es obligatorio')
