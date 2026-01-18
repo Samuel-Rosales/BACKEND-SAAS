@@ -132,7 +132,9 @@ export class MemberService {
                 orderBy: { joinedAt: 'desc' }
             });
 
-            if (members.length === 0) {
+            const onlyEmployees = members.filter(member => member.role.code !== 'OWNER');
+
+            if (onlyEmployees.length === 0) {
                 return {
                     message: `No hay miembros registrados`,
                     status: 404,
@@ -143,7 +145,7 @@ export class MemberService {
             return {
                 message: `Miembros obtenidos exitosamente`,
                 status: 200,
-                data: members
+                data: onlyEmployees
             };
 
         } catch (error) {
