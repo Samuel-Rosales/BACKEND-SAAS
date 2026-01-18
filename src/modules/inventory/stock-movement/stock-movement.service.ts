@@ -88,7 +88,7 @@ export class StockMovementService {
                 data: {
                     businessId: businessId,
                     productId: data.productId,
-                    memberId: data.memberId,
+                    memberId: membershipId,
                     depotId: data.depotId,
                     type: data.type,
                     quantity: data.quantity,
