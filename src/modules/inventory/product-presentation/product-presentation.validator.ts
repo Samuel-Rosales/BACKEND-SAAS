@@ -21,7 +21,7 @@ export class ProductPresentationValidator {
     body('barCode')
       .optional()
       .trim()
-      .isEmpty().withMessage('El código no puede estar vacío'),
+      .isString(),
 
     body('price')
       .optional()
