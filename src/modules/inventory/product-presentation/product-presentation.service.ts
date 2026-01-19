@@ -15,8 +15,6 @@ export class ProductPresentationService {
                 return { message: 'El producto no existe o no pertenece a tu negocio', status: 404, data: null };
             }
 
-            // B. Validar duplicados de nombre para ese mismo producto
-            // (No queremos dos presentaciones llamadas "Caja" para el mismo producto)
             const duplicate = await prisma.productPresentation.findFirst({
                 where: {
                     productId: data.productId,

@@ -10,7 +10,7 @@ export class ProductController {
         try {
             // TypeScript necesita saber que user existe. 
             // Si tienes definido Express.Request, usa req.user. Sino (req as any).user
-            const { businessId, id: userId } = (req as any).user;
+            const { businessId, id: userId } = req.user;
 
             if (!businessId) {
                 return res.status(400).json({
@@ -37,7 +37,7 @@ export class ProductController {
     // 2. LISTAR (Con Paginación)
     async findAll(req: Request, res: Response) {
         try {
-            const { businessId } = (req as any).user;
+            const { businessId } = req.user;
 
             // Extraer query params
             const query = {

@@ -45,6 +45,7 @@ export class ProductValidator {
             .isLength({ min: 1, max: 100 }).withMessage('El SKU debe tener entre 1 y 100 caracteres'),
 
         body('description')
+            .optional({ nullable: true, checkFalsy: true })
             .trim()
             .notEmpty().withMessage('La descripción es obligatoria') // Ahora es obligatoria según schema
             .isString()

@@ -181,7 +181,7 @@ model Product {
   unitId      Int // <--- NUEVO: Unidad base (kg, und)
   name        String
   sku         String?
-  description String
+  description String? @default("")
   imageUrl    String?
 
   costPrice Decimal @default(0) @db.Decimal(15, 2)

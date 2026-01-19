@@ -8,6 +8,8 @@ export class ProductPresentationController {
     async create(req: Request, res: Response) {
         try {
             const { businessId } = (req as any).user;
+            
+
             const result = await service.create(businessId, req.body);
             return res.status(result.status).json(result);
         } catch (error) {
