@@ -144,7 +144,17 @@ export class ProductService {
                 include: {
                     category: { select: { id: true, name: true } },
                     unit: { select: { id: true, name: true, symbol: true } },
-                    presentations: true, // <--- NUEVO: Mostrar cajas/bultos disponibles
+                    presentations: true,
+                    stockLots: { 
+                        include: { 
+                            depot: { 
+                                select: { 
+                                    id: true, 
+                                    name: true 
+                                }
+                            } 
+                        } 
+                    },
                     _count: {
                         select: {
                             stockLots: true,
@@ -158,7 +168,14 @@ export class ProductService {
 
             if (!product) return { message: 'Producto no encontrado', status: 404, data: null };
 
-            return { message: 'Producto encontrado', status: 200, data: product };
+            // Calculamos el stock total sumado de los lotes
+            const totalStock = product.stockLots.reduce((acc, lot) => acc + lot.quantity, 0);
+            const productWithStock = {
+                ...product,
+                currentStock: totalStock
+            };
+
+            return { message: 'Producto encontrado', status: 200, data: productWithStock };
 
         } catch (error) {
             console.error('Error al obtener el producto:', error);
