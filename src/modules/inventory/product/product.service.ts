@@ -104,6 +104,7 @@ export class ProductService {
                     include: {
                         category: { select: { id: true, name: true } },
                         unit: { select: { id: true, symbol: true } }, // <--- ÚTIL PARA EL FRONTEND
+                        presentations: true, // <--- Include presentations
                         // Opcional: Traer stock total sumado de los lotes
                         stockLots: { select: { quantity: true } }
                     }
