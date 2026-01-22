@@ -168,4 +168,67 @@ export class SaleController {
             });
         }
     }
+
+    async findCredits(req: Request, res: Response) {
+        try {
+
+            const { businessId } = req.user;
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            const { data, message, status } = await service.findCredits(businessId);
+
+            return res.status(status).json({
+                data,
+                message
+            });
+        }
+        catch (error) {
+
+            console.error('Error en SaleController.findCredits:', error);
+
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al obtener créditos',
+                data: null
+            });
+        }
+    }
+
+    async getPaymentHistory(req: Request, res: Response) {
+        try {
+
+            const { businessId } = req.user;
+            const saleId = Number(req.params.id);
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+            
+            const { data, message, status } = await service.getPaymentHistory(businessId, saleId);
+
+            return res.status(status).json({
+                data,
+                message
+            });
+        } catch (error) {
+
+            console.error('Error en SaleController.getPaymentHistory:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al obtener el historial de pagos',
+                data: null
+            });
+        }
+    }
 }

@@ -27,12 +27,25 @@ router.get(
     controller.findAll
 );
 
+
+router.get(
+    '/credit',
+    controller.findCredits
+);
+
 // 3. Obtener una Venta por ID
 router.get(
     '/:id', 
     validator.validateId,
     handleValidationErrors,
     controller.findOne
+);
+
+router.get(
+    '/:id/sale-payment',
+    validator.validateId,
+    handleValidationErrors,
+    controller.getPaymentHistory
 );
 
 // 4. Actualizar Venta (Solo status y remainingBalance)
@@ -45,7 +58,7 @@ router.patch(
 
 // 5. Agregar Pago a Venta
 router.post(
-    '/:id/payments', 
+    '/:id/sale-payment', 
     validator.validateAddPayment,
     handleValidationErrors,
     controller.addPayment
