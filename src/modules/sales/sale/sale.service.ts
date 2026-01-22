@@ -568,6 +568,7 @@ export class SaleService {
                 if (data.currency !== 'USD') {
                     // Si paga en Bolívares, convertimos a Dólares con la tasa DE HOY
                     const rate = Number(exchangeRate.rate);
+                    if (!rate || rate <= 0) throw new BusinessError("Tasa de cambio inválida para conversión", 400);
                     paymentInBaseCurrency = data.amount / rate;
                 }
         
@@ -577,7 +578,7 @@ export class SaleService {
                 // 4. Validar que no esté pagando de más
                 // Usamos un pequeño margen de error (0.05) por los decimales
                 if (paymentInBaseCurrency > (Number(sale.remainingBalance) + 0.05)) {
-                    throw new Error(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`);
+                    throw new BusinessError(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`, 400);
                 }
         
                 // 5. Crear el registro del Pago (La "Cuota")
@@ -631,6 +632,14 @@ export class SaleService {
             };
         } catch (error) {
             console.error('Error al agregar pago:', error);
+            if (error instanceof BusinessError) {
+                return {
+                    message: error.message,
+                    status: error.status, // Usamos el status que definimos al lanzar el error (400, 404, 409)
+                    data: null
+                };
+            }
+
             return {
                 status: 500,
                 message: 'Error interno al agregar pago',

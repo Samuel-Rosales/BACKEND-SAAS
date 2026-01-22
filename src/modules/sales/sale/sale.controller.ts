@@ -142,8 +142,10 @@ export class SaleController {
 
     async addPayment(req: Request, res: Response) {
         try {
-            const { businessId } = req.user!.businessId;
+            const { businessId } = req.user;
+
             const saleId = Number(req.params.id);
+            console.log('Received addPayment request for businessId:', businessId, 'with body:', req.body);
 
             if (!businessId) {
                 return res.status(400).json({
