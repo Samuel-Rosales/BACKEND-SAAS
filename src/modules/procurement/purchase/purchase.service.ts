@@ -57,6 +57,10 @@ export class PurchaseService {
             if (data.payments.length > 0 && validPaymentMethods.length !== paymentMethodIds.length) {
                 return { message: 'Método de pago inválido', status: 404, data: null };
             }
+
+            if (data.payments.length === 0) {
+                return { message: 'Debe registrar al menos un pago para la compra', status: 400, data: null };
+            }
     
             // --- VALIDACIONES LÓGICAS ---
     
