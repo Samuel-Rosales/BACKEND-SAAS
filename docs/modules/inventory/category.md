@@ -1,5 +1,20 @@
 # Módulo Inventory - Categorías de Productos
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/inventory/category`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear categoría
+- `GET /` — Listar categorías
+- `GET /:id` — Obtener categoría
+- `PATCH /:id` — Actualizar categoría
+- `DELETE /:id` — Eliminar categoría
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/inventory/category`

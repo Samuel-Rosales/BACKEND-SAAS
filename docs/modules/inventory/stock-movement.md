@@ -1,5 +1,23 @@
 # Módulo Inventory - Movimientos de Stock
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/inventory/stock-movement`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear movimiento
+- `GET /` — Listar movimientos
+- `GET /:id` — Obtener movimiento
+- `GET /product/:productId` — Listar por producto
+- `GET /depot/:depotId` — Listar por depósito
+- `GET /type/:type` — Listar por tipo
+- `PATCH /:id` — Actualizar movimiento
+- `DELETE /:id` — Eliminar movimiento
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/inventory/stock-movement`

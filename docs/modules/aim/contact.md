@@ -1,5 +1,19 @@
 # Módulo AIM - Contactos de Usuario
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/aim/contact`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear contacto
+- `GET /` — Listar contactos
+- `GET /:id` — Obtener contacto
+- `GET /user/:userId` — Listar contactos por usuario
+- `PATCH /:id` — Actualizar contacto
+- `DELETE /:id` — Eliminar contacto
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/aim/contact`

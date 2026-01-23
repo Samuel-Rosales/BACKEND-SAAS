@@ -1,5 +1,20 @@
 # Módulo Finance - Caja Registradora
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/finance/cash-register`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /open` — Abrir caja
+- `GET /` — Listar cajas
+- `GET /open` — Obtener caja abierta
+- `GET /:id` — Obtener caja
+- `PATCH /:id/close` — Cerrar caja
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/finance/cash-register`

@@ -1,5 +1,22 @@
 # Módulo Sales - Ventas
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/sales/sale`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear venta
+- `GET /` — Listar ventas (query: `page`, `limit`, `startDate`, `endDate`, `status`)
+- `GET /credit` — Listar ventas a crédito
+- `GET /:id` — Obtener venta
+- `GET /:id/sale-payment` — Obtener historial de pagos
+- `PATCH /:id` — Actualizar venta
+- `POST /:id/sale-payment` — Agregar pago
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/sales/sale`

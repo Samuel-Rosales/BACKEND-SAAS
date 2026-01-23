@@ -13,9 +13,7 @@ export interface PurchasePaymentDto {
     paymentMethodId: number;
     exchangeRateId: number; // Tasa del día (para conversión)
     amount: number;       // El monto tal cual lo pagó el usuario (Ej: 100 Bs)
-    currency: 'USD' | 'VES'; // Moneda del pago físico
     reference: string;   // Referencia bancaria / Zelle
-
 }
 
 // DTO Principal de Creación (Cabecera)

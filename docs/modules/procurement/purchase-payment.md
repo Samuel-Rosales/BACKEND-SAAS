@@ -1,5 +1,19 @@
 # Módulo Procurement - Pagos de Compra
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/procurement/purchase-payment`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear pago
+- `GET /` — Listar pagos (requiere `purchaseId` query)
+- `GET /:id` — Obtener pago
+- `PATCH /:id` — Actualizar pago
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/procurement/purchase-payment`

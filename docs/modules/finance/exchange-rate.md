@@ -1,5 +1,21 @@
 # Módulo Finance - Tasas de Cambio
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/finance/exchange-rate`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear tasa
+- `GET /` — Listar tasas
+- `GET /latest` — Obtener última tasa
+- `GET /:id` — Obtener tasa
+- `PATCH /:id` — Actualizar tasa
+- `DELETE /:id` — Eliminar tasa
+
+**Nota:** Enviar `x-business-id` para contexto de negocio si aplica.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/finance/exchange-rate`

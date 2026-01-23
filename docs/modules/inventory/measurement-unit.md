@@ -1,5 +1,20 @@
 # Módulo Inventory - Unidades de Medida
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/inventory/measurement-unit`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear unidad
+- `GET /` — Listar unidades
+- `GET /:id` — Obtener unidad
+- `PATCH /:id` — Actualizar unidad
+- `DELETE /:id` — Eliminar unidad
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/inventory/measurement-unit`

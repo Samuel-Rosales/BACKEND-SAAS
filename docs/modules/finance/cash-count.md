@@ -1,5 +1,20 @@
 # Módulo Finance - Conteo de Caja
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/finance/cash-count`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear conteo
+- `GET /cash-register/:cashRegisterId` — Listar por caja
+- `GET /:id` — Obtener conteo
+- `PATCH /:id` — Actualizar conteo
+- `DELETE /:id` — Eliminar conteo
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/finance/cash-count`

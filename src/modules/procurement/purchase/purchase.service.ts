@@ -278,7 +278,6 @@ export class PurchaseService {
 
                             paymentMethodId: pay.paymentMethodId,
                             amount: pay.amount,
-                            currency: pay.currency,
                             exchangeRateId: data.exchangeRateId,
                             reference: pay.reference || "N/A"
                         }))

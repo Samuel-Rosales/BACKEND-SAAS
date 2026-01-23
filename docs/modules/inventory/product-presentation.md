@@ -1,5 +1,19 @@
 # Módulo Inventory - Presentaciones de Producto
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/inventory/product-presentation`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear presentación
+- `GET /` — Listar por producto (requiere `productId` query)
+- `PATCH /:id` — Actualizar presentación
+- `DELETE /:id` — Eliminar presentación
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/inventory/product-presentation`

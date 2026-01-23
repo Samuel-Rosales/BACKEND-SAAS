@@ -1,5 +1,20 @@
 # Módulo AIM - Miembros de Negocio
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/aim/business-member`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Agregar miembro
+- `GET /` — Listar miembros
+- `GET /:id` — Obtener miembro
+- `PATCH /:id` — Actualizar rol/estado
+- `DELETE /:id` — Desvincular miembro
+
+**Nota:** Si aplica contexto de negocio, enviar `x-business-id`.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/aim/business-member`

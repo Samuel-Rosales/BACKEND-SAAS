@@ -1,5 +1,20 @@
 # Módulo Sales - Clientes
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/sales/client`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear cliente
+- `GET /` — Listar clientes
+- `GET /:id` — Obtener cliente
+- `PATCH /:id` — Actualizar cliente
+- `DELETE /:id` — Eliminar cliente
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/sales/client`

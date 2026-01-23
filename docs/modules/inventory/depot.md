@@ -1,5 +1,20 @@
 # Módulo Inventory - Depósitos
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/inventory/depot`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear depósito
+- `GET /` — Listar depósitos
+- `GET /:id` — Obtener depósito
+- `PATCH /:id` — Actualizar depósito
+- `DELETE /:id` — Eliminar depósito
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/inventory/depot`

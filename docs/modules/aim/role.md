@@ -1,5 +1,18 @@
 # Módulo AIM - Roles
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/aim/role`
+
+**Autenticación:** ❌ No requerida
+
+**Endpoints:**
+- `POST /` — Crear rol
+- `GET /` — Listar roles
+- `GET /:id` — Obtener rol
+- `PATCH /:id` — Actualizar rol
+- `DELETE /:id` — Eliminar rol
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/aim/role`

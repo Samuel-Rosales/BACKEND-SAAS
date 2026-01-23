@@ -1,5 +1,18 @@
 # Módulo Procurement - Compras
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/procurement/purchase`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear compra
+- `GET /` — Listar compras (query: `page`, `limit`, `startDate`, `endDate`)
+- `GET /:id` — Obtener compra
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/procurement/purchase`

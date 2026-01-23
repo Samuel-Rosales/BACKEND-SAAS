@@ -1,5 +1,18 @@
 # Módulo AIM - Usuarios
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/aim/user`
+
+**Autenticación:** Parcial (solo lectura/edición)
+
+**Endpoints:**
+- `POST /` — Crear usuario (sin auth)
+- `GET /` — Listar usuarios (auth)
+- `GET /:id` — Obtener usuario (auth)
+- `PATCH /:id` — Actualizar usuario (auth)
+- `DELETE /:id` — Eliminar usuario (auth)
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/aim/user`

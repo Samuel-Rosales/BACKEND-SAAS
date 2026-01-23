@@ -1,5 +1,20 @@
 # Módulo Procurement - Proveedores
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/procurement/supplier`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear proveedor
+- `GET /` — Listar proveedores
+- `GET /:id` — Obtener proveedor
+- `PATCH /:id` — Actualizar proveedor
+- `DELETE /:id` — Eliminar proveedor
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/procurement/supplier`

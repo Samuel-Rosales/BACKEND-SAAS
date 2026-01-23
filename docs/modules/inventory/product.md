@@ -1,5 +1,20 @@
 # Módulo Inventory - Productos
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/inventory/product`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear producto
+- `GET /` — Listar productos
+- `GET /:id` — Obtener producto
+- `PATCH /:id` — Actualizar producto
+- `DELETE /:id` — Eliminar producto
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/inventory/product`

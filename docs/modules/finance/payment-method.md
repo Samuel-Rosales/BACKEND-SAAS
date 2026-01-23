@@ -1,5 +1,21 @@
 # Módulo Finance - Métodos de Pago
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/finance/payment-method`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear método
+- `GET /` — Listar métodos
+- `GET /active` — Listar activos
+- `GET /:id` — Obtener método
+- `PATCH /:id` — Actualizar método
+- `DELETE /:id` — Eliminar método
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/finance/payment-method`

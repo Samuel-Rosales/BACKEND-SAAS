@@ -1,5 +1,19 @@
 # Módulo Platform - Suscripciones
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/platform/subscription`
+
+**Autenticación:** ❌ No requerida
+
+**Endpoints:**
+- `POST /` — Crear suscripción
+- `GET /` — Listar suscripciones
+- `GET /:id` — Obtener suscripción
+- `GET /business/:businessId` — Listar por negocio
+- `PATCH /:id` — Actualizar suscripción
+- `DELETE /:id` — Eliminar suscripción
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/platform/subscription`

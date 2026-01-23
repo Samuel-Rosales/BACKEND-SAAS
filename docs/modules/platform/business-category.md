@@ -1,5 +1,18 @@
 # Módulo Platform - Categorías de Negocio
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/platform/business-category`
+
+**Autenticación:** ❌ No requerida
+
+**Endpoints:**
+- `POST /` — Crear categoría
+- `GET /` — Listar categorías
+- `GET /:id` — Obtener categoría
+- `PATCH /:id` — Actualizar categoría
+- `DELETE /:id` — Eliminar categoría
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/platform/business-category`

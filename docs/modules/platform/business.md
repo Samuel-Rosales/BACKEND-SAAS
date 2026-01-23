@@ -1,5 +1,17 @@
 # Módulo Platform - Negocios
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/platform/business`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear negocio
+- `GET /my-businesses` — Listar negocios del usuario
+- `GET /:id` — Obtener negocio
+- `PATCH /:id` — Actualizar negocio
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/platform/business`

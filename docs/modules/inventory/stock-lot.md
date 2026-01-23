@@ -1,5 +1,21 @@
 # Módulo Inventory - Stock por Lotes
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/inventory/stock-lot`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear lote
+- `GET /` — Listar lotes
+- `GET /:id` — Obtener lote
+- `GET /product/:productId` — Listar por producto
+- `PATCH /:id` — Actualizar lote
+- `DELETE /:id` — Eliminar lote
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/inventory/stock-lot`

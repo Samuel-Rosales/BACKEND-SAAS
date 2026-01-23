@@ -1,5 +1,20 @@
 # Módulo Procurement - Items de Compra
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/procurement/purchase-item`
+
+**Autenticación:** ✅ Requerida
+
+**Endpoints:**
+- `POST /` — Crear item
+- `GET /` — Listar items (requiere `purchaseId` query)
+- `GET /:id` — Obtener item
+- `PATCH /:id` — Actualizar item
+- `DELETE /:id` — Eliminar item
+
+**Nota:** Enviar `x-business-id` para contexto de negocio.
+
 ## 📍 Endpoints
 
 Base URL: `/api/v1/procurement/purchase-item`

@@ -1,5 +1,14 @@
 # Módulo AIM - Autenticación
 
+## ✅ Endpoints actuales (v2026-01-23)
+
+Base URL: `/api/v1/aim/auth`
+
+**Autenticación:** ❌ No requerida
+
+**Endpoints:**
+- `POST /login` — Iniciar sesión
+
 ## 📍 Endpoints
 
 ### Login
