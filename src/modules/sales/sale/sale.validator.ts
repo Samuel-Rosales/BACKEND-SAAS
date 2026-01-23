@@ -177,11 +177,6 @@ export class SaleValidator {
       .notEmpty().withMessage('El monto es obligatorio')
       .isFloat({ min: 0.01 }).withMessage('El monto debe ser un número positivo')
       .toFloat(),
-    
-    body('currency')
-      .trim()
-      .notEmpty().withMessage('La moneda es obligatoria')
-      .isIn(['USD', 'VES']).withMessage('La moneda debe ser USD o VES'),
 
     body('reference')
       .optional()
