@@ -21,8 +21,7 @@ export class ExchangeRateValidator {
         body('currency')
         .optional()
         .isString().withMessage('La moneda debe ser una cadena de texto')
-        .isLength({ min: 3, max: 3 }).withMessage('La moneda debe ser un código ISO de 3 caracteres')
-        .matches(/^[A-Z]{3}$/).withMessage('La moneda debe ser un código ISO válido en mayúsculas'),
+        .isIn(['USD', 'VES']).withMessage('La moneda debe ser USD o VES'),
 
         body('rate')
         .optional()
@@ -39,6 +38,7 @@ export class ExchangeRateValidator {
 
         param('currency')
         .isString().withMessage('La moneda debe ser una cadena de texto')
+        .isIn(['USD', 'VES']).withMessage('La moneda debe ser USD o VES')
         .isLength({ min: 3, max: 3 }).withMessage('La moneda debe ser un código ISO de 3 caracteres')
         .matches(/^[A-Z]{3}$/).withMessage('La moneda debe ser un código ISO válido en mayúsculas')
     ];

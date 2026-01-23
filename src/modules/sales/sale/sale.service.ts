@@ -554,13 +554,14 @@ export class SaleService {
                 });
         
                 if (!sale) throw new Error("Venta no encontrada");
-                if (sale.paymentStatus === PaymentStatus.PAID) throw new Error("Esta venta ya está pagada por completo");
+                if (sale.paymentStatus === PaymentStatus.PAID) throw new BusinessError("Esta venta ya está pagada por completo", 400);
         
                 // 2. Buscar la Tasa del día (Porque puede pagar hoy con una tasa distinta a la de la venta original)
                 const exchangeRate = await tx.exchangeRate.findUnique({
                     where: { id: data.exchangeRateId }
                 });
-                if (!exchangeRate) throw new Error("Tasa de cambio inválida");
+                
+                if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
         
                 // 3. Normalizar el Pago a Dólares (Moneda Base)
                 let paymentInBaseCurrency = data.amount;
