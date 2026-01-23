@@ -22,7 +22,6 @@ router.get('/', controller.findAll);
 
 router.get(
     '/latest',
-    validator.validateCurrency,
     handleValidationErrors,
     controller.findLatest
 );

@@ -414,7 +414,7 @@ model SalePayment {
   paymentMethodId Int
   paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
   amount          Decimal       @db.Decimal(15, 2)
-  currency        String // Moneda del pago (ej: USD)
+  //currency        String // Moneda del pago (ej: USD)
   exchangeRateId  Int // Si pagaron en Bs, qué tasa se usó
   reference       String // Nro de referencia bancaria
   date            DateTime      @default(now())
@@ -492,7 +492,7 @@ model PurchasePayment {
   paymentMethodId Int
   paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
   amount          Decimal       @db.Decimal(15, 2)
-  currency        String // Moneda del pago (ej: USD o VES)
+  //currency        String // Moneda del pago (ej: USD o VES)
   exchangeRateId  Int
   reference       String? // Nro de referencia bancaria
   paymentDate     DateTime      @default(now())

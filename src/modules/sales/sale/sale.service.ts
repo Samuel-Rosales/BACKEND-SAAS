@@ -2,6 +2,7 @@ import { prisma } from '@/configs';
 import { CreateSaleInterface, SalePaymentDto, UpdateSaleInterface } from './interfaces';
 import { PaymentStatus, SaleConditions, SaleStatus, SaleType } from '@prisma/client';
 import { BusinessError } from '@/utils/catch-errors.util';
+import { paymentMethods } from '@/data/index.data';
 
 const IVA = 0.16;
 
@@ -23,7 +24,7 @@ export class SaleService {
             // --- CONSULTAS PARALELAS ---
             const [exchangeRate, client, member, products, validPaymentMethods, presentations] = await Promise.all([
 
-                prisma.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
+                prisma.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }), //esto se puede actualziar para encontrar la mas reciente por fecha
 
                 prisma.client.findUnique({ where: { id: data.clientId } }),
 
@@ -32,7 +33,7 @@ export class SaleService {
                 prisma.product.findMany({ where: { id: { in: productIds }, businessId, isActive: true }, select: { id: true, name: true, isService: true, businessId: true, salePrice: true } }),
 
                 data.payments.length > 0 
-                    ? prisma.paymentMethod.findMany({ where: { id: { in: paymentMethodIds }, isActive: true }, select: { id: true } })
+                    ? prisma.paymentMethod.findMany({ where: { id: { in: paymentMethodIds }, isActive: true }, select: { id: true, currency: true } })
                     : Promise.resolve([]),
                 
                 presentationIds.length > 0
@@ -157,7 +158,13 @@ export class SaleService {
             // A. Normalizar Pagos a Moneda Base (USD)
             const totalPaidInBaseCurrency = data.payments.reduce((acc, payment) => {
 
-                if (payment.currency === 'USD') {
+                const paymentMethod = validPaymentMethods.find(pm => pm.id === payment.paymentMethodId);
+
+                if (!paymentMethod) {
+                    throw new Error(`Inconsistencia: Método de pago ID ${payment.paymentMethodId} no encontrado en validaciones previas`);
+                }
+
+                if (paymentMethod.currency === 'USD') {
 
                     return acc + payment.amount;
 
@@ -382,7 +389,6 @@ export class SaleService {
                             saleId: sale.id,
                             paymentMethodId: pay.paymentMethodId,
                             amount: pay.amount,
-                            currency: pay.currency,
                             exchangeRateId: exchangeRate.id,
                             reference: pay.reference || "N/A"
                         }))
@@ -548,25 +554,29 @@ export class SaleService {
         try {
             const result = await prisma.$transaction(async (tx) => {
                 
-                // 1. Buscar la venta y cuánto debe ACTUALMENTE
-                const sale = await tx.sale.findUnique({
-                    where: { id: saleId, businessId }
-                });
+                const [exchangeRate, sale, paymentMethod ] = await Promise.all([
+                    tx.exchangeRate.findUnique({
+                        where: { id: data.exchangeRateId }
+                    }),
+                    tx.sale.findUnique({
+                        where: { id: saleId, businessId }
+                    }),
+                    tx.paymentMethod.findUnique({
+                        where: { id: data.paymentMethodId }
+                    })
+                ]);
         
                 if (!sale) throw new BusinessError("Venta no encontrada", 404);
                 if (sale.paymentStatus === PaymentStatus.PAID) throw new BusinessError("Esta venta ya está pagada por completo", 400);
         
-                // 2. Buscar la Tasa del día (Porque puede pagar hoy con una tasa distinta a la de la venta original)
-                const exchangeRate = await tx.exchangeRate.findUnique({
-                    where: { id: data.exchangeRateId }
-                });
-
                 if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
+
+                if (!paymentMethod) throw new BusinessError("Método de pago inválido", 400);
         
                 // 3. Normalizar el Pago a Dólares (Moneda Base)
                 let paymentInBaseCurrency = data.amount;
                 
-                if (data.currency !== 'USD') {
+                if (paymentMethod.currency !== 'USD') {
                     // Si paga en Bolívares, convertimos a Dólares con la tasa DE HOY
                     const rate = Number(exchangeRate.rate);
                     if (!rate || rate <= 0) throw new BusinessError("Tasa de cambio inválida para conversión", 400);
@@ -589,7 +599,6 @@ export class SaleService {
                         paymentMethodId: data.paymentMethodId,
                         exchangeRateId: exchangeRate.id, // Guardamos la tasa de HOY
                         amount: data.amount,             // Lo que pagó (ej. 1000 Bs)
-                        currency: data.currency,         // Moneda (VES)
                         reference: data.reference || "N/A"
                     }
                 });
@@ -801,7 +810,7 @@ export class SaleService {
                 where: { saleId },
                 include: {
                     paymentMethod: {
-                        select: { name: true, type: true } // Ej: "Zelle Banesco"
+                        select: { name: true, type: true, currency: true } // Ej: "Zelle Banesco"
                     },
                     exchangeRate: {
                         select: { rate: true } // Ej: 50.00
@@ -819,12 +828,13 @@ export class SaleService {
 
             // 4. Mapear los pagos para el Frontend (DTO de Salida)
             const formattedPayments = payments.map(p => {
+
                 const rate = Number(p.exchangeRate.rate);
                 const originalAmount = Number(p.amount);
                 
                 // Calculamos cuánto representó este pago en la moneda base (USD)
                 // Si fue VES, dividimos. Si fue USD, es igual.
-                const usdEquivalent = p.currency === 'VES' 
+                const usdEquivalent = p.paymentMethod.currency === 'VES' 
                     ? originalAmount / rate 
                     : originalAmount;
 
@@ -838,7 +848,7 @@ export class SaleService {
                     reference: p.reference,
 
                     // Detalles Financieros
-                    currency: p.currency,
+                    currency: p.paymentMethod.currency,
                     originalAmount: originalAmount, // Ej: 1000 (Bs)
                     rateUsed: rate,                 // Ej: 50.00
                     

@@ -4,10 +4,10 @@ export class ExchangeRateValidator {
   
     public validateCreate: ValidationChain[] = [
         
-        body('currency')
+        /*body('currency')
         .isString().withMessage('La moneda debe ser una cadena de texto')
         .isLength({ min: 3, max: 3 }).withMessage('La moneda debe ser un código ISO de 3 caracteres (ej: USD, VES)')
-        .matches(/^[A-Z]{3}$/).withMessage('La moneda debe ser un código ISO válido en mayúsculas'),
+        .matches(/^[A-Z]{3}$/).withMessage('La moneda debe ser un código ISO válido en mayúsculas'),*/
 
         body('rate')
         .isFloat({ min: 0 }).withMessage('La tasa debe ser un número positivo')

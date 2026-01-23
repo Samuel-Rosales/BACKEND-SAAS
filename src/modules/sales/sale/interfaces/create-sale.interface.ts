@@ -22,7 +22,6 @@ export interface SalePaymentDto {
     exchangeRateId: number; // ID de la tasa usada para este pago específico
     
     amount: number; // Monto numérico
-    currency: 'USD' | 'VES'; // Moneda original del pago
     
     reference?: string; // Opcional: "Zelle #12345", "Lote #999"
 }
