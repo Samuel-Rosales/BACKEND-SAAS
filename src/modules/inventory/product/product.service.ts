@@ -48,6 +48,7 @@ export class ProductService {
                     description: data.description,
                     imageUrl: data.imageUrl || null,
                     costPrice: data.costPrice,
+                    profitMargin: data.profitMargin,
                     salePrice: data.salePrice, // <--- NUEVO (IVA)
                     minStock: data.minStock || 0,
                     isService: data.isService || false,

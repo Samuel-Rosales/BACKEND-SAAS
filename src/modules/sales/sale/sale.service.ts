@@ -710,9 +710,9 @@ export class SaleService {
                 businessId,
                 conditions: 'CREDIT', // Solo ventas a crédito
                 // Truco Senior: No traigas las que ya están pagadas para no saturar la vista
-                paymentStatus: {
+                /*paymentStatus: {
                 not: 'PAID' 
-                },
+                },*/
                 // Opcional: Asegurar que el saldo sea mayor a 0 por integridad
                 remainingBalance: {
                 gt: 0 

@@ -1,6 +1,7 @@
 import { prisma } from '@/configs';
 import { CreatePurchaseInterface } from './interfaces';
 import { MovementType } from '@prisma/client';
+import { BusinessError } from '@/utils';
 
 const NON_PERISHABLE_DATE = new Date('2099-12-31');
 const IVA = 0.16; // 16% de IVA
@@ -28,7 +29,7 @@ export class PurchaseService {
 
                 prisma.supplier.findUnique({ where: { id: data.supplierId } }),
 
-                prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, isPerishable: true } }),
+                prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, isPerishable: true, profitMargin: true } }),
 
                 prisma.depot.findMany({ where: { id: { in: depotIds } }, select: { id: true } }),
                 
@@ -156,11 +157,15 @@ export class PurchaseService {
                     // 1. Calcular Cantidad Real (Unidades)
                     let finalQuantity = item.quantity;
 
+                    let unitCostByPresentation = item.unitCost;
+
                     if (item.productPresentationId) {
 
                         const pres = presentations.find(p => p.id === item.productPresentationId);
 
                         if (pres) finalQuantity = item.quantity * Number(pres.factor);
+
+                         unitCostByPresentation = item.unitCost / Number(pres?.factor || 1);
                     }
             
                     const expiration = item.expirationDate ? new Date(item.expirationDate) : NON_PERISHABLE_DATE;
@@ -210,6 +215,20 @@ export class PurchaseService {
                             }
                         });
                     }
+
+                    const product = products.find(p => p.id === item.productId);
+
+                    if (!product) {
+                        throw new Error('Producto no encontrado en la fase de inventario');
+                    }
+
+                    await tx.product.update({
+                        where: { id: item.productId },
+                        data: {
+                            costPrice: unitCostByPresentation,
+                            salePrice: (Number(product.profitMargin) * unitCostByPresentation) + unitCostByPresentation
+                        }
+                    });
     
                     // 4. Kardex (StockMovement)
                     await tx.stockMovement.create({

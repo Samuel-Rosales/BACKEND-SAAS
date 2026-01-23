@@ -60,7 +60,11 @@ export class ProductValidator {
         body('costPrice')
             .isFloat({ min: 0 }).withMessage('El precio de costo debe ser positivo')
             .toFloat(),
-
+            
+        body('profitMargin')
+            .isFloat({ min: 0 }).withMessage('El margen de ganancia debe ser positivo')
+            .toFloat(),
+    
         body('salePrice')
             .isFloat({ min: 0 }).withMessage('El precio de venta debe ser positivo')
             .toFloat(),

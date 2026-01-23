@@ -185,6 +185,7 @@ model Product {
   imageUrl    String?
 
   costPrice Decimal @default(0) @db.Decimal(15, 2)
+  profitMargin Decimal @default(0) @db.Decimal(5, 2) // Porcentaje de ganancia esperado
   salePrice Decimal @default(0) @db.Decimal(15, 2)
 
   minStock     Int     @default(0)

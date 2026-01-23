@@ -7,6 +7,7 @@ export interface CreateProductInterface {
   description: string;
   imageUrl?: string;
   costPrice: number;
+  profitMargin: number;
   salePrice: number;
   minStock: number;
   isService: boolean;
