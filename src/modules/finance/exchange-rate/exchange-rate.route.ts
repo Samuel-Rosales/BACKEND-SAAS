@@ -21,10 +21,10 @@ router.post(
 router.get('/', controller.findAll);
 
 router.get(
-    '/currency/:currency',
+    '/latest',
     validator.validateCurrency,
     handleValidationErrors,
-    controller.findLatestByCurrency
+    controller.findLatest
 );
 
 router.get(

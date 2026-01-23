@@ -405,7 +405,7 @@ export class SaleService {
                         payments: {
                             include: {
                                 paymentMethod: { select: { name: true, type: true } },
-                                exchangeRate: { select: { rate: true, currency: true } }
+                                exchangeRate: { select: { rate: true, /* currency: true */ } }
                             }
                         }
                     }
@@ -471,7 +471,7 @@ export class SaleService {
                     include: {
                         client: { select: { name: true, ci: true } },
                         member: { include: { user: { select: { name: true } } } },
-                        exchangeRate: { select: { rate: true, currency: true } },
+                        exchangeRate: { select: { rate: true, /* currency: true */ } },
                         _count: { select: { items: true, payments: true } }
                     },
                     orderBy: { createdAt: 'desc' }
@@ -526,7 +526,7 @@ export class SaleService {
                     payments: {
                         include: {
                             paymentMethod: { select: { name: true, type: true } },
-                            exchangeRate: { select: { rate: true, currency: true } }
+                            exchangeRate: { select: { rate: true, /* currency: true */ } }
                         }
                     }
                 }

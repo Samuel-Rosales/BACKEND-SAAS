@@ -187,7 +187,7 @@ export class CashRegisterService {
                             exchangeRate: {
                                 select: {
                                     id: true,
-                                    currency: true,
+                                    // currency: true,
                                     rate: true
                                 }
                             }
@@ -247,7 +247,7 @@ export class CashRegisterService {
                             exchangeRate: {
                                 select: {
                                     id: true,
-                                    currency: true,
+                                    // currency: true,
                                     rate: true
                                 }
                             }
@@ -330,7 +330,7 @@ export class CashRegisterService {
                             exchangeRate: {
                                 select: {
                                     id: true,
-                                    currency: true,
+                                    // currency: true,
                                     rate: true
                                 }
                             }

@@ -1,5 +1,8 @@
 export const paymentMethods = [
-  { name: "Caja Efectivo", type: "CASH", isActive: true },
-  { name: "Zelle Banesco", type: "ZELLE", isActive: true },
-  { name: "Pago Móvil", type: "MOBILE_PAYMENT", isActive: true }
+  { name: "Caja Efectivo Bolivares (Bs)", type: "CASH", currency: "VES", isActive: true },
+  { name: "Caja Efectivo Dólares (US$)", type: "CASH", currency: "USD", isActive: true },
+  { name: "Zelle Banesco (U$)", type: "ZELLE", currency: "USD", isActive: true },
+  { name: "Pago Móvil (Bs)", type: "MOBILE_PAYMENT", currency: "VES", isActive: true },
+  { name: "Transferencia (Bs)", type: "TRANSFER", currency: "VES", isActive: true },
+  { name: "Transferencia (US$)", type: "TRANSFER", currency: "USD", isActive: true }
 ];

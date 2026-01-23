@@ -8,13 +8,10 @@ export class ExchangeRateService {
             
             const exchangeRate = await prisma.exchangeRate.create({
                 data: {
-                    currency: data.currency,
                     rate: data.rate,
-                    createdById: userId
                 },
                 select: {
                     id: true,
-                    currency: true,
                     rate: true,
                     createdAt: true,
                 }
@@ -86,11 +83,10 @@ export class ExchangeRateService {
     }
 
     // 3. OBTENER LA ÚLTIMA TASA POR MONEDA
-    async findLatestByCurrency(currency: string) {
+    async findLatest() {
         try {
             const exchangeRate = await prisma.exchangeRate.findFirst({
                 where: {
-                    currency: currency,
                     isActive: true
                 },
                 orderBy: {
@@ -100,7 +96,7 @@ export class ExchangeRateService {
 
             if (!exchangeRate) {
                 return {
-                    message: `No se encontró tasa de cambio para la moneda ${currency}`,
+                    message: `No se encontró tasa de cambio`,
                     status: 404,
                     data: null
                 };

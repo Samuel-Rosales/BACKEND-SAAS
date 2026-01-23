@@ -107,7 +107,7 @@ export class PurchasePaymentService {
                         select: {
                             id: true,
                             rate: true,
-                            currency: true,
+                            //currency: true,
                             createdAt: true
                         }
                     },
@@ -167,7 +167,7 @@ export class PurchasePaymentService {
                         select: {
                             id: true,
                             rate: true,
-                            currency: true,
+                            //currency: true,
                             createdAt: true
                         }
                     },
@@ -233,7 +233,7 @@ export class PurchasePaymentService {
                         select: {
                             id: true,
                             rate: true,
-                            currency: true,
+                            //currency: true,
                             createdAt: true
                         }
                     },
@@ -376,7 +376,7 @@ export class PurchasePaymentService {
                         select: {
                             id: true,
                             rate: true,
-                            currency: true,
+                            //currency: true,
                             createdAt: true
                         }
                     },

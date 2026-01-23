@@ -57,7 +57,7 @@ export class CashCountService {
                     exchangeRate: {
                         select: {
                             id: true,
-                            currency: true,
+                            // currency: true,
                             rate: true
                         }
                     }
@@ -119,7 +119,7 @@ export class CashCountService {
                     exchangeRate: {
                         select: {
                             id: true,
-                            currency: true,
+                            // currency: true,
                             rate: true
                         }
                     }
@@ -176,7 +176,7 @@ export class CashCountService {
                     exchangeRate: {
                         select: {
                             id: true,
-                            currency: true,
+                            //currency: true,
                             rate: true
                         }
                     }
@@ -262,7 +262,7 @@ export class CashCountService {
                     exchangeRate: {
                         select: {
                             id: true,
-                            currency: true,
+                            //currency: true,
                             rate: true
                         }
                     }

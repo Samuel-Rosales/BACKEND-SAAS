@@ -25,10 +25,9 @@ export class ExchangeRateController {
         });
     };
 
-    findLatestByCurrency = async (req: Request, res: Response) => {
-        const { currency } = req.params;
+    findLatest = async (req: Request, res: Response) => {
 
-        const {status, data, message} = await this.service.findLatestByCurrency(currency);
+        const {status, data, message} = await this.service.findLatest();
 
         res.status(status).json({ 
             message, 

@@ -120,10 +120,8 @@ model Subscription {
 
 model ExchangeRate {
   id          Int      @id @default(autoincrement())
-  currency    String // Ej: "VES", "USD" (ISO Code)
   rate        Decimal  @db.Decimal(10, 4) // Ej: 54.3000 (4 decimales para precisión)
   createdAt   DateTime @default(now()) // Histórico: permite ver cuánto valía el dólar hace 1 mes
-  createdById Int
   isActive    Boolean  @default(true)
 
   // Relaciones inversas: Usadas para saber a qué tasa se pagó una venta antigua
@@ -185,7 +183,7 @@ model Product {
   imageUrl    String?
 
   costPrice Decimal @default(0) @db.Decimal(15, 2)
-  profitMargin Decimal @default(0) @db.Decimal(5, 2) // Porcentaje de ganancia esperado
+  profitMargin Decimal @default(0) @db.Decimal(5, 4) // Porcentaje de ganancia esperado
   salePrice Decimal @default(0) @db.Decimal(15, 2)
 
   minStock     Int     @default(0)
@@ -540,6 +538,7 @@ model PaymentMethod {
   name     String // Ej: "Zelle Banesco", "Caja Chica", "Punto de Venta"
   type     PaymentType // El tipo "interno" para que el sistema sepa cómo comportarse
   isActive Boolean     @default(true) // Para ocultar cuentas viejas sin borrar historial
+  currency String    // Moneda predeterminada (USD, VES)
 
   // Relaciones con los pagos realizados
   salePayments     SalePayment[]

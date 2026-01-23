@@ -23,6 +23,7 @@ export class PaymentMethodService {
             const paymentMethod = await prisma.paymentMethod.create({
                 data: {
                     name: data.name,
+                    currency: data.currency,
                     type: data.type,
                     isActive: data.isActive !== undefined ? data.isActive : true
                 }

@@ -6,6 +6,23 @@ import { BusinessError } from '@/utils';
 const NON_PERISHABLE_DATE = new Date('2099-12-31');
 const IVA = 0.16; // 16% de IVA
 
+export const calculatePriceWithMargin = (marginPercentage: number, cost: number): number => {
+    // Validación de seguridad: El margen no puede ser 100% o más (división por cero o negativo)
+    if (marginPercentage >= 1) {
+        throw new Error("El margen no puede ser 100% o superior, causaría un precio infinito.");
+    }
+    
+    if (marginPercentage <= 0) {
+        return cost; // Si el margen es 0 o negativo, vendemos al costo (o manejas lógica de pérdida)
+    }
+
+    // Fórmula Gross Margin
+    const price = cost / (1 - marginPercentage);
+    
+    // Redondeo bancario a 2 decimales (importante para evitar $142.857142)
+    return Math.round((price + Number.EPSILON) * 100) / 100;
+};
+
 export class PurchaseService {
 
     async create(businessId: number, userId: number, data: CreatePurchaseInterface) {
@@ -34,7 +51,7 @@ export class PurchaseService {
                 prisma.depot.findMany({ where: { id: { in: depotIds } }, select: { id: true } }),
                 
                 data.payments.length > 0 
-                    ? prisma.paymentMethod.findMany({ where: { id: { in: paymentMethodIds } }, select: { id: true } })
+                    ? prisma.paymentMethod.findMany({ where: { id: { in: paymentMethodIds } }, select: { id: true, currency: true } })
                     : Promise.resolve([]),
                 
                 presentationIds.length > 0 
@@ -114,10 +131,16 @@ export class PurchaseService {
                     return { message: 'El monto de pago debe ser mayor a cero', status: 400, data: null };
                 }
 
-                if (pay.currency === 'USD') {
+                const paymentMethod = validPaymentMethods.find(pm => pm.id === pay.paymentMethodId);
+
+                if (!paymentMethod) {
+                    return { message: 'Método de pago inválido', status: 404, data: null };
+                }
+
+                if (paymentMethod.currency === 'USD') {
                     totalPayments += pay.amount;
                 }
-                else if (pay.currency === 'VES') {
+                else if (paymentMethod.currency === 'VES') {
                     totalPayments += pay.amount / Number(exchangeRate.rate);
                 }
             }
@@ -226,7 +249,7 @@ export class PurchaseService {
                         where: { id: item.productId },
                         data: {
                             costPrice: unitCostByPresentation,
-                            salePrice: (Number(product.profitMargin) * unitCostByPresentation) + unitCostByPresentation
+                            salePrice: calculatePriceWithMargin(Number(product.profitMargin), unitCostByPresentation)
                         }
                     });
     
@@ -311,7 +334,7 @@ export class PurchaseService {
                         supplier: { select: { nameCompany: true } },
                         member: { include: { user: { select: { name: true } } } },
                         // Traemos el totalCost y status para mostrar en la tabla
-                        exchangeRate: { select: { rate: true, currency: true } }, 
+                        exchangeRate: { select: { rate: true, /* currency: true*/ } }, 
                         _count: { select: { items: true } }
                     },
                     orderBy: { date: 'desc' }
