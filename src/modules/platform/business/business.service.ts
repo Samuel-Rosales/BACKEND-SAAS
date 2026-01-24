@@ -1,6 +1,7 @@
 import { prisma } from '@/configs';
-import { CreateBusinessInterface, UpdateBusinessInterface } from './interfaces';
-import { PlanType, SubStatus } from '@prisma/client'; // Importamos Enums de Prisma
+import { CreateBusinessInterface, UpdateBusinessInterface, UpdateExchangeConfigInterface } from './interfaces';
+import { PlanType, SubStatus, ExchangeRateStrategy } from '@prisma/client'; // Importamos Enums de Prisma
+import { BusinessError } from '@/utils';
 
 export class BusinessService {
 
@@ -211,6 +212,103 @@ export class BusinessService {
       return {
         message: 'Por favor contacte al administrador',
         status: 500,
+        data: null
+      };
+    }
+  }
+
+  async updateExchangeRateConfig( businessId: number, userId: number, data: UpdateExchangeConfigInterface ) {
+    try {
+      // A. Verificación de seguridad (Solo dueños o admins deberían tocar dinero)
+      // Reutilizamos tu método privado verifyAccess
+      const accessCheck = await this.verifyAccess(businessId, userId);
+      if (accessCheck.status !== 200) return accessCheck;
+
+      return await prisma.$transaction(async (tx) => {
+        let newCurrentRate: number = 0;
+
+        // --- CASO 1: ESTRATEGIA MANUAL ---
+        if (data.strategy === ExchangeRateStrategy.MANUAL) {
+
+          if (!data.manualRate || data.manualRate <= 0) {
+            throw new BusinessError('Para la estrategia MANUAL, se requiere una tasa válida mayor a 0.', 400);
+          }
+
+          newCurrentRate = data.manualRate;
+
+          // 1.1 Crear el registro histórico de auditoría
+          await tx.exchangeRate.create({
+            data: {
+              businessId: businessId, // Es privado de este negocio
+              rate: data.manualRate,
+              source: ExchangeRateStrategy.MANUAL,
+              isActive: true
+            }
+          });
+        } 
+        
+        // --- CASO 2: ESTRATEGIA API (BCV o PARALELO) ---
+        else {
+          // 2.1 Buscar la última tasa GLOBAL disponible en el sistema para esa estrategia
+          // Esto es vital: Si el usuario cambia a BCV, el sistema debe buscar 
+          // cuánto vale el BCV YA MISMO para actualizar la caché del negocio.
+          const globalRate = await tx.exchangeRate.findFirst({
+            where: {
+              businessId: null, // Tasa global
+              source: data.strategy, // API_BCV o API_PARALLEL
+              isActive: true
+            },
+            orderBy: { createdAt: 'desc' } // La más reciente
+          });
+
+          if (!globalRate) {
+            // Fallback de seguridad si el sistema es nuevo y no ha corrido el cron job aún
+            console.warn(`No se encontró tasa global para ${data.strategy}. Se mantendrá tasa actual.`);
+            // En este caso extremo, no actualizamos el currentExchangeRate o usamos 1.0
+            // Para este ejemplo, lanzaré error para obligar a tener el sistema configurado
+            throw new BusinessError(`El sistema no tiene tasas cargadas para ${data.strategy} actualmente.`, 400);
+          }
+
+          newCurrentRate = Number(globalRate.rate);
+          
+          // NOTA: Aquí NO creamos un registro en ExchangeRate. 
+          // El negocio simplemente se "suscribe" a la tasa global existente.
+        }
+
+        // --- ACTUALIZACIÓN DEL NEGOCIO (CACHE) ---
+        const updatedBusiness = await tx.business.update({
+          where: { id: businessId },
+          data: {
+            rateStrategy: data.strategy,
+            manualRate: data.strategy === ExchangeRateStrategy.MANUAL ? data.manualRate : null, // Limpiamos si no es manual (opcional)
+            currentExchangeRate: newCurrentRate // Actualizamos la caché para el Frontend
+          }
+        });
+
+        return {
+          message: 'Configuración de tasa actualizada exitosamente',
+          status: 200,
+          data: {
+            strategy: updatedBusiness.rateStrategy,
+            currentRate: updatedBusiness.currentExchangeRate
+          }
+        };
+      });
+
+    } catch (error: any) {
+
+      if (error instanceof BusinessError) {
+        return {
+          message: error.message,
+          status: error.status,
+          data: null
+        };
+      }
+
+      console.error('Error al configurar tasa de cambio:', error);
+      return {
+        message: error.message || 'Error interno al actualizar la tasa',
+        status: error.message.includes('tasa válida') ? 400 : 500, // Manejo de error semántico
         data: null
       };
     }

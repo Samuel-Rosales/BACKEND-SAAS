@@ -74,7 +74,6 @@ model BusinessMember {
 model Business {
   id           Int     @id @default(autoincrement())
   name         String
-  exchangeRate Decimal @default(1.0) @db.Decimal(10, 4) // Tasa base global actual
 
   businessCategoryId Int
   businessCategory   BusinessCategory @relation(fields: [businessCategoryId], references: [id])
@@ -83,6 +82,22 @@ model Business {
   logoUrl   String? // Logo del negocio
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // CONFIGURACIÓN DE TASA
+  // Define de dónde sacaremos el valor para mostrar en el Frontend hoy
+  rateStrategy ExchangeRateStrategy @default(MANUAL)
+  
+  // Si es MANUAL, usamos este valor. 
+  // Si es API_*, este campo se ignora (o se usa como fallback).
+  manualRate   Decimal?             @db.Decimal(10, 4) 
+
+  // Este campo "exchangeRate" que tenías antes, lo mantenemos pero
+  // conceptualmente será el "Valor Actual Calculado" (cache) para no
+  // tener que consultar la estrategia en cada lectura de producto.
+  currentExchangeRate Decimal @default(1.0) @db.Decimal(10, 4) 
+
+  // Relaciones
+  exchangeRates ExchangeRate[] // Historial de tasas creadas por este negocio
 
   // Relaciones
   subscription   Subscription?
@@ -120,9 +135,15 @@ model Subscription {
 
 model ExchangeRate {
   id          Int      @id @default(autoincrement())
+  businessId  Int?
+
   rate        Decimal  @db.Decimal(10, 4) // Ej: 54.3000 (4 decimales para precisión)
   createdAt   DateTime @default(now()) // Histórico: permite ver cuánto valía el dólar hace 1 mes
   isActive    Boolean  @default(true)
+
+  source    ExchangeRateStrategy @default(MANUAL)
+
+  business  Business? @relation(fields: [businessId], references: [id])
 
   // Relaciones inversas: Usadas para saber a qué tasa se pagó una venta antigua
   sales            Sale[]
@@ -130,6 +151,8 @@ model ExchangeRate {
   purchases        Purchase[]
   purchasePayments PurchasePayment[]
   cashCounts       CashCount[]
+
+  @@index([createdAt])
 }
 
 // ==========================================
@@ -604,4 +627,10 @@ enum CashCountType {
   INITIAL
   FINAL
   AUDIT // Arqueo sorpresa
+}
+
+enum ExchangeRateStrategy {
+  MANUAL        // El usuario escribe su tasa (ej: 40.5)
+  API_BCV       // Se sincroniza auto con el Banco Central
+  API_PARALLEL  // Se sincroniza auto con paralelo
 }
