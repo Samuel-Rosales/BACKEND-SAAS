@@ -9,7 +9,9 @@ async function main() {
     console.log('Product', await q('SELECT COUNT(*)::int AS c FROM "Product"'));
     console.log('ProductComponent', await q('SELECT COUNT(*)::int AS c FROM "ProductComponent"'));
     console.log('Sale', await q('SELECT COUNT(*)::int AS c FROM "Sale"'));
+    console.log('SaleInstallment', await q('SELECT COUNT(*)::int AS c FROM "SaleInstallment"'));
     console.log('Purchase', await q('SELECT COUNT(*)::int AS c FROM "Purchase"'));
+    console.log('PurchaseInstallment', await q('SELECT COUNT(*)::int AS c FROM "PurchaseInstallment"'));
   } finally {
     await pool.end();
   }

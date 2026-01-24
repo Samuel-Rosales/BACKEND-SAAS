@@ -40,7 +40,7 @@ Es el corazón del sistema. Ejecuta una **Transacción Atómica** compleja:
   "clientId": 45,
   "exchangeRateId": 102, // ID de la tasa ACTUAL mostrada en pantalla
   "type": "RETAIL",      // "RETAIL" | "WHOLESALE"
-  "condition": "CREDIT", // "CASH" | "CREDIT"
+  "conditions": "CREDIT", // "CASH" | "CREDIT"
   "depotId": 1,          // ⚠️ IMPORTANTE: Almacén de origen (Header)
   "paymentDueDate": "2026-02-28", // Fecha límite de pago
 
@@ -61,15 +61,9 @@ Es el corazón del sistema. Ejecuta una **Transacción Atómica** compleja:
     {
       "paymentMethodId": 2, // Zelle
       "amount": 50.00,      // Monto en moneda del método
-      "reference": "REF-12345"
+      "reference": "REF-12345",
+      "exchangeRateId": 102 // Recomendado (si no se envía, se asume la misma tasa de la venta)
     }
-  ],
-
-  // --- PLAN DE CUOTAS (Solo si condition = CREDIT) ---
-  // La suma de installments debe ser igual al (Total - Pagos Iniciales)
-  "installments": [
-    { "number": 1, "amount": 100.00, "dueDate": "2026-02-15" },
-    { "number": 2, "amount": 45.50,  "dueDate": "2026-02-28" }
   ]
 }
 
@@ -81,7 +75,7 @@ Es el corazón del sistema. Ejecuta una **Transacción Atómica** compleja:
 * **Tasa:** Si el `exchangeRateId` enviado es diferente al activo en BD, devuelve `409 Conflict`. El front debe refrescar la tasa.
 * **Matemática:** El sistema usa `Decimal` (precisión bancaria).
 * `Cash`: Si `pagos < total`, error 400.
-* `Credit`: `total - pagos_iniciales === suma(installments)`. Tolerancia de $0.05.
+* `Credit`: Se guarda `remainingBalance` y `paymentDueDate` para gestión de cobranza.
 
 
 
@@ -205,6 +199,8 @@ Obtiene la radiografía completa de los pagos de una venta. Útil para auditorí
 
 #### Response (200 OK)
 
+**Nota:** `currency` se obtiene de `paymentMethod.currency` (no se guarda como columna en `SalePayment`).
+
 ```json
 {
   "status": 200,
@@ -264,8 +260,4 @@ Para evitar errores `400 Bad Request`, el Frontend debe respetar estrictamente:
 * `PENDING` (No ha pagado nada - *Solo posible en Crédito*)
 * `PARTIAL` (Abonó algo, debe algo)
 * `PAID` (Deuda saldada, saldo <= 0.05)
-
-**InstallmentStatus (Estado de Cuota):**
-
-* `PENDING`
-* `PAID`
+* `REFUNDED` (Se devolvió el dinero)

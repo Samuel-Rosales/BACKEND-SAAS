@@ -69,7 +69,9 @@ Authorization: Bearer <token>
     "address": "Av. Principal 123",
     "logoUrl": "https://ejemplo.com/logo.png",
     "businessCategoryId": 1,
-    "exchangeRate": "1.0000",
+    "rateStrategy": "MANUAL",
+    "manualRate": "1.0000",
+    "currentExchangeRate": "1.0000",
     "createdAt": "2024-01-15T10:30:00Z",
     "updatedAt": "2024-01-15T10:30:00Z",
     "subscription": {
@@ -203,7 +205,8 @@ Authorization: Bearer <token>
   "address": "Nueva Dirección 456",
   "logoUrl": "https://ejemplo.com/nuevo-logo.png",
   "businessCategoryId": 2,
-  "exchangeRate": 54.30
+  "rateStrategy": "MANUAL",
+  "manualRate": 54.30
 }
 ```
 
@@ -213,7 +216,8 @@ Authorization: Bearer <token>
 - `address`: Opcional, string, 5-200 caracteres
 - `logoUrl`: Opcional, string, URL válida
 - `businessCategoryId`: Opcional, number, debe existir
-- `exchangeRate`: Opcional, number, debe ser positivo
+- `rateStrategy`: Opcional, enum (`MANUAL`, `API_BCV`, `API_PARALLEL`)
+- `manualRate`: Opcional, number, debe ser positivo (solo relevante si `rateStrategy = MANUAL`)
 
 #### Response (200 OK)
 
@@ -256,4 +260,5 @@ Authorization: Bearer <token>
   - Relación BusinessMember con rol OWNER
 - Todo se hace en una transacción atómica
 - El rol `OWNER` debe existir en el sistema antes de crear negocios
-- La tasa de cambio (`exchangeRate`) tiene un valor por defecto de 1.0
+- La tasa usada por el frontend se expone como `currentExchangeRate` (cache).
+- Si `rateStrategy = MANUAL`, el valor de referencia es `manualRate`.

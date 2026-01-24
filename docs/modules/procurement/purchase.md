@@ -49,7 +49,7 @@ Registra una nueva compra. Es una **Transacción Atómica** que realiza:
   "totalCost": 1160.00,
 
   // --- NUEVO: Condiciones de Pago ---
-  "condition": "CREDIT", // "CASH" | "CREDIT"
+  "conditions": "CREDIT", // "CASH" | "CREDIT"
   
   // Opcional: Solo si es CREDIT. La suma debe dar 1160.00 - (Pagos Iniciales)
   "installments": [

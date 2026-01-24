@@ -28,10 +28,12 @@ import {
   saleItems,
   saleItemLots,
   salePayments,
+  saleInstallments,
   creditNotes,
   creditNoteItems,
   suppliers,
   purchases,
+  purchaseInstallments,
   purchaseItems,
   purchasePayments,
 } from "../src/data/index.data";
@@ -75,12 +77,14 @@ async function main() {
   // Procurement
   await prisma.supplier.createMany({ data: suppliers as any, skipDuplicates: true });
   await prisma.purchase.createMany({ data: purchases as any, skipDuplicates: true });
+  await prisma.purchaseInstallment.createMany({ data: purchaseInstallments as any, skipDuplicates: true });
   await prisma.purchaseItem.createMany({ data: purchaseItems as any, skipDuplicates: true });
   await prisma.purchasePayment.createMany({ data: purchasePayments as any, skipDuplicates: true });
 
   // Sales
   await prisma.client.createMany({ data: clients as any, skipDuplicates: true });
   await prisma.sale.createMany({ data: sales as any, skipDuplicates: true });
+  await prisma.saleInstallment.createMany({ data: saleInstallments as any, skipDuplicates: true });
   await prisma.saleItem.createMany({ data: saleItems as any, skipDuplicates: true });
   await prisma.saleItemLot.createMany({ data: saleItemLots as any, skipDuplicates: true });
   await prisma.salePayment.createMany({ data: salePayments as any, skipDuplicates: true });

@@ -43,6 +43,7 @@ Authorization: Bearer <token>
 {
   "name": "Zelle Banesco",
   "type": "ZELLE",
+  "currency": "USD",
   "isActive": true
 }
 ```
@@ -51,6 +52,7 @@ Authorization: Bearer <token>
 
 - `name`: Obligatorio, string, 2-100 caracteres, único en el sistema
 - `type`: Obligatorio, enum (`CASH`, `DEBIT_CARD`, `CREDIT_CARD`, `TRANSFER`, `MOBILE_PAYMENT`, `ZELLE`, `OTHER`)
+- `currency`: Obligatorio, string (ej: `USD`, `VES`)
 - `isActive`: Opcional, boolean (default: true)
 
 #### Tipos de Pago Disponibles
@@ -73,6 +75,7 @@ Authorization: Bearer <token>
     "id": 1,
     "name": "Zelle Banesco",
     "type": "ZELLE",
+    "currency": "USD",
     "isActive": true
   }
 }
@@ -106,12 +109,14 @@ Authorization: Bearer <token>
       "id": 1,
       "name": "Zelle Banesco",
       "type": "ZELLE",
+      "currency": "USD",
       "isActive": true
     },
     {
       "id": 2,
       "name": "Efectivo",
       "type": "CASH",
+      "currency": "USD",
       "isActive": true
     }
   ]
@@ -146,12 +151,14 @@ Authorization: Bearer <token>
       "id": 1,
       "name": "Zelle Banesco",
       "type": "ZELLE",
+      "currency": "USD",
       "isActive": true
     },
     {
       "id": 2,
       "name": "Efectivo",
       "type": "CASH",
+      "currency": "USD",
       "isActive": true
     }
   ]
@@ -185,6 +192,7 @@ Authorization: Bearer <token>
     "id": 1,
     "name": "Zelle Banesco",
     "type": "ZELLE",
+    "currency": "USD",
     "isActive": true
   }
 }

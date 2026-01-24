@@ -103,9 +103,6 @@ export class SaleValidator {
     body('payments.*.amount')
       .isFloat({ min: 0.01 }).withMessage('El monto del pago debe ser mayor a 0')
       .toFloat(),
-
-    body('payments.*.currency')
-      .isIn(['USD', 'VES']).withMessage('La moneda del pago debe ser USD o VES'),
       
     body('payments.*.reference')
       .optional()

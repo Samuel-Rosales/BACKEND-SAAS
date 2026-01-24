@@ -42,17 +42,15 @@ x-business-id: 1
 
 ```json
 {
-  "currency": "USD",
-  "rate": 54.3000
+  "rate": 54.3000,
+  "source": "MANUAL" 
 }
 ```
 
 #### Validaciones
 
-- `currency`: Obligatorio, string, código ISO de 3 caracteres en mayúsculas (ej: USD, VES, EUR)
-- `rate`: Obligatorio, number, debe ser >= 0 (4 decimales de precisión)
-
-**Nota:** El `createdById` se obtiene automáticamente del token de autenticación.
+- `rate`: Obligatorio, number, debe ser > 0 (4 decimales de precisión)
+- `source`: Opcional, enum (`MANUAL`, `API_BCV`, `API_PARALLEL`) (default: `MANUAL`)
 
 #### Response (201 Created)
 
@@ -63,9 +61,9 @@ x-business-id: 1
   "data": {
     "id": 1,
     "businessId": 1,
-    "currency": "USD",
     "rate": 54.3000,
-    "createdById": 5,
+    "source": "MANUAL",
+    "isActive": true,
     "createdAt": "2024-01-15T10:30:00.000Z",
     "business": {
       "id": 1,
@@ -103,17 +101,17 @@ x-business-id: 1
     {
       "id": 1,
       "businessId": 1,
-      "currency": "USD",
       "rate": 54.3000,
-      "createdById": 5,
+      "source": "MANUAL",
+      "isActive": true,
       "createdAt": "2024-01-15T10:30:00.000Z"
     },
     {
       "id": 2,
       "businessId": 1,
-      "currency": "USD",
       "rate": 54.5000,
-      "createdById": 5,
+      "source": "MANUAL",
+      "isActive": true,
       "createdAt": "2024-01-14T10:30:00.000Z"
     }
   ]
@@ -126,21 +124,17 @@ x-business-id: 1
 
 ---
 
-### 3. Obtener Última Tasa por Moneda
+### 3. Obtener Última Tasa
 
-Obtiene la tasa de cambio más reciente para una moneda específica.
+Obtiene la tasa de cambio más reciente (por negocio). Útil para inicializar el POS.
 
-**Endpoint:** `GET /api/v1/finance/exchange-rate/currency/:currency`
+**Endpoint:** `GET /api/v1/finance/exchange-rate/latest`
 
 **Headers:**
 ```
 Authorization: Bearer <token>
 x-business-id: 1
 ```
-
-#### Parámetros
-
-- `currency`: Código ISO de la moneda (3 caracteres, mayúsculas)
 
 #### Response (200 OK)
 
@@ -151,17 +145,13 @@ x-business-id: 1
   "data": {
     "id": 1,
     "businessId": 1,
-    "currency": "USD",
     "rate": 54.3000,
-    "createdById": 5,
+    "source": "MANUAL",
+    "isActive": true,
     "createdAt": "2024-01-15T10:30:00.000Z"
   }
 }
 ```
-
-#### Errores
-
-- `404`: No se encontró tasa de cambio para la moneda especificada
 
 ---
 
@@ -190,9 +180,9 @@ x-business-id: 1
   "data": {
     "id": 1,
     "businessId": 1,
-    "currency": "USD",
     "rate": 54.3000,
-    "createdById": 5,
+    "source": "MANUAL",
+    "isActive": true,
     "createdAt": "2024-01-15T10:30:00.000Z",
     "business": {
       "id": 1,
@@ -236,8 +226,9 @@ x-business-id: 1
 
 #### Validaciones
 
-- `currency`: Opcional, string, código ISO de 3 caracteres en mayúsculas
-- `rate`: Opcional, number, debe ser >= 0
+- `rate`: Opcional, number, debe ser > 0
+- `source`: Opcional, enum (`MANUAL`, `API_BCV`, `API_PARALLEL`)
+- `isActive`: Opcional, boolean
 
 #### Response (200 OK)
 
@@ -248,9 +239,9 @@ x-business-id: 1
   "data": {
     "id": 1,
     "businessId": 1,
-    "currency": "USD",
     "rate": 54.5000,
-    "createdById": 5,
+    "source": "MANUAL",
+    "isActive": true,
     "createdAt": "2024-01-15T10:30:00.000Z"
   }
 }

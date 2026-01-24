@@ -35,6 +35,7 @@ import { sales } from "./sales/sale.data";
 import { saleItems } from "./sales/sale-item.data";
 import { saleItemLots } from "./sales/sale-item-lot.data";
 import { salePayments } from "./sales/sale-payment.data";
+import { saleInstallments } from "./sales/sale-installment.data";
 import { creditNotes } from "./sales/credit-note.data";
 import { creditNoteItems } from "./sales/credit-note-item.data";
 
@@ -43,6 +44,7 @@ import { suppliers } from "./procurement/supplier.data";
 import { purchases } from "./procurement/purchase.data";
 import { purchaseItems } from "./procurement/purchase-item.data";
 import { purchasePayments } from "./procurement/purchase-payment.data";
+import { purchaseInstallments } from "./procurement/purchase-installment.data";
 
 // Export agrupado por módulos (opcional)
 export const seedData = {
@@ -66,17 +68,18 @@ export const seedData = {
 		saleItems,
 		saleItemLots,
 		salePayments,
+		saleInstallments,
 		creditNotes,
 		creditNoteItems,
 	},
 	procurement: {
 		suppliers,
 		purchases,
+		purchaseInstallments,
 		purchaseItems,
 		purchasePayments,
 	},
 };
-
 // Named exports para importación directa por entidad
 export {
 	users,
@@ -104,10 +107,12 @@ export {
 	saleItems,
 	saleItemLots,
 	salePayments,
+	saleInstallments,
 	creditNotes,
 	creditNoteItems,
 	suppliers,
 	purchases,
 	purchaseItems,
 	purchasePayments,
+	purchaseInstallments,
 };
