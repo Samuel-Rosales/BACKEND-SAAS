@@ -1,3 +1,11 @@
+import { Conditions } from "@prisma/client";
+
+export interface CreatePurchaseInstallment {
+    number: number;
+    amount: number;
+    dueDate: Date | string;
+}
+
 // DTO para cada línea de producto (Simplificado y con Destino)
 export interface CreatePurchaseItemDto {
     productId: number;
@@ -11,7 +19,6 @@ export interface CreatePurchaseItemDto {
 // DTO para los pagos (Soporte bi-monetario)
 export interface PurchasePaymentDto {
     paymentMethodId: number;
-    exchangeRateId: number; // Tasa del día (para conversión)
     amount: number;       // El monto tal cual lo pagó el usuario (Ej: 100 Bs)
     reference: string;   // Referencia bancaria / Zelle
 }
@@ -19,18 +26,32 @@ export interface PurchasePaymentDto {
 // DTO Principal de Creación (Cabecera)
 export interface CreatePurchaseInterface {
     supplierId: number;
-    exchangeRateId: number; // ID de la tasa del día (para conversiones)
+    subTotal: number;
+    taxAmount: number;
+    totalCost: number;
+    exchangeRateId: number; // Validación de seguridad
+    reference?: string;
+    observation?: string;
     
-    // Metadatos de la Factura Física
-    reference?: string;     // Nro de Factura del Proveedor (Ej: "A-00459")
-    observation: string;   // Notas adicionales
+    // --- NUEVOS CAMPOS ---
+    condition: Conditions; // CONTADO o CRÉDITO
+    installments?: CreatePurchaseInstallment[]; // Opcional, solo si es crédito
 
-    // Desglose Financiero (El frontend envía los cálculos para validación)
-    subTotal: number;       // Suma de items
-    taxAmount: number;      // Monto del IVA
-    totalCost: number;      // Total Final (SubTotal + Tax)
-
-    // Arrays de datos
     items: CreatePurchaseItemDto[];
+
     payments: PurchasePaymentDto[];
+}
+
+export interface CreatePaymentDto {
+    // 1. ¿Cómo paga? (Zelle, Pago Móvil, Efectivo USD)
+    paymentMethodId: number; 
+
+    // 2. ¿A qué tasa? (Vital para la conversión si paga en Bs)
+    exchangeRateId: number;  
+
+    // 3. ¿Cuánto paga? (El número que sale en el comprobante bancario)
+    amount: number;          
+
+    // 4. ¿Cuál es el comprobante? (Opcional, pues Efectivo no suele tener)
+    reference?: string;      
 }

@@ -371,7 +371,7 @@ model Sale {
   status SaleStatus @default(COMPLETED) // COMPLETED, CANCELLED, DRAFT
 
   // --- CONDICIONES DE PAGO ---
-  conditions SaleConditions @default(CASH) // CASH o CREDIT
+  conditions Conditions @default(CASH) // CASH o CREDIT
 
   // Este estado se calcula automáticamente al pagar. 
   // Eliminé OVERDUE y CANCELLED de aquí porque eso se deduce de otras variables.
@@ -401,6 +401,22 @@ model Sale {
   items       SaleItem[]
   payments    SalePayment[]
   creditNotes CreditNote[]
+
+  installments SaleInstallment[]
+}
+
+model SaleInstallment {
+  id          Int      @id @default(autoincrement())
+  saleId      Int
+  
+  number      Int      // Cuota #1, #2...
+  amount      Decimal  @db.Decimal(15, 2)
+  dueDate     DateTime @db.Date
+  
+  status      InstallmentStatus @default(PENDING)
+  paidAt      DateTime?
+
+  sale        Sale     @relation(fields: [saleId], references: [id])
 }
 
 model CreditNote {
@@ -431,25 +447,6 @@ model CreditNoteItem {
   product    Product    @relation(fields: [productId], references: [id])
 }
 
-enum SaleConditions {
-  CASH
-  CREDIT
-}
-
-// Renombrado a PaymentStatus para ser más claro
-enum PaymentStatus {
-  PENDING // No se ha pagado nada (o saldo inicial completo)
-  PARTIAL // Se ha abonado algo
-  PAID // Saldo en 0
-  REFUNDED // Se devolvió el dinero
-  // Nota: "VENCIDO" se calcula en el frontend comparando paymentDueDate vs Hoy
-}
-
-enum SaleStatus {
-  DRAFT // Aún editando (carrito)
-  COMPLETED // Venta cerrada y stock descontado
-  CANCELLED // Venta anulada (requiere devolver stock)
-}
 
 model SaleItem {
   id                    Int     @id @default(autoincrement())
@@ -532,6 +529,14 @@ model Purchase {
 
   date DateTime @default(now())
 
+  conditions      Conditions @default(CASH) // CONTADO o CREDITO
+  paymentStatus   PaymentStatus     @default(PAID) // PENDING, PARTIAL, PAID
+  
+  remainingBalance Decimal @default(0) @db.Decimal(15, 2) // Cuánto falta por pagar
+  paymentDueDate   DateTime? // Fecha límite final (o fecha de la primera cuota, según lógica)
+
+  // Relación con las nuevas Cuotas
+  installments    PurchaseInstallment[]
   // Relaciones
   business     Business       @relation(fields: [businessId], references: [id])
   supplier     Supplier       @relation(fields: [supplierId], references: [id])
@@ -540,6 +545,24 @@ model Purchase {
 
   items    PurchaseItem[]
   payments PurchasePayment[]
+}
+
+// --- PLAN DE PAGOS DE COMPRAS (Cuentas por Pagar) ---
+model PurchaseInstallment {
+  id          Int      @id @default(autoincrement())
+  purchaseId  Int
+  
+  number      Int      // Cuota #1, #2, #3...
+  amount      Decimal  @db.Decimal(15, 2) // Monto de ESTA cuota
+  dueDate     DateTime @db.Date           // Fecha de vencimiento de ESTA cuota
+  
+  // Estado individual de la cuota
+  status      InstallmentStatus @default(PENDING) 
+  
+  // Opcional: Si quieres registrar qué día exacto se terminó de pagar esta cuota
+  paidAt      DateTime? 
+
+  purchase    Purchase @relation(fields: [purchaseId], references: [id])
 }
 
 model PurchaseItem {
@@ -688,4 +711,36 @@ enum ProductType {
   SIMPLE      // Producto físico estándar (se compra y se vende)
   COMPOSITE   // Receta / Combo / Kit (se compone de otros, stock calculado)
   SERVICE     // Intangible (no mueve stock)
+}
+
+enum Conditions {
+  CASH
+  CREDIT
+}
+
+// Renombrado a PaymentStatus para ser más claro
+enum PaymentStatus {
+  PENDING // No se ha pagado nada (o saldo inicial completo)
+  PARTIAL // Se ha abonado algo
+  PAID // Saldo en 0
+  REFUNDED // Se devolvió el dinero
+  // Nota: "VENCIDO" se calcula en el frontend comparando paymentDueDate vs Hoy
+}
+
+enum SaleStatus {
+  DRAFT // Aún editando (carrito)
+  COMPLETED // Venta cerrada y stock descontado
+  CANCELLED // Venta anulada (requiere devolver stock)
+}
+
+enum InstallmentStatus {
+  PENDING // Aún no se cubre el monto
+  PAID    // Monto cubierto
+  OVERDUE // Vencida (se calcula por fecha, pero el estado ayuda en filtros)
+}
+
+enum Currency {
+  USD
+  VES
+  EUR
 }

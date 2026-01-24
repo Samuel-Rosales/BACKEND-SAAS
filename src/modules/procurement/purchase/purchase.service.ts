@@ -1,28 +1,12 @@
 import { prisma } from '@/configs';
-import { CreatePurchaseInterface } from './interfaces';
-import { MovementType } from '@prisma/client';
-import { BusinessError, resolveBusinessExchangeRate } from '@/utils';
+import { CreatePaymentDto, CreatePurchaseInterface } from './interfaces';
+import { Conditions, Currency, InstallmentStatus, MovementType, PaymentStatus, ProductType } from '@prisma/client';
+import { BusinessError, calculatePriceWithMargin, resolveBusinessExchangeRate, updateRecursiveRecipeCosts } from '@/utils';
 
 const NON_PERISHABLE_DATE = new Date('2099-12-31');
 const IVA = 0.16; // 16% de IVA
 const EPSILON = 0.02; // Margen de error aceptable en validaciones monetarias
 
-export const calculatePriceWithMargin = (marginPercentage: number, cost: number): number => {
-    // Validación de seguridad: El margen no puede ser 100% o más (división por cero o negativo)
-    if (marginPercentage >= 1) {
-        throw new Error("El margen no puede ser 100% o superior, causaría un precio infinito.");
-    }
-    
-    if (marginPercentage <= 0) {
-        return cost; // Si el margen es 0 o negativo, vendemos al costo (o manejas lógica de pérdida)
-    }
-
-    // Fórmula Gross Margin
-    const price = cost / (1 - marginPercentage);
-    
-    // Redondeo bancario a 2 decimales (importante para evitar $142.857142)
-    return Math.round((price + Number.EPSILON) * 100) / 100;
-};
 
 export class PurchaseService {
 
@@ -62,7 +46,7 @@ export class PurchaseService {
 
                 prisma.supplier.findUnique({ where: { id: data.supplierId } }),
 
-                prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, isPerishable: true, profitMargin: true } }),
+                prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, isPerishable: true, profitMargin: true, type: true, costPrice: true } }),
 
                 prisma.depot.findMany({ where: { id: { in: depotIds } }, select: { id: true } }),
                 
@@ -92,6 +76,14 @@ export class PurchaseService {
 
             if (data.payments.length === 0) {
                 return { message: 'Debe registrar al menos un pago para la compra', status: 400, data: null };
+            }   
+
+            const compositeProduct = products.find(p => p.type === ProductType.COMPOSITE);
+            if (compositeProduct) {
+                return { 
+                    status: 400, 
+                    message: `No puedes comprar/ingresar stock directo del producto compuesto "${compositeProduct.name}". Debes comprar sus ingredientes.` 
+                };
             }
     
             // --- VALIDACIONES LÓGICAS ---
@@ -137,32 +129,54 @@ export class PurchaseService {
                 }
             }
 
-            let totalPayments = 0;
+            let totalPaidBase = 0; // Dinero real entregado (Abono inicial)
 
+            // Recorremos pagos para sumar
             for (const pay of data.payments) {
 
-                if (pay.amount <= 0) {
-                    return { message: 'El monto de pago debe ser mayor a cero', status: 400, data: null };
-                }
+                const method = validPaymentMethods.find(pm => pm.id === pay.paymentMethodId);
 
-                const paymentMethod = validPaymentMethods.find(pm => pm.id === pay.paymentMethodId);
-
-                if (!paymentMethod) {
-                    return { message: 'Método de pago inválido', status: 404, data: null };
-                }
-
-                if (paymentMethod.currency === 'USD') {
-                    totalPayments += pay.amount;
-                }
-                else if (paymentMethod.currency === 'VES') {
-                    totalPayments += pay.amount / Number(currentRateRecord.rate);
+                // ... validaciones de moneda ...
+                if (method?.currency === 'USD') {
+                    totalPaidBase += pay.amount;
+                } else if (method?.currency === 'VES') {
+                    totalPaidBase += pay.amount / Number(currentRateRecord.rate);
                 }
             }
+            
+            // Redondeo
+            const totalPaidFinal = Math.round(totalPaidBase * 100) / 100;
+            const remainingBalance = Math.round((data.totalCost - totalPaidFinal) * 100) / 100;
 
-            const totalPaidFinal = Math.round(totalPayments * 100) / 100;
+            // Lógica de Estados
+            let paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' = 'PAID';
+            
+            if (remainingBalance > 0) {
+                // Si sobra deuda, debe ser CRÉDITO obligatoriamente
+                if (data.condition !== 'CREDIT') {
+                    return { status: 400, message: 'El monto pagado es menor al total, la compra debe marcarse como CRÉDITO.', data: null };
+                }
 
-            if (data.payments.length > 0 && Math.abs(totalPaidFinal - data.totalCost) > 0.01) {
-                return { message: `El total de pagos (${totalPaidFinal}) no coincide con el costo total de la compra (${data.totalCost})`, status: 400, data: null };
+                paymentStatus = totalPaidFinal > 0 ? 'PARTIAL' : 'PENDING';
+
+                // Validar que las cuotas cubran la deuda
+                if (!data.installments || data.installments.length === 0) {
+                     return { status: 400, message: 'Una compra a crédito requiere definir cuotas de pago.', data: null };
+                }
+
+                const totalInstallments = data.installments.reduce((sum, inst) => sum + inst.amount, 0);
+
+                if (Math.abs(totalInstallments - remainingBalance) > EPSILON) {
+                    return { status: 400, message: `La suma de las cuotas (${totalInstallments}) no coincide con el saldo restante (${remainingBalance}).`, data: null };
+                }
+
+            } else {
+                // Si no hay deuda
+                if (Math.abs(remainingBalance) > EPSILON && remainingBalance < 0) {
+                     return { status: 400, message: 'Estás pagando más del costo total.', data: null };
+                }
+
+                paymentStatus = 'PAID';
             }
     
             // =================================================================
@@ -171,64 +185,91 @@ export class PurchaseService {
             
             const result = await prisma.$transaction(async (tx) => {
                 
-                // A. Cabecera
+                // A. Cabecera [ACTUALIZADO CON CRÉDITO]
                 const purchase = await tx.purchase.create({
                     data: {
                         businessId,
                         memberId: userId,
-
                         supplierId: data.supplierId,
                         exchangeRateId: currentRateRecord.id,
-                        subTotal: data.subTotal, // por validación previa (hacer pruebas extensivas aquí)
+                        
+                        subTotal: data.subTotal,
                         taxAmount: data.taxAmount,
                         totalCost: data.totalCost,
-                        status: 'COMPLETED',
+                        
                         reference: data.reference || "N/A",
                         observation: data.observation || "N/A",
+
+                        // --- NUEVOS CAMPOS ---
+                        conditions: data.condition, // CASH o CREDIT
+                        paymentStatus: paymentStatus,
+                        remainingBalance: remainingBalance,
+                        // Asignamos la fecha de vencimiento general (la última cuota o hoy)
+                        paymentDueDate: data.installments?.length 
+                            ? new Date(data.installments[data.installments.length - 1].dueDate) 
+                            : new Date()
                     }
                 });
+
+                // --- [NUEVO] CREACIÓN DE CUOTAS (Si aplica) ---
+                if (data.condition === Conditions.CREDIT && data.installments) {
+                    await tx.purchaseInstallment.createMany({
+                        data: data.installments.map(inst => ({
+                            purchaseId: purchase.id,
+                            number: inst.number,
+                            amount: inst.amount,
+                            dueDate: new Date(inst.dueDate),
+                            status: InstallmentStatus.PENDING
+                        }))
+                    });
+                }
     
                 // B. Procesar Items e Inventario
                 for (const item of data.items) {
                     
-                    // 1. Calcular Cantidad Real (Unidades)
+                    // 1. Calcular Cantidad Real y Costo Unitario Real
                     let finalQuantity = item.quantity;
-
-                    let unitCostByPresentation = item.unitCost;
+                    let unitCostByPresentation = item.unitCost; // Costo por unidad base
 
                     if (item.productPresentationId) {
-
                         const pres = presentations.find(p => p.id === item.productPresentationId);
-
-                        if (pres) finalQuantity = item.quantity * Number(pres.factor);
-
-                         unitCostByPresentation = item.unitCost / Number(pres?.factor || 1);
+                        if (pres) {
+                            // Ej: Compro 2 Cajas (quantity=2). Factor=12.
+                            // finalQuantity = 24 unidades.
+                            finalQuantity = item.quantity * Number(pres.factor);
+                            
+                            // Ej: Caja cuesta $24. Factor=12.
+                            // unitCostByPresentation = $2.
+                            unitCostByPresentation = item.unitCost / Number(pres.factor);
+                        }
                     }
             
                     const expiration = item.expirationDate ? new Date(item.expirationDate) : NON_PERISHABLE_DATE;
             
-                    // 2. Crear PurchaseItem (Registro histórico de la compra)
+                    // 2. Crear PurchaseItem 
+                    // MANTENEMOS DATOS DE FACTURA (Aquí NO usamos el costo unitario, sino el de compra)
                     await tx.purchaseItem.create({
                         data: {
                             purchaseId: purchase.id,
                             productId: item.productId,
                             productPresentationId: item.productPresentationId || null,
                             quantity: item.quantity, 
-                            unitCost: item.unitCost,
+                            unitCost: item.unitCost, // $24 (Precio de la caja)
                             depotId: item.depotId,
                             expirationDate: expiration
                         }
                     });
             
                     // 3. GESTIÓN DE LOTES (StockLot)
-                    // Estrategia: Si ya tengo un lote del mismo producto, en el mismo almacén, 
-                    // con la misma fecha y MISMO COSTO, lo sumo. Si cambia el costo, creo uno nuevo.
+                    // [CORRECCIÓN]: Usamos unitCostByPresentation, no item.unitCost
                     const existingLot = await tx.stockLot.findFirst({
                         where: {
                             productId: item.productId,
                             depotId: item.depotId,
                             expirationDate: expiration,
-                            lotCost: item.unitCost 
+                            // Importante: Buscamos lotes que cuesten lo mismo UNITARIAMENTE ($2)
+                            // Usamos un rango pequeño (EPSILON) por si hay decimales flotantes
+                            lotCost: { equals: unitCostByPresentation } 
                         }
                     });
     
@@ -238,58 +279,76 @@ export class PurchaseService {
                             where: { id: existingLot.id },
                             data: { quantity: { increment: finalQuantity } }
                         });
-
                     } else {
 
                         await tx.stockLot.create({
                             data: {
                                 productId: item.productId,
                                 depotId: item.depotId,
-                                quantity: finalQuantity,
-                                lotCost: item.unitCost,
+                                quantity: finalQuantity, // 24 unidades
+                                lotCost: unitCostByPresentation, // $2 (Costo real unitario)
                                 expirationDate: expiration,
                                 createdAt: new Date()
                             }
                         });
                     }
 
+                    // 4. Actualización del Producto Maestro
                     const product = products.find(p => p.id === item.productId);
+                    if (!product) throw new Error('Producto no encontrado en inventario');
 
-                    if (!product) {
-                        throw new Error('Producto no encontrado en la fase de inventario');
+                    // [OPTIMIZACIÓN]: Solo actualizamos si el costo cambia significativamente (> 0.01)
+                    // Esto evita escrituras innecesarias en base de datos.
+                    const currentCost = Number(product.costPrice);
+                    const costDiff = Math.abs(currentCost - unitCostByPresentation);
+
+                    if (costDiff > 0.001) {
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: {
+                                costPrice: unitCostByPresentation,
+                                // Recalculamos precio de venta basado en el nuevo costo
+                                salePrice: calculatePriceWithMargin(Number(product.profitMargin), unitCostByPresentation)
+                            }
+                        });
+
+                        // ============================================================
+                        // [IMPORTANTE - TAREA PENDIENTE]
+                        // Aquí acabas de cambiar el precio de un INGREDIENTE (ej: Carne).
+                        // Si tienes Productos Compuestos (ej: Hamburguesa) que usan Carne,
+                        // su costo ahora está desactualizado.
+                        //
+                        // Deberías llamar aquí a una función auxiliar (fuera de este loop si es posible)
+                        // Ej: await this.updateCompositeProductCosts(tx, item.productId);
+                        // ============================================================
+                        await updateRecursiveRecipeCosts(tx, item.productId);
                     }
 
-                    await tx.product.update({
-                        where: { id: item.productId },
-                        data: {
-                            costPrice: unitCostByPresentation,
-                            salePrice: calculatePriceWithMargin(Number(product.profitMargin), unitCostByPresentation)
-                        }
-                    });
     
-                    // 4. Kardex (StockMovement)
+                    // 5. Kardex (StockMovement)
+                    // [CORRECCIÓN]: Usamos finalQuantity y unitCostByPresentation
                     await tx.stockMovement.create({
                         data: {
                             businessId,
                             productId: item.productId,
                             memberId: userId,
                             depotId: item.depotId,
-                            type: MovementType.IN,
-                            quantity: finalQuantity,
-                            historicalCost: item.unitCost, // Costo de entrada
-                            reason: `Compra #${purchase.id}` // O usa purchase.number si tienes consecutivo
+                            type: 'IN', // O tu enum MovementType.IN
+                            quantity: finalQuantity, // Entran 24 unidades
+                            historicalCost: unitCostByPresentation, // A $2 cada una
+                            reason: `Compra #${purchase.id}`, // O purchase.reference
+                            date: new Date()
                         }
                     });
                 }
     
-                // C. Pagos
+                // C. Pagos (Abono inicial)
                 if (data.payments.length > 0) {
 
-                    await tx.purchasePayment.createMany({
+                     await tx.purchasePayment.createMany({
 
                         data: data.payments.map(pay => ({
                             purchaseId: purchase.id,
-
                             paymentMethodId: pay.paymentMethodId,
                             amount: pay.amount,
                             exchangeRateId: currentRateRecord.id,
@@ -403,6 +462,133 @@ export class PurchaseService {
         } catch (error) {
             console.error(error);
             return { status: 500, message: 'Error interno al obtener compra', data: null };
+        }
+    }
+
+    async addPayment(businessId: number, purchaseId: number, data: CreatePaymentDto) {
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+
+            // 1. Consultas Iniciales
+            const [exchangeRate, purchase, paymentMethod] = await Promise.all([
+                tx.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
+                tx.purchase.findUnique({ 
+                    where: { id: purchaseId, businessId }
+                }),
+                tx.paymentMethod.findUnique({ where: { id: data.paymentMethodId } })
+            ]);
+
+            // 2. Validaciones
+            if (!purchase) throw new BusinessError("Compra no encontrada", 404);
+            
+            // USO CORRECTO DEL ENUM AQUÍ
+            if (purchase.paymentStatus === PaymentStatus.PAID) { 
+                throw new BusinessError("Esta compra ya está pagada por completo", 400);
+            }
+            
+            if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
+            if (!paymentMethod) throw new BusinessError("Método de pago inválido", 400);
+
+            // 3. Normalización (USD Base)
+            let paymentInBaseCurrency = data.amount;
+
+            // USO CORRECTO DEL ENUM AQUÍ
+            if (paymentMethod.currency !== Currency.USD) {
+                const rate = Number(exchangeRate.rate);
+                if (!rate || rate <= 0) throw new BusinessError("Tasa de cambio inválida", 400);
+                paymentInBaseCurrency = data.amount / rate;
+            }
+
+            paymentInBaseCurrency = Math.round(paymentInBaseCurrency * 100) / 100;
+
+            // 4. Sobrepago
+            if (paymentInBaseCurrency > (Number(purchase.remainingBalance) + 0.05)) {
+                throw new BusinessError(`El monto supera la deuda pendiente`, 400);
+            }
+
+            // 5. Crear Pago
+            const newPayment = await tx.purchasePayment.create({
+                data: {
+                    purchaseId,
+                    paymentMethodId: data.paymentMethodId,
+                    exchangeRateId: exchangeRate.id,
+                    amount: data.amount,
+                    reference: data.reference || "N/A"
+                }
+            });
+
+            // 6. Cascada de Cuotas
+            // USO CORRECTO DEL ENUM AQUÍ
+            if (purchase.conditions === Conditions.CREDIT) {
+                
+                const pendingInstallments = await tx.purchaseInstallment.findMany({
+                    where: { 
+                        purchaseId: purchaseId,
+                        // USO CORRECTO DEL ENUM AQUÍ
+                        status: { not: InstallmentStatus.PAID } 
+                    },
+                    orderBy: { dueDate: 'asc' }
+                });
+
+                let moneyDistributor = paymentInBaseCurrency;
+
+                for (const inst of pendingInstallments) {
+                    if (moneyDistributor <= 0.01) break;
+
+                    const amountPending = Number(inst.amount);
+
+                    if (moneyDistributor >= (amountPending - 0.01)) {
+                        await tx.purchaseInstallment.update({
+                            where: { id: inst.id },
+                            data: { 
+                                // USO CORRECTO DEL ENUM AQUÍ
+                                status: InstallmentStatus.PAID,
+                                paidAt: new Date()
+                            }
+                        });
+                        moneyDistributor -= amountPending;
+                    } 
+                }
+            }
+
+            // 7. Actualización Global
+            const newBalance = Number(purchase.remainingBalance) - paymentInBaseCurrency;
+            const finalBalance = newBalance < 0 ? 0 : newBalance;
+
+            let newStatus: PaymentStatus = purchase.paymentStatus;
+
+            // [AQUÍ ESTABA EL ERROR]
+            // Debes usar el Enum, no el string literal
+            if (finalBalance <= 0.05) {
+                newStatus = PaymentStatus.PAID; // <--- CORREGIDO
+            } else {
+                newStatus = PaymentStatus.PARTIAL; // <--- CORREGIDO
+            }
+
+            await tx.purchase.update({
+                where: { id: purchaseId },
+                data: {
+                    remainingBalance: finalBalance,
+                    paymentStatus: newStatus
+                }
+            });
+
+            return {
+                payment: newPayment,
+                newBalance: finalBalance,
+                status: newStatus,
+                message: newStatus === PaymentStatus.PAID ? '¡Compra pagada totalmente!' : 'Abono registrado'
+            };
+        });
+
+        return { status: 200, message: 'Pago registrado exitosamente', data: result };
+
+    } catch (error) {
+            console.error('Error addPurchasePayment:', error);
+            if (error instanceof BusinessError) {
+                return { status: error.status, message: error.message, data: null };
+            }
+            return { status: 500, message: 'Error interno al registrar pago', data: null };
         }
     }
 }

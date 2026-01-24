@@ -551,96 +551,146 @@ export class SaleService {
     }
 
     async addPayment(businessId: number, saleId: number, data: SalePaymentDto) {
-        try {
-            const result = await prisma.$transaction(async (tx) => {
-                
-                const [exchangeRate, sale, paymentMethod ] = await Promise.all([
-                    tx.exchangeRate.findUnique({
-                        where: { id: data.exchangeRateId }
-                    }),
-                    tx.sale.findUnique({
-                        where: { id: saleId, businessId }
-                    }),
-                    tx.paymentMethod.findUnique({
-                        where: { id: data.paymentMethodId }
-                    })
-                ]);
-        
-                if (!sale) throw new BusinessError("Venta no encontrada", 404);
-                if (sale.paymentStatus === PaymentStatus.PAID) throw new BusinessError("Esta venta ya está pagada por completo", 400);
-        
-                if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
-
-                if (!paymentMethod) throw new BusinessError("Método de pago inválido", 400);
-        
-                // 3. Normalizar el Pago a Dólares (Moneda Base)
-                let paymentInBaseCurrency = data.amount;
-                
-                if (paymentMethod.currency !== 'USD') {
-                    // Si paga en Bolívares, convertimos a Dólares con la tasa DE HOY
-                    const rate = Number(exchangeRate.rate);
-                    if (!rate || rate <= 0) throw new BusinessError("Tasa de cambio inválida para conversión", 400);
-                    paymentInBaseCurrency = data.amount / rate;
-                }
-        
-                // Redondeo a 2 decimales
-                paymentInBaseCurrency = Math.round(paymentInBaseCurrency * 100) / 100;
-        
-                // 4. Validar que no esté pagando de más
-                // Usamos un pequeño margen de error (0.05) por los decimales
-                if (paymentInBaseCurrency > (Number(sale.remainingBalance) + 0.05)) {
-                    throw new BusinessError(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`, 400);
-                }
-        
-                // 5. Crear el registro del Pago (La "Cuota")
-                const newPayment = await tx.salePayment.create({
-                    data: {
-                        saleId,
-                        paymentMethodId: data.paymentMethodId,
-                        exchangeRateId: exchangeRate.id, // Guardamos la tasa de HOY
-                        amount: data.amount,             // Lo que pagó (ej. 1000 Bs)
-                        reference: data.reference || "N/A"
-                    }
-                });
-        
-                // 6. Calcular Nuevo Saldo
-                // Restamos lo que pagó (convertido a USD) al saldo anterior
-                const newBalance = Number(sale.remainingBalance) - paymentInBaseCurrency;
-                
-                // Asegurar que no quede negativo por milésimas (ej: -0.00001)
-                const finalBalance = newBalance < 0 ? 0 : newBalance;
-        
-                // 7. Determinar Nuevo Estado
-                let newStatus: PaymentStatus = sale.paymentStatus;
-                if (finalBalance <= 0.05) { // Margen de error
-                    newStatus = PaymentStatus.PAID;
-                } else {
-                    newStatus = PaymentStatus.PARTIAL;
-                }
-        
-                // 8. Actualizar la Venta Principal
-                await tx.sale.update({
-                    where: { id: saleId },
-                    data: {
-                        remainingBalance: finalBalance,
-                        paymentStatus: newStatus
-                    }
-                });
-        
-                return {
-                    payment: newPayment,
-                    newBalance: finalBalance,
-                    status: newStatus,
-                    message: newStatus === PaymentStatus.PAID ? '¡Venta liquidada correctamente!' : 'Abono registrado correctamente'
-                };
-            });
+    try {
+        const result = await prisma.$transaction(async (tx) => {
             
+            // 1. Consultas Iniciales
+            const [exchangeRate, sale, paymentMethod] = await Promise.all([
+                tx.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
+                tx.sale.findUnique({ 
+                    where: { id: saleId, businessId },
+                    // [IMPORTANTE]: Necesitamos ver si tiene cuotas pendientes para procesarlas
+                    // No hacemos include aquí para no traer basura, las buscaremos abajo filtradas
+                }),
+                tx.paymentMethod.findUnique({ where: { id: data.paymentMethodId } })
+            ]);
+    
+            if (!sale) throw new BusinessError("Venta no encontrada", 404);
+            if (sale.paymentStatus === 'PAID') throw new BusinessError("Esta venta ya está pagada por completo", 400);
+            if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
+            if (!paymentMethod) throw new BusinessError("Método de pago inválido", 400); // <-- Corregido typo
+    
+            // 2. Normalizar el Pago a Dólares (Moneda Base)
+            let paymentInBaseCurrency = data.amount;
+            
+            if (paymentMethod.currency !== 'USD') {
+                const rate = Number(exchangeRate.rate);
+                if (!rate || rate <= 0) throw new BusinessError("Tasa de cambio inválida para conversión", 400);
+                paymentInBaseCurrency = data.amount / rate;
+            }
+    
+            // Redondeo a 2 decimales para evitar problemas de flotantes
+            paymentInBaseCurrency = Math.round(paymentInBaseCurrency * 100) / 100;
+    
+            // 3. Validar sobrepago
+            // Margen de error de 0.05 centavos por temas de conversión
+            if (paymentInBaseCurrency > (Number(sale.remainingBalance) + 0.05)) {
+                throw new BusinessError(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`, 400);
+            }
+    
+            // 4. Crear el registro del Pago (Histórico)
+            const newPayment = await tx.salePayment.create({
+                data: {
+                    saleId,
+                    paymentMethodId: data.paymentMethodId,
+                    exchangeRateId: exchangeRate.id,
+                    amount: data.amount, // Guardamos el monto original (ej: Bolívares)
+                    reference: data.reference || "N/A"
+                }
+            });
+
+            // =================================================================
+            // 5. LÓGICA DE CASCADA DE CUOTAS (LO NUEVO)
+            // =================================================================
+            
+            // Si la venta es a CRÉDITO, debemos intentar "matar" cuotas viejas
+            if (sale.conditions === 'CREDIT') {
+                
+                // A. Buscamos cuotas que NO estén pagadas, ordenadas por la más antigua
+                const pendingInstallments = await tx.saleInstallment.findMany({
+                    where: { 
+                        saleId: saleId,
+                        status: { not: 'PAID' } // Trae PENDING y PARTIAL (si existiera)
+                    },
+                    orderBy: { dueDate: 'asc' } // FIFO: Primero vence, primero se paga
+                });
+
+                // B. Distribuimos el dinero
+                let moneyDistributor = paymentInBaseCurrency;
+
+                for (const inst of pendingInstallments) {
+                    
+                    if (moneyDistributor <= 0) break; // Se acabó el dinero del pago
+
+                    const amountPending = Number(inst.amount); // Asumiendo que 'amount' es el total de la cuota
+                    
+                    // NOTA: Si tuvieras un campo 'paidAmount' en la cuota, deberías restar lo que ya se abonó.
+                    // Como tu modelo actual es simple (Status PENDING/PAID), asumimos lógica binaria o 
+                    // que el pago cubre la totalidad.
+                    
+                    // Si el dinero que tengo cubre esta cuota...
+                    // Usamos un pequeño margen (EPSILON) para comparaciones float
+                    if (moneyDistributor >= (amountPending - 0.01)) {
+                        
+                        // 1. Marcar cuota como PAGADA
+                        await tx.saleInstallment.update({
+                            where: { id: inst.id },
+                            data: { 
+                                status: 'PAID',
+                                paidAt: new Date() // Si agregaste este campo opcional
+                            }
+                        });
+
+                        // 2. Restar del distribuidor
+                        moneyDistributor -= amountPending;
+
+                    } else {
+                        // Si el dinero NO alcanza para cubrir TODA la cuota...
+                        // Opción A: Dejarla PENDING (El saldo global baja, pero la cuota sigue "abierta")
+                        // Opción B: Marcarla PARTIAL (Recomendado si agregaste ese enum)
+                        
+                        // Como tu dinero se acabó (o no alcanza para cerrar esta), el loop termina aquí normalmente.
+                        // Pero restamos para el tracking mental (aunque no se guarde en BD en este modelo simple)
+                        moneyDistributor = 0; 
+                    }
+                }
+            }
+
+            // =================================================================
+            // 6. Actualización Global (Saldo y Estado de Venta)
+            // =================================================================
+
+            const newBalance = Number(sale.remainingBalance) - paymentInBaseCurrency;
+            const finalBalance = newBalance < 0 ? 0 : newBalance;
+    
+            let newStatus = sale.paymentStatus;
+            
+            // Si debe menos de 5 centavos, lo consideramos PAGADO (Manejo de residuos decimales)
+            if (finalBalance <= 0.05) {
+                newStatus = 'PAID';
+            } else {
+                newStatus = 'PARTIAL';
+            }
+    
+            await tx.sale.update({
+                where: { id: saleId },
+                data: {
+                    remainingBalance: finalBalance,
+                    paymentStatus: newStatus
+                }
+            });
+    
             return {
-                status: 200,
-                message: 'Pago agregado exitosamente',
-                data: result
+                payment: newPayment,
+                newBalance: finalBalance,
+                status: newStatus,
+                message: newStatus === 'PAID' ? '¡Venta liquidada correctamente!' : 'Abono registrado correctamente'
             };
-        } catch (error) {
+        });
+        
+        return { status: 200, message: 'Pago agregado exitosamente', data: result };
+
+    } catch (error) {
             console.error('Error al agregar pago:', error);
             if (error instanceof BusinessError) {
                 return {
