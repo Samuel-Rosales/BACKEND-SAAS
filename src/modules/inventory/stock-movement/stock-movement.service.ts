@@ -58,7 +58,7 @@ export class StockMovementService {
             }
 
             // Verificar que el producto no sea un servicio (excepto para ajustes)
-            if (product.isService && data.type !== 'ADJUSTMENT') {
+            if (product.type === 'SERVICE' && data.type !== 'ADJUSTMENT') {
                 return {
                     message: 'No se puede gestionar movimientos de stock para productos que son servicios',
                     status: 400,

@@ -41,7 +41,7 @@ export class StockLotService {
             }
 
             // Verificar que el producto no sea un servicio
-            if (product.isService) {
+            if (product.type === 'SERVICE') {
                 return {
                     message: 'No se puede gestionar lotes de productos que son servicios',
                     status: 400,
