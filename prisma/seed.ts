@@ -16,7 +16,9 @@ import {
   cashCounts,
   measurementUnits,
   categories,
+  taxes,
   products,
+  productComponents,
   productPresentations,
   depots,
   stockLots,
@@ -56,7 +58,9 @@ async function main() {
   // Inventory
   await prisma.measurementUnit.createMany({ data: measurementUnits as any, skipDuplicates: true });
   await prisma.category.createMany({ data: categories as any, skipDuplicates: true });
+  await prisma.tax.createMany({ data: taxes, skipDuplicates: true });
   await prisma.product.createMany({ data: products as any, skipDuplicates: true });
+  await prisma.productComponent.createMany({ data: productComponents, skipDuplicates: true });
   await prisma.productPresentation.createMany({ data: productPresentations as any, skipDuplicates: true });
   await prisma.depot.createMany({ data: depots as any, skipDuplicates: true });
   await prisma.stockLot.createMany({ data: stockLots as any, skipDuplicates: true });
