@@ -1,336 +1,273 @@
-# Módulo Inventory - Productos
+# Módulo Inventory - Productos (v2)
 
-## ✅ Endpoints actuales (v2026-01-23)
-
-Base URL: `/api/v1/inventory/product`
-
-**Autenticación:** ✅ Requerida
-
-**Endpoints:**
-- `POST /` — Crear producto
-- `GET /` — Listar productos
-- `GET /:id` — Obtener producto
-- `PATCH /:id` — Actualizar producto
-- `DELETE /:id` — Eliminar producto
-
-**Nota:** Enviar `x-business-id` para contexto de negocio.
-
-## 📍 Endpoints
+## ✅ Resumen de Endpoints
 
 Base URL: `/api/v1/inventory/product`
 
-**Autenticación:** ✅ Requerida
+**Autenticación:** ✅ Requerida (Bearer Token)
+**Header Multi-tenant:** 🟢 Requerido (`x-business-id`)
 
-**Header Multi-tenant:** `x-business-id: <businessId>`
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `POST` | `/` | **Crear Producto** (Soporta Recetas/Combos) |
+| `GET` | `/` | **Listar Productos** (Con stock calculado y filtros) |
+| `GET` | `/:id` | **Obtener Producto** (Detalle completo, receta y lotes) |
+| `PATCH` | `/:id` | **Actualizar Producto** (Edición de datos y recetas) |
+| `DELETE` | `/:id` | **Eliminar Producto** (Lógica Híbrida: Soft/Hard Delete) |
 
 ---
 
+## 📍 Detalle de Endpoints
+
 ### 1. Crear Producto
 
-Crea un nuevo producto para el negocio.
+Registra un nuevo producto en el catálogo. Soporta la creación transaccional de **Productos Compuestos (Recetas)** en un solo paso.
 
 **Endpoint:** `POST /api/v1/inventory/product`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
-
-#### Request Body
+#### Request Body (Producto Simple)
 
 ```json
 {
-  "name": "Laptop Dell XPS 15",
-  "sku": "LAP-DELL-XPS15-001",
-  "description": "Laptop de alta gama con procesador Intel i7",
-  "categoryId": 1,
-  "unitId": 1,
-  "costPrice": 899.99,
-  "salePrice": 1299.99,
-  "minStock": 5,
-  "isService": false,
-  "isPerishable": false,
-  "imageUrl": "https://example.com/image.jpg"
+  "name": "Harina Pan 1kg",
+  "sku": "HAR-001",
+  "description": "Harina de maíz precocida",
+  "imageUrl": "https://...",
+  "categoryId": 5,
+  "unitId": 1, // Unidad base (ej: Kg o Unidad)
+  "taxId": 1,
+  
+  // Clasificación
+  "type": "SIMPLE", // "SIMPLE" | "COMPOSITE" | "SERVICE"
+  "isPerishable": true,
+
+  // Finanzas
+  "costPrice": 1.00,
+  "profitMargin": 0.30,
+  "salePrice": 1.30,
+  "minStock": 10
 }
+
+```
+
+#### Request Body (Producto Compuesto / Receta)
+
+*Ejemplo: Una Hamburguesa que descuenta Pan y Carne.*
+
+```json
+{
+  "name": "Hamburguesa Clásica",
+  "sku": "FOOD-HAM-001",
+  "categoryId": 10,
+  "unitId": 1, 
+  "taxId": 2,
+  
+  "type": "COMPOSITE", // <--- IMPORTANTE
+  "isPerishable": false, // El plato servido no vence en stock (se cocina al momento)
+  
+  "costPrice": 2.50, // Costo calculado (puede ser manual o auto-sumado)
+  "profitMargin": 0.50,
+  "salePrice": 5.00,
+
+  // La Receta: Qué se descuenta del inventario al vender esto
+  "components": [
+    { "childProductId": 50, "quantity": 1 },   // 1 Pan
+    { "childProductId": 51, "quantity": 0.200 } // 0.200 Kg de Carne (200g)
+  ]
+}
+
 ```
 
 #### Validaciones
 
-- `name`: Obligatorio, string, 2-200 caracteres
-- `categoryId`: Obligatorio, number, debe existir la categoría en el negocio
-- `unitId`: Obligatorio, number, debe existir la unidad de medida
-- `costPrice`: Obligatorio, number, debe ser >= 0
-- `salePrice`: Obligatorio, number, debe ser >= 0
-- `sku`: Opcional, string, 3-50 caracteres, único por negocio
-- `description`: Opcional, string, máximo 1000 caracteres
-- `imageUrl`: Opcional, string, URL válida
-- `minStock`: Opcional, number, debe ser >= 0 (default: 0)
-- `isService`: Opcional, boolean (default: false) - Si es true, no se gestiona stock
-- `isPerishable`: Opcional, boolean (default: false) - Si es true, requiere fecha de vencimiento en compras
+* **SKU:** Debe ser único dentro del negocio.
+* **Relaciones:** `categoryId`, `unitId`, `taxId` deben existir.
+* **Recetas:** Si `type === COMPOSITE`, el array `components` es obligatorio y sus ingredientes (`childProductId`) deben existir y pertenecer al negocio.
 
 #### Response (201 Created)
 
 ```json
 {
-  "message": "Producto creado exitosamente",
   "status": 201,
+  "message": "Producto creado exitosamente",
   "data": {
-    "id": 1,
-    "businessId": 1,
-    "categoryId": 1,
-    "name": "Laptop Dell XPS 15",
-    "sku": "LAP-DELL-XPS15-001",
-    "description": "Laptop de alta gama con procesador Intel i7",
-    "price": 1299.99,
-    "cost": 899.99,
-    "minStock": 5,
-    "isService": false,
-    "createdById": 5,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "updatedAt": "2024-01-15T10:30:00.000Z",
-    "category": {
-      "id": 1,
-      "name": "Electrónica"
-    }
+    "id": 100,
+    "name": "Hamburguesa Clásica",
+    "type": "COMPOSITE",
+    "currentStock": 0, // Inicia en 0 hasta que haya producción o compra
+    "components": [
+       { "childProductId": 50, "quantity": 1, "child": { "name": "Pan" } }
+    ]
   }
 }
+
 ```
-
-#### Errores
-
-- `400`: El SKU ya existe en este negocio
-- `404`: Categoría no encontrada o no pertenece a este negocio
-- `404`: Negocio no encontrado
-- `400`: El costo no puede ser mayor que el precio
 
 ---
 
 ### 2. Listar Productos
 
-Obtiene todos los productos del negocio con paginación y búsqueda opcional.
+Obtiene el catálogo con paginación y **Stock Actual Calculado** (suma de lotes).
 
 **Endpoint:** `GET /api/v1/inventory/product`
 
-#### Query Parameters
+#### Query Params
 
-- `page`: Opcional, number, número de página (default: 1)
-- `limit`: Opcional, number, cantidad de resultados por página (default: 20)
-- `search`: Opcional, string, busca por nombre o SKU
-
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
+* `page`: number (def: 1)
+* `limit`: number (def: 20)
+* `search`: string (Busca por nombre o SKU)
+* `categoryId`: number (Filtrar por categoría)
 
 #### Response (200 OK)
 
 ```json
 {
-  "message": "Productos obtenidos exitosamente",
   "status": 200,
-  "data": {
-    "products": [
-      {
-        "id": 1,
-        "businessId": 1,
-        "categoryId": 1,
-        "unitId": 1,
-        "name": "Laptop Dell XPS 15",
-        "sku": "LAP-DELL-XPS15-001",
-        "description": "Laptop de alta gama con procesador Intel i7",
-        "costPrice": 899.99,
-        "salePrice": 1299.99,
-        "minStock": 5,
-        "isService": false,
-        "isPerishable": false,
-        "category": {
-          "id": 1,
-          "name": "Electrónica"
-        },
-        "unit": {
-          "id": 1,
-          "name": "Unidad",
-          "symbol": "u"
-        },
-        "currentStock": 200
-      }
-    ],
-    "pagination": {
-      "page": 1,
-      "limit": 20,
-      "total": 1,
-      "totalPages": 1
+  "message": "Productos obtenidos exitosamente",
+  "data": [
+    {
+      "id": 100,
+      "name": "Harina Pan 1kg",
+      "sku": "HAR-001",
+      "category": { "name": "Víveres" },
+      "unit": { "symbol": "und" },
+      "salePrice": "1.30",
+      "type": "SIMPLE",
+      // Campo calculado en backend (Suma de todos los lotes en todos los depósitos)
+      "currentStock": 150 
     }
+  ],
+  "meta": {
+    "total": 50,
+    "page": 1,
+    "lastPage": 3
   }
 }
+
 ```
-
-#### Errores
-
-- `404`: No hay productos registrados (retorna array vacío)
 
 ---
 
-### 3. Obtener Producto por ID
+### 3. Obtener Producto (Detalle)
 
-Obtiene un producto específico del negocio.
+Devuelve la radiografía completa del producto.
 
 **Endpoint:** `GET /api/v1/inventory/product/:id`
-
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
-
-#### Parámetros
-
-- `id`: ID del producto (número)
 
 #### Response (200 OK)
 
 ```json
 {
-  "message": "Producto obtenido exitosamente",
   "status": 200,
+  "message": "Producto encontrado",
   "data": {
-    "id": 1,
-    "businessId": 1,
-    "categoryId": 1,
-    "name": "Laptop Dell XPS 15",
-    "sku": "LAP-DELL-XPS15-001",
-    "description": "Laptop de alta gama con procesador Intel i7",
-    "price": 1299.99,
-    "cost": 899.99,
-    "minStock": 5,
-    "isService": false,
-    "createdById": 5,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "updatedAt": "2024-01-15T10:30:00.000Z",
-    "category": {
-      "id": 1,
-      "name": "Electrónica"
+    "id": 100,
+    "name": "Hamburguesa Clásica",
+    "type": "COMPOSITE",
+    "currentStock": 0, // Stock físico directo (para recetas suele ser 0)
+    
+    // 1. Dónde está mi stock (si es físico)
+    "stockLots": [
+       { "quantity": 10, "depot": { "name": "Almacén Central" }, "expirationDate": "..." }
+    ],
+
+    // 2. Si soy Receta, qué ingredientes llevo
+    "components": [
+       { "childProductId": 50, "quantity": 1, "child": { "name": "Pan Burger" } }
+    ],
+
+    // 3. Si soy Ingrediente, en qué platos me usan
+    "componentOf": [
+       { "parent": { "id": 200, "name": "Combo Familiar" } }
+    ],
+
+    // 4. Estadísticas rápidas
+    "_count": {
+       "saleItems": 450, // Veces vendido
+       "purchaseItems": 0
     }
   }
 }
+
 ```
-
-#### Errores
-
-- `404`: Producto no encontrado o no pertenece a este negocio
 
 ---
 
 ### 4. Actualizar Producto
 
-Actualiza un producto existente.
+Permite editar datos básicos y **reconfigurar la receta** (si aplica).
 
 **Endpoint:** `PATCH /api/v1/inventory/product/:id`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
+#### Lógica de Actualización de Recetas
 
-#### Parámetros
+Si el producto es `COMPOSITE` y envías el array `components`, el sistema:
 
-- `id`: ID del producto (número)
+1. **Borra** los ingredientes anteriores de este producto.
+2. **Crea** las nuevas relaciones con las nuevas cantidades.
+*Esto permite editar recetas completas simplemente enviando la nueva versión.*
 
 #### Request Body
 
 ```json
 {
-  "name": "Laptop Dell XPS 15 (Actualizado)",
-  "salePrice": 1199.99,
-  "minStock": 10
+  "salePrice": 6.00,
+  "components": [ // Receta actualizada (más carne)
+    { "childProductId": 50, "quantity": 1 },
+    { "childProductId": 51, "quantity": 0.250 } 
+  ]
 }
+
 ```
-
-**Todos los campos son opcionales**, pero al menos uno debe ser enviado.
-
-#### Validaciones
-
-- `name`: Opcional, string, 2-200 caracteres
-- `categoryId`: Opcional, number, debe existir la categoría en el negocio
-- `unitId`: Opcional, number, debe existir la unidad de medida
-- `costPrice`: Opcional, number, debe ser >= 0
-- `salePrice`: Opcional, number, debe ser >= 0
-- `sku`: Opcional, string, 3-50 caracteres, único por negocio
-- `description`: Opcional, string, máximo 1000 caracteres
-- `imageUrl`: Opcional, string, URL válida
-- `minStock`: Opcional, number, debe ser >= 0
-- `isService`: Opcional, boolean
-- `isPerishable`: Opcional, boolean
-
-#### Response (200 OK)
-
-```json
-{
-  "message": "Producto actualizado exitosamente",
-  "status": 200,
-  "data": {
-    "id": 1,
-    "businessId": 1,
-    "categoryId": 1,
-    "unitId": 1,
-    "name": "Laptop Dell XPS 15 (Actualizado)",
-    "sku": "LAP-DELL-XPS15-001",
-    "salePrice": 1199.99,
-    "minStock": 10,
-    "updatedAt": "2024-01-15T11:00:00.000Z"
-  }
-}
-```
-
-#### Errores
-
-- `404`: Producto no encontrado o no pertenece a este negocio
-- `400`: El SKU ya existe en este negocio
-- `404`: Categoría no encontrada o no pertenece a este negocio
-- `404`: Unidad de medida no encontrada
 
 ---
 
-### 5. Eliminar Producto
+### 5. Eliminar Producto (Smart Delete)
 
-Elimina un producto. No se puede eliminar si tiene registros de stock, ventas o compras asociados.
+Aplica una lógica híbrida de seguridad para proteger la integridad contable.
 
 **Endpoint:** `DELETE /api/v1/inventory/product/:id`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
+#### Escenario A: Bloqueo por Stock (409 Conflict)
 
-#### Parámetros
+Si el producto tiene existencias físicas (`stockLots > 0`), **no se puede eliminar ni archivar**.
 
-- `id`: ID del producto (número)
+> *Solución:* El usuario debe hacer un "Ajuste de Salida" para llevar el stock a 0 primero.
 
-#### Response (200 OK)
+#### Escenario B: Archivar (Soft Delete)
+
+Si el producto tiene historial (se ha vendido, comprado o movido) pero ya no tiene stock:
+
+* **Acción:** `isActive = false`
+* **Mensaje:** "Producto archivado correctamente (Se mantiene el historial contable)"
+
+#### Escenario C: Borrado Físico (Hard Delete)
+
+Si el producto se creó por error, nunca se movió y no tiene stock:
+
+* **Acción:** `DELETE FROM DB`
+* **Mensaje:** "Producto eliminado permanentemente"
+
+#### Response (Ejemplo Archivar)
 
 ```json
 {
-  "message": "Producto eliminado exitosamente",
   "status": 200,
-  "data": null
+  "message": "Producto archivado correctamente (Se mantiene el historial contable)",
+  "data": {
+    "id": 100,
+    "isActive": false
+  }
 }
+
 ```
-
-#### Errores
-
-- `404`: Producto no encontrado o no pertenece a este negocio
-- `400`: No se puede eliminar el producto porque tiene registros de stock, ventas o compras asociados
 
 ---
 
-## 🔒 Seguridad
+## ⚠️ Enums Importantes (Frontend)
 
-- Todos los endpoints requieren autenticación
-- Filtrado multi-tenant por `businessId` (header `x-business-id`)
-- Un negocio solo puede gestionar sus propios productos
-- Protección de integridad: no se puede eliminar productos con registros asociados
-- Auditoría: se registra quién creó y actualizó cada producto
+**ProductType:**
+
+* `SIMPLE`: Producto físico estándar (se compra, almacena y vende).
+* `COMPOSITE`: Producto lógico (Receta, Combo, Kit). Su stock depende de sus ingredientes.
+* `SERVICE`: Intangible (Envío, Mano de obra). No maneja stock.
