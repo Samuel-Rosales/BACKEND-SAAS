@@ -144,7 +144,6 @@ model ExchangeRate {
   source    ExchangeRateStrategy @default(MANUAL)
 
   business  Business? @relation(fields: [businessId], references: [id])
-
   // Relaciones inversas: Usadas para saber a qué tasa se pagó una venta antigua
   sales            Sale[]
   salePayments     SalePayment[]
@@ -153,6 +152,20 @@ model ExchangeRate {
   cashCounts       CashCount[]
 
   @@index([createdAt])
+}
+
+model Tax {
+  id          Int      @id @default(autoincrement())
+  //businessId  Int      // Cada negocio podría configurar sus impuestos si aplica, o lo haces global
+  name        String   // Ej: "IVA General", "Exento", "Alicuota Reducida"
+  rate        Decimal  @db.Decimal(5, 4) // 0.1600, 0.0000, 0.0800
+  code        String?  // Para facturación electrónica (si aplica)
+  isActive    Boolean  @default(true)
+
+  products    Product[]
+  
+  // Opcional: Si los impuestos son estándar para todos los tenants, quita businessId
+  //business    Business @relation(fields: [businessId], references: [id])
 }
 
 // ==========================================
@@ -221,6 +234,9 @@ model Product {
   category  Category        @relation(fields: [categoryId], references: [id])
   unit      MeasurementUnit @relation(fields: [unitId], references: [id]) // <--- Relación
   updatedBy User?           @relation(fields: [updatedById], references: [id])
+
+  taxId       Int      
+  tax         Tax      @relation(fields: [taxId], references: [id])
 
   stockLots      StockLot[]
   saleItems      SaleItem[]
@@ -633,4 +649,10 @@ enum ExchangeRateStrategy {
   MANUAL        // El usuario escribe su tasa (ej: 40.5)
   API_BCV       // Se sincroniza auto con el Banco Central
   API_PARALLEL  // Se sincroniza auto con paralelo
+}
+
+enum ProductType {
+  SIMPLE      // Producto físico estándar (se compra y se vende)
+  COMPOSITE   // Receta / Combo / Kit (se compone de otros, stock calculado)
+  SERVICE     // Intangible (no mueve stock)
 }

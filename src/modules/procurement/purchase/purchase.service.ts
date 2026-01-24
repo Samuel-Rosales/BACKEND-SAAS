@@ -1,10 +1,11 @@
 import { prisma } from '@/configs';
 import { CreatePurchaseInterface } from './interfaces';
 import { MovementType } from '@prisma/client';
-import { BusinessError } from '@/utils';
+import { BusinessError, resolveBusinessExchangeRate } from '@/utils';
 
 const NON_PERISHABLE_DATE = new Date('2099-12-31');
 const IVA = 0.16; // 16% de IVA
+const EPSILON = 0.02; // Margen de error aceptable en validaciones monetarias
 
 export const calculatePriceWithMargin = (marginPercentage: number, cost: number): number => {
     // Validación de seguridad: El margen no puede ser 100% o más (división por cero o negativo)
@@ -28,6 +29,23 @@ export class PurchaseService {
     async create(businessId: number, userId: number, data: CreatePurchaseInterface) {
         try {
             // =================================================================
+            // Fase 0: AUTORIDAD DE TASA (LO NUEVO)
+            // =================================================================
+            
+            // Obtenemos la tasa REAL que manda el servidor
+            const currentRateRecord = await resolveBusinessExchangeRate(businessId, prisma);
+
+            // Opcional: Validación estricta "Anti-Sorpresas"
+            // Si el front mandó un ID viejo, lanzamos error para que refresquen.
+            if (data.exchangeRateId && data.exchangeRateId !== currentRateRecord.id) {
+                return { 
+                    status: 409, // Conflict
+                    message: 'La tasa de cambio ha variado durante la operación. Por favor recargue.', 
+                    data: { newRate: currentRateRecord.rate } 
+                };
+            }
+
+            // =================================================================
             // FASE 1: VALIDACIONES PARALELAS
             // =================================================================
             
@@ -40,9 +58,7 @@ export class PurchaseService {
             )];
 
             // --- CONSULTAS PARALELAS ---
-            const [exchangeRate, supplier, products, depots, validPaymentMethods, presentations] = await Promise.all([
-
-                prisma.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
+            const [supplier, products, depots, validPaymentMethods, presentations] = await Promise.all([
 
                 prisma.supplier.findUnique({ where: { id: data.supplierId } }),
 
@@ -60,8 +76,6 @@ export class PurchaseService {
             ]);
     
             // --- VALIDACIONES DE EXISTENCIA ---
-            if (!exchangeRate) return { message: 'Tasa de cambio no encontrada', status: 404, data: null };
-
             if (!supplier) return { message: 'Proveedor no encontrado', status: 404, data: null };
 
             if (!supplier.isActive) return { message: 'Proveedor inactivo', status: 400, data: null };
@@ -99,7 +113,7 @@ export class PurchaseService {
                 calculatedSubTotal += (item.quantity * item.unitCost);
             }
     
-            if (Math.abs(calculatedSubTotal - data.subTotal) > 0.01) {
+            if (Math.abs(calculatedSubTotal - data.subTotal) > EPSILON) {
                 return {
                     message: `Error en montos del subtotal. Calculado: ${calculatedSubTotal}, Enviado: ${data.subTotal}`,
                     status: 400,
@@ -107,7 +121,7 @@ export class PurchaseService {
                 };
             }
 
-            if (Math.abs(calculatedSubTotal * IVA - data.taxAmount) > 0.01) {
+            if (Math.abs(calculatedSubTotal * IVA - data.taxAmount) > EPSILON) {
                 return {
                     message: `Error en montos del IVA. Calculado: ${calculatedSubTotal * IVA}, Enviado: ${data.taxAmount}`,
                     status: 400,
@@ -115,7 +129,7 @@ export class PurchaseService {
                 };
             }
 
-            if (Math.abs(calculatedSubTotal + (calculatedSubTotal * IVA) - data.totalCost) > 0.01) {
+            if (Math.abs(calculatedSubTotal + (calculatedSubTotal * IVA) - data.totalCost) > EPSILON) {
                 return {
                     message: `Error en montos del costo total. Calculado: ${calculatedSubTotal + (calculatedSubTotal * IVA)}, Enviado: ${data.totalCost}`,
                     status: 400,
@@ -141,7 +155,7 @@ export class PurchaseService {
                     totalPayments += pay.amount;
                 }
                 else if (paymentMethod.currency === 'VES') {
-                    totalPayments += pay.amount / Number(exchangeRate.rate);
+                    totalPayments += pay.amount / Number(currentRateRecord.rate);
                 }
             }
 
@@ -164,7 +178,7 @@ export class PurchaseService {
                         memberId: userId,
 
                         supplierId: data.supplierId,
-                        exchangeRateId: data.exchangeRateId,
+                        exchangeRateId: currentRateRecord.id,
                         subTotal: data.subTotal, // por validación previa (hacer pruebas extensivas aquí)
                         taxAmount: data.taxAmount,
                         totalCost: data.totalCost,
@@ -278,7 +292,7 @@ export class PurchaseService {
 
                             paymentMethodId: pay.paymentMethodId,
                             amount: pay.amount,
-                            exchangeRateId: data.exchangeRateId,
+                            exchangeRateId: currentRateRecord.id,
                             reference: pay.reference || "N/A"
                         }))
                     });
