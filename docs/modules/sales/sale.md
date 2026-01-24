@@ -1,498 +1,271 @@
-# Módulo Sales - Ventas
+# Módulo Sales - Ventas (POS & B2B)
 
-## ✅ Endpoints actuales (v2026-01-23)
+## ✅ Resumen de Endpoints
 
-Base URL: `/api/v1/sales/sale`
+**Base URL:** `/api/v1/sales`
+**Autenticación:** ✅ Requerida (Bearer Token)
+**Header Multi-tenant:** 🟢 Requerido (`x-business-id`)
 
-**Autenticación:** ✅ Requerida
-
-**Endpoints:**
-- `POST /` — Crear venta
-- `GET /` — Listar ventas (query: `page`, `limit`, `startDate`, `endDate`, `status`)
-- `GET /credit` — Listar ventas a crédito
-- `GET /:id` — Obtener venta
-- `GET /:id/sale-payment` — Obtener historial de pagos
-- `PATCH /:id` — Actualizar venta
-- `POST /:id/sale-payment` — Agregar pago
-
-**Nota:** Enviar `x-business-id` para contexto de negocio.
-
-## 📍 Endpoints
-
-Base URL: `/api/v1/sales/sale`
-
-**Autenticación:** ✅ Requerida
-
-**Header Multi-tenant:** `x-business-id: <businessId>`
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `POST` | `/` | **Registrar Venta** (Facturación, descargo de stock y pagos) |
+| `GET` | `/` | **Listar Ventas** (Histórico general con filtros) |
+| `GET` | `/:id` | **Obtener Venta** (Detalle completo, items y trazabilidad) |
+| `POST` | `/:id/payment` | **Registrar Pago** (Abono a Cuentas por Cobrar) |
+| `GET` | `/credits` | **Cuentas por Cobrar** (Listado de clientes con deuda) |
+| `GET` | `/:id/payment-history` | **Detalle Financiero** (Resumen de pagos y saldos) |
 
 ---
 
-### 1. Crear Venta
+## 📍 Detalle de Endpoints
 
-Registra una nueva venta de productos. Este endpoint realiza múltiples operaciones en una transacción:
-- Crea la cabecera de venta con número de recibo consecutivo
-- Registra los items de venta
-- Registra los pagos realizados
-- Actualiza el inventario (reduce stock usando FIFO/FEFO)
-- Registra movimientos de stock tipo `OUT`
-- Crea trazabilidad de lotes (`SaleItemLot`)
+### 1. Registrar Venta (Create Sale)
 
-**Endpoint:** `POST /api/v1/sales/sale`
+Es el corazón del sistema. Ejecuta una **Transacción Atómica** compleja:
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
+1. **Validación Preventiva:** Verifica stock disponible (incluyendo recetas recursivas) antes de crear la factura.
+2. **Anti-Sorpresas:** Valida que la tasa de cambio (`exchangeRateId`) no haya variado.
+3. **Inventario:** Descuenta stock FIFO y genera trazabilidad (Lotes -> SaleItems).
+4. **Finanzas:** Calcula impuestos, descuentos prorrateados y registra pagos iniciales.
+
+**Endpoint:** `POST /api/v1/sales`
 
 #### Request Body
 
+**Escenario: Venta Mixta (Contado + Crédito)**
+*Vende 2 productos, paga una parte en Zelle (USD) y el resto queda a Crédito.*
+
 ```json
 {
-  "clientId": 1,
-  "memberId": 5,
-  "exchangeRateId": 1,
-  "conditions": "CASH",
-  "type": "RETAIL",
-  "subTotal": 1000.00,
-  "taxAmount": 160.00,
-  "discount": 50.00,
-  "totalAmount": 1110.00,
-  "paymentDueDate": null,
+  "clientId": 45,
+  "exchangeRateId": 102, // ID de la tasa ACTUAL mostrada en pantalla
+  "type": "RETAIL",      // "RETAIL" | "WHOLESALE"
+  "condition": "CREDIT", // "CASH" | "CREDIT"
+  "depotId": 1,          // ⚠️ IMPORTANTE: Almacén de origen (Header)
+  "paymentDueDate": "2026-02-28", // Fecha límite de pago
+
+  "discount": 0,         // Descuento Global (Monto, no porcentaje)
+
+  // --- ITEMS (Carrito de Compra) ---
   "items": [
     {
-      "productId": 1,
-      "productPresentationId": 2,
-      "quantity": 10,
-      "unitPrice": 100.00,
-      "subTotal": 1000.00
+      "productId": 10,
+      "quantity": 2,     // Cantidad visual
+      "productPresentationId": 5 // Opcional (ej: Pack x6)
     }
+    // Nota: El backend calculará precios, impuestos y recetas automáticamente.
   ],
+
+  // --- PAGOS INICIALES (Abono) ---
   "payments": [
     {
-      "paymentMethodId": 1,
-      "exchangeRateId": 1,
-      "amount": 1110.00,
-      "currency": "USD",
-      "reference": "EFECTIVO-001"
+      "paymentMethodId": 2, // Zelle
+      "amount": 50.00,      // Monto en moneda del método
+      "reference": "REF-12345"
     }
+  ],
+
+  // --- PLAN DE CUOTAS (Solo si condition = CREDIT) ---
+  // La suma de installments debe ser igual al (Total - Pagos Iniciales)
+  "installments": [
+    { "number": 1, "amount": 100.00, "dueDate": "2026-02-15" },
+    { "number": 2, "amount": 45.50,  "dueDate": "2026-02-28" }
   ]
 }
+
 ```
 
-#### Validaciones
+#### Validaciones Clave (Backend)
 
-**Cabecera:**
-- `clientId`: Obligatorio, number, debe existir el cliente y pertenecer al negocio
-- `memberId`: Opcional, number, ID del vendedor (si no se envía, se usa el usuario autenticado)
-- `exchangeRateId`: Obligatorio, number, debe existir la tasa de cambio y estar activa
-- `conditions`: Obligatorio, enum (`CASH`, `CREDIT`)
-- `type`: Opcional, enum (`RETAIL`, `WHOLESALE`), default: `RETAIL`
-- `subTotal`: Obligatorio, number, debe ser >= 0
-- `taxAmount`: Obligatorio, number, debe ser >= 0
-- `discount`: Opcional, number, debe ser >= 0
-- `totalAmount`: Obligatorio, number, debe ser >= 0 (debe ser igual a subTotal + taxAmount - discount)
-- `paymentDueDate`: Opcional, string (YYYY-MM-DD), **obligatorio si conditions es `CREDIT`**
+* **Stock:** Si envías `depotId`, se descuenta solo de ese almacén. Si es `null`, busca globalmente. Si es un `SERVICE`, no valida stock.
+* **Tasa:** Si el `exchangeRateId` enviado es diferente al activo en BD, devuelve `409 Conflict`. El front debe refrescar la tasa.
+* **Matemática:** El sistema usa `Decimal` (precisión bancaria).
+* `Cash`: Si `pagos < total`, error 400.
+* `Credit`: `total - pagos_iniciales === suma(installments)`. Tolerancia de $0.05.
 
-**Items:**
-- `productId`: Obligatorio, number, debe existir el producto, estar activo y pertenecer al negocio
-- `productPresentationId`: Opcional, number, debe existir la presentación si se proporciona
-- `quantity`: Obligatorio, number, debe ser > 0
-- `unitPrice`: Obligatorio, number, debe ser >= 0
-- `subTotal`: Obligatorio, number, debe ser igual a quantity × unitPrice (con tolerancia de 0.05)
 
-**Pagos:**
-- `paymentMethodId`: Obligatorio, number, debe existir el método de pago y estar activo
-- `exchangeRateId`: Obligatorio, number, debe existir la tasa de cambio
-- `amount`: Obligatorio, number, debe ser > 0
-- `currency`: Obligatorio, enum (`USD`, `VES`)
-- `reference`: Opcional, string, referencia bancaria o de pago
-
-**Validaciones Adicionales:**
-- La suma de `items.subTotal` debe coincidir con `subTotal` (con tolerancia de 0.05)
-- El `totalAmount` debe ser igual a `subTotal + taxAmount - discount` (con tolerancia de 0.05)
-- Para productos físicos (no servicios), se valida que haya stock suficiente
-- Los productos marcados como `isService: true` no requieren validación de stock
-- Si `conditions` es `CREDIT`, debe proporcionarse `paymentDueDate`
 
 #### Response (201 Created)
 
 ```json
 {
-  "message": "Venta registrada exitosamente",
   "status": 201,
+  "message": "Venta registrada exitosamente",
   "data": {
-    "id": 1,
-    "businessId": 1,
-    "receiptNumber": 1,
-    "memberId": 5,
-    "clientId": 1,
-    "exchangeRateId": 1,
-    "type": "RETAIL",
-    "status": "COMPLETED",
-    "subTotal": 1000.00,
-    "taxAmount": 160.00,
-    "discount": 50.00,
-    "totalAmount": 1110.00,
-    "remainingBalance": 0,
-    "paymentDueDate": null,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "client": {
-      "name": "Juan Pérez",
-      "ci": "V-12345678"
-    },
-    "member": {
-      "user": {
-        "name": "Carlos Vendedor"
-      }
-    },
-    "exchangeRate": {
-      "id": 1,
-      "rate": 36.50,
-      "currency": "USD"
-    },
-    "items": [
-      {
-        "id": 1,
-        "saleId": 1,
-        "productId": 1,
-        "productPresentationId": 2,
-        "quantity": 10,
-        "unitPrice": 100.00,
-        "subTotal": 1000.00,
-        "product": {
-          "id": 1,
-          "name": "Producto A",
-          "sku": "PROD-A-001",
-          "imageUrl": "https://example.com/image.jpg"
-        },
-        "productPresentation": {
-          "id": 2,
-          "name": "Caja x12",
-          "factor": 12
-        }
-      }
-    ],
-    "payments": [
-      {
-        "id": 1,
-        "saleId": 1,
-        "paymentMethodId": 1,
-        "amount": 1110.00,
-        "currency": "USD",
-        "reference": "EFECTIVO-001",
-        "paymentMethod": {
-          "name": "Efectivo",
-          "type": "CASH"
-        },
-        "exchangeRate": {
-          "rate": 36.50,
-          "currency": "USD"
-        }
-      }
-    ]
+    "id": 88,
+    "receiptNumber": 1045,
+    "totalAmount": "195.50",
+    "remainingBalance": "145.50", // Lo que quedó debiendo
+    "paymentStatus": "PARTIAL",   // PENDING, PARTIAL, PAID
+    "items": [...]
   }
 }
+
 ```
-
-#### Errores
-
-- `404`: La tasa de cambio no existe o está inactiva
-- `404`: El cliente no existe o no pertenece a este negocio
-- `404`: El vendedor no existe o no pertenece a este negocio
-- `404`: Uno o más productos no existen, están inactivos o no pertenecen al negocio
-- `404`: Uno o más métodos de pago no existen o están inactivos
-- `400`: Error matemático: La suma de items no coincide con el SubTotal
-- `400`: Error matemático: El total no coincide con subTotal + taxAmount - discount
-- `400`: Stock insuficiente para uno o más productos
-- `400`: Si conditions es CREDIT, paymentDueDate es obligatorio
 
 ---
 
-### 2. Listar Ventas
+### 2. Listar Ventas (Find All)
 
-Obtiene todas las ventas del negocio con paginación y filtros opcionales.
+Listado general con filtros avanzados.
 
-**Endpoint:** `GET /api/v1/sales/sale`
+**Endpoint:** `GET /api/v1/sales`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
+#### Query Params
 
-#### Query Parameters
+* `page`: number (def: 1)
+* `limit`: number (def: 20)
+* `fromDate`: YYYY-MM-DD
+* `toDate`: YYYY-MM-DD
+* `clientId`: number
+* `status`: `COMPLETED` | `CANCELLED`
 
-- `page`: Opcional, number, número de página (default: 1)
-- `limit`: Opcional, number, cantidad de resultados por página (default: 20, máximo: 100)
-- `fromDate`: Opcional, string (YYYY-MM-DD), fecha inicial del rango
-- `toDate`: Opcional, string (YYYY-MM-DD), fecha final del rango
-- `clientId`: Opcional, number, filtrar por ID de cliente
-- `status`: Opcional, enum (`PENDING`, `COMPLETED`, `CANCELLED`, `REFUNDED`), filtrar por estado
+---
 
-**Nota:** Si se proporcionan `fromDate` y `toDate`, se filtran las ventas por ese rango.
+### 3. Cuentas por Cobrar (Find Credits) 🆕
+
+Endpoint optimizado para la gestión de cobranza. Devuelve solo las ventas que tienen saldo pendiente (`remainingBalance > 0`).
+
+**Endpoint:** `GET /api/v1/sales/credits`
 
 #### Response (200 OK)
 
 ```json
 {
-  "message": "Ventas obtenidas exitosamente",
   "status": 200,
+  "message": "Créditos obtenidos exitosamente",
   "data": [
     {
-      "id": 1,
-      "businessId": 1,
-      "receiptNumber": 1,
-      "clientId": 1,
-      "type": "RETAIL",
-      "status": "COMPLETED",
-      "totalAmount": 1110.00,
-      "remainingBalance": 0,
-      "createdAt": "2024-01-15T10:30:00.000Z",
-      "client": {
-        "name": "Juan Pérez",
-        "ci": "V-12345678"
-      },
-      "member": {
-        "user": {
-          "name": "Carlos Vendedor"
-        }
-      },
-      "exchangeRate": {
-        "rate": 36.50,
-        "currency": "USD"
-      },
-      "_count": {
-        "items": 1,
-        "payments": 1
-      }
+      "id": 88,
+      "saleId": 1045, // Nro Factura Visual
+      "clientName": "Farmacia Saas",
+      "totalAmount": 195.50,
+      "paidAmount": 50.00,
+      "remainingBalance": 145.50, // Lo que debe mostrarse en rojo
+      "dueDate": "2026-02-28T00:00:00.000Z",
+      "status": "PARTIAL"
     }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 1,
-    "totalPages": 1
-  }
+  ]
 }
+
 ```
 
 ---
 
-### 3. Obtener Venta por ID
+### 4. Registrar Pago / Abono (Add Payment)
 
-Obtiene una venta específica con todos sus items, pagos y trazabilidad de lotes.
+Registra un abono a una venta existente. Usa lógica **Waterfall (Cascada)**: el pago cubre automáticamente las cuotas más antiguas primero.
 
-**Endpoint:** `GET /api/v1/sales/sale/:id`
+**Endpoint:** `POST /api/v1/sales/:id/payment`
 
-**Headers:**
+#### Request Body
+
+**Escenario: Cliente paga en Bolívares (VES)**
+
+```json
+{
+  "paymentMethodId": 3,  // Pago Móvil (Moneda: VES)
+  "exchangeRateId": 103, // Tasa DEL DÍA del pago (ej: 50.00)
+  "amount": 2500.00,     // Monto en Bolívares
+  "reference": "PM-998877"
+}
+
 ```
-Authorization: Bearer <token>
-x-business-id: 1
-```
 
-#### Parámetros de URL
+#### Lógica Interna
 
-- `id` (number): ID de la venta
+1. El backend detecta que el método es `VES`.
+2. Convierte: `2500 VES / 50.00 Tasa = $50.00 USD`.
+3. Verifica que `$50.00 <= Deuda Pendiente`.
+4. Resta $50.00 del `remainingBalance`.
+5. Busca las cuotas pendientes más viejas y las marca como `PAID` hasta agotar los $50.
 
 #### Response (200 OK)
 
 ```json
 {
-  "message": "Venta obtenida exitosamente",
+  "status": 200,
+  "message": "Abono registrado correctamente",
+  "data": {
+    "payment": { "id": 12, "amount": "2500", "reference": "PM-998877" },
+    "newBalance": 95.50,    // Nuevo saldo en USD
+    "status": "PARTIAL"
+  }
+}
+
+```
+
+---
+
+### 5. Historial Financiero (Payment History)
+
+Obtiene la radiografía completa de los pagos de una venta. Útil para auditoría o para mostrar al cliente "qué ha pagado".
+
+**Endpoint:** `GET /api/v1/sales/:id/payment-history`
+
+#### Response (200 OK)
+
+```json
+{
   "status": 200,
   "data": {
-    "id": 1,
-    "businessId": 1,
-    "receiptNumber": 1,
-    "memberId": 5,
-    "clientId": 1,
-    "exchangeRateId": 1,
-    "type": "RETAIL",
-    "status": "COMPLETED",
-    "subTotal": 1000.00,
-    "taxAmount": 160.00,
-    "discount": 50.00,
-    "totalAmount": 1110.00,
-    "remainingBalance": 0,
-    "paymentDueDate": null,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "client": {
-      "id": 1,
-      "name": "Juan Pérez",
-      "ci": "V-12345678",
-      "phone": "+58 212 1234567",
-      "email": "juan.perez@example.com"
+    "saleInfo": {
+      "receiptNumber": 1045,
+      "status": "PARTIAL"
     },
-    "member": {
-      "id": 5,
-      "user": {
-        "name": "Carlos Vendedor",
-        "ci": "V-11111111"
-      }
+    "summary": {
+      "totalDebt": 195.50,
+      "totalPaid": 100.00,
+      "currentDebt": 95.50
     },
-    "exchangeRate": {
-      "id": 1,
-      "rate": 36.50,
-      "currency": "USD",
-      "createdAt": "2024-01-15T00:00:00.000Z"
-    },
-    "items": [
+    "history": [
       {
-        "id": 1,
-        "saleId": 1,
-        "productId": 1,
-        "productPresentationId": 2,
-        "quantity": 10,
-        "unitPrice": 100.00,
-        "subTotal": 1000.00,
-        "product": {
-          "id": 1,
-          "name": "Producto A",
-          "sku": "PROD-A-001",
-          "imageUrl": "https://example.com/image.jpg"
-        },
-        "productPresentation": {
-          "id": 2,
-          "name": "Caja x12",
-          "factor": 12
-        },
-        "lotAllocations": [
-          {
-            "id": 1,
-            "saleItemId": 1,
-            "stockLotId": 5,
-            "quantity": 10,
-            "stockLot": {
-              "id": 5,
-              "expirationDate": "2024-12-31T00:00:00.000Z",
-              "lotCost": 80.00
-            }
-          }
-        ]
-      }
-    ],
-    "payments": [
+        "id": 12,
+        "date": "2026-01-25...",
+        "methodName": "Pago Móvil",
+        "currency": "VES",
+        "originalAmount": 2500,  // Lo que salió del banco del cliente
+        "rateUsed": 50.00,       // Tasa usada ese día
+        "usdEquivalent": 50.00   // Lo que realmente bajó la deuda
+      },
       {
-        "id": 1,
-        "saleId": 1,
-        "paymentMethodId": 1,
-        "amount": 1110.00,
+        "id": 5,
+        "date": "2026-01-24...",
+        "methodName": "Zelle",
         "currency": "USD",
-        "reference": "EFECTIVO-001",
-        "date": "2024-01-15T10:30:00.000Z",
-        "paymentMethod": {
-          "name": "Efectivo",
-          "type": "CASH"
-        },
-        "exchangeRate": {
-          "rate": 36.50,
-          "currency": "USD"
-        }
+        "originalAmount": 50,
+        "rateUsed": 50.00,
+        "usdEquivalent": 50.00
       }
     ]
   }
 }
-```
 
-#### Response (404 Not Found)
-
-```json
-{
-  "message": "Venta no encontrada",
-  "status": 404,
-  "data": null
-}
 ```
 
 ---
 
-### 4. Actualizar Venta
+## ⚠️ Enums y Constantes
 
-Actualiza el estado y saldo pendiente de una venta existente. Solo se pueden actualizar campos específicos.
+Para evitar errores `400 Bad Request`, el Frontend debe respetar estrictamente:
 
-**Endpoint:** `PATCH /api/v1/sales/sale/:id`
+**SaleType:**
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
+* `RETAIL` (PVP)
+* `WHOLESALE` (Mayorista)
 
-#### Parámetros de URL
+**Conditions (Condición de Pago):**
 
-- `id` (number): ID de la venta
+* `CASH` (Contado)
+* `CREDIT` (Crédito)
 
-#### Request Body (todos los campos son opcionales)
+**PaymentStatus (Estado de la Venta):**
 
-```json
-{
-  "status": "CANCELLED",
-  "remainingBalance": 500.00,
-  "paymentDueDate": "2024-02-15"
-}
-```
+* `PENDING` (No ha pagado nada - *Solo posible en Crédito*)
+* `PARTIAL` (Abonó algo, debe algo)
+* `PAID` (Deuda saldada, saldo <= 0.05)
 
-#### Validaciones
+**InstallmentStatus (Estado de Cuota):**
 
-- `status`: Opcional, enum (`PENDING`, `COMPLETED`, `CANCELLED`, `REFUNDED`)
-- `remainingBalance`: Opcional, number, debe ser >= 0
-- `paymentDueDate`: Opcional, string (YYYY-MM-DD), fecha de vencimiento
-
-#### Response (200 OK)
-
-```json
-{
-  "message": "Venta actualizada exitosamente",
-  "status": 200,
-  "data": {
-    "id": 1,
-    "businessId": 1,
-    "receiptNumber": 1,
-    "status": "CANCELLED",
-    "remainingBalance": 500.00,
-    "paymentDueDate": "2024-02-15T00:00:00.000Z",
-    "client": {
-      "name": "Juan Pérez"
-    },
-    "member": {
-      "user": {
-        "name": "Carlos Vendedor"
-      }
-    }
-  }
-}
-```
-
-#### Errores
-
-- `404`: Venta no encontrada o no pertenece a este negocio
-- `400`: El saldo pendiente no puede ser negativo
-
----
-
-## 🔒 Seguridad
-
-- Todos los endpoints requieren autenticación
-- Filtrado multi-tenant por `businessId` (header `x-business-id`)
-- Un negocio solo puede gestionar sus propias ventas
-- Validación matemática de totales en el backend
-- Transacciones atómicas: si falla algo, se revierte todo
-- Validación de stock antes de procesar la venta
-
-## 📝 Notas
-
-- **Número de Recibo:** Se genera automáticamente de forma consecutiva por negocio (`receiptNumber`)
-- **Actualización de Inventario:** Al crear una venta, automáticamente:
-  - Se reduce el stock usando FIFO/FEFO (lotes más antiguos primero)
-  - Se crean registros `SaleItemLot` para trazabilidad exacta
-  - Se registran movimientos de stock tipo `OUT` con costo histórico del lote
-- **Productos Servicio:** Los productos marcados como `isService: true` no requieren validación ni reducción de stock
-- **Ventas a Crédito:** 
-  - Si `conditions` es `CREDIT`, se calcula `remainingBalance` automáticamente (totalAmount - suma de pagos)
-  - Se requiere `paymentDueDate` para ventas a crédito
-  - El `remainingBalance` se puede actualizar cuando se registren pagos adicionales
-- **Presentaciones:** El campo `productPresentationId` es opcional. Si no se proporciona, se usa la unidad base del producto
-- **Múltiples Pagos:** Se pueden registrar múltiples pagos con diferentes métodos y monedas
-- **Estado:** Las ventas se crean con estado `COMPLETED` automáticamente
-- **Trazabilidad:** Cada item de venta mantiene relación con los lotes específicos de los que se extrajo el stock (`lotAllocations`)
+* `PENDING`
+* `PAID`

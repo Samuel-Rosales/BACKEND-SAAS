@@ -1,59 +1,41 @@
-// =================================================================
-// 1. ITEMS (Detalle de productos)
-// =================================================================
+import { Conditions, SaleType } from '@prisma/client';
+
+export interface CreateSaleInstallmentDto {
+    number: number;
+    amount: number;
+    dueDate: Date | string;
+}
+
 export interface CreateSaleItemDto {
     productId: number;
-    productPresentationId?: number; // Opcional (si es null, es la unidad base)
-    
-    quantity: number;
-    unitPrice: number; // Precio unitario bruto (o neto, según tu config de impuestos)
-    
-    // El frontend envía esto para "doble chequeo", 
-    // pero el backend debe recalcular (quantity * unitPrice) y validar que coincida.
-    subTotal: number;
-    stockLotId?: number; // Opcional: Para ventas con lotes específicos
+    productPresentationId?: number; // Opcional (Si es null, es la unidad base)
+    quantity: number; // Cantidad visual (ej: 2 Cajas)
+    price?: number;   // Opcional: Sobreescribir precio del sistema
+    // discount?: number; // Opcional: Descuento por línea (Lo dejaremos para v3 si quieres simplificar ahora)
 }
 
-// =================================================================
-// 2. PAGOS (Bi-monetario)
-// =================================================================
-export interface SalePaymentDto {
+export interface CreateSalePaymentDto {
     paymentMethodId: number;
-    exchangeRateId: number; // ID de la tasa usada para este pago específico
-    
-    amount: number; // Monto numérico
-    
-    reference?: string; // Opcional: "Zelle #12345", "Lote #999"
+    exchangeRateId: number;
+    amount: number; // Monto nominal (ej: 100 Bs)
+    reference?: string;
 }
 
-// =================================================================
-// 3. CABECERA (La Venta Principal)
-// =================================================================
 export interface CreateSaleInterface {
     clientId: number;
-    memberId: number; // ID del Vendedor asignado a la venta
-    exchangeRateId: number; // ID de la tasa global del día (para reportes)
-
-    // --- Lógica de Negocio ---
-    conditions: 'CASH' | 'CREDIT';
-    type: 'RETAIL' | 'WHOLESALE'; // Default: RETAIL (backend)
+    exchangeRateId: number;
+    type: SaleType; // RETAIL / WHOLESALE
+    depotId: number;
     
-    // Nota: Eliminamos 'status' y 'creditStatus' porque al crear la venta:
-    // 1. status siempre nace como 'COMPLETED' (o 'DRAFT' si tienes carrito).
-    // 2. paymentStatus se calcula solo (si payments >= total ? PAID : PENDING).
+    // --- FINANZAS ---
+    discount: number; // Descuento Global en dinero (ej: $5.00)
+    
+    // --- CONDICIONES ---
+    condition: Conditions; // CASH / CREDIT
+    installments?: CreateSaleInstallmentDto[]; // Obligatorio si es CREDIT
 
-    // --- Totales y Desglose Fiscal (Nuevo) ---
-    // Enviamos el desglose para asegurar que el frontend y backend coincidan en los centavos
-    subTotal: number;  // Base imponible
-    taxAmount: number; // Monto del IVA
-    discount?: number; // Opcional: Descuentos globales
-    totalAmount: number; // La suma final que el cliente debe pagar
-
-    // --- Crédito (Solo si conditions === 'CREDIT') ---
-    // Eliminamos 'remainingBalance' por seguridad (el backend lo calcula: total - pagos)
-    paymentDueDate?: string; // Obligatorio si es CREDIT. Formato ISO: "2023-12-31"
-
-    // --- Arrays de Datos ---
     items: CreateSaleItemDto[];
-    payments: SalePaymentDto[]; // Puede estar vacío si es 100% Crédito
+    payments: CreateSalePaymentDto[]; // Puede estar vacío si es Crédito total
+    
+    paymentDueDate?: Date | string; // Fecha límite general (para reportes rápidos)
 }
