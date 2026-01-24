@@ -209,43 +209,76 @@ model Category {
 }
 
 model Product {
-  id          Int     @id @default(autoincrement())
-  businessId  Int
-  categoryId  Int
-  unitId      Int // <--- NUEVO: Unidad base (kg, und)
-  name        String
-  sku         String?
-  description String? @default("")
-  imageUrl    String?
+  id            Int     @id @default(autoincrement())
+  businessId    Int
+  categoryId    Int
+  unitId        Int
+  taxId         Int
+  
+  name          String
+  sku           String?
+  description   String? @default("")
+  imageUrl      String?
 
-  costPrice Decimal @default(0) @db.Decimal(15, 2)
-  profitMargin Decimal @default(0) @db.Decimal(5, 4) // Porcentaje de ganancia esperado
-  salePrice Decimal @default(0) @db.Decimal(15, 2)
+  // --- COMPORTAMIENTO ---
+  // Reemplaza a isService. Define CÓMO se comporta el producto.
+  type          ProductType @default(SIMPLE) 
+  
+  // Se mantiene. Define si pedimos fecha de vencimiento al comprar.
+  isPerishable  Boolean @default(false) 
 
-  minStock     Int     @default(0)
-  isService    Boolean @default(false)
-  isPerishable Boolean @default(false)
+  // --- FINANZAS ---
+  costPrice     Decimal @default(0) @db.Decimal(15, 2)
+  profitMargin  Decimal @default(0) @db.Decimal(5, 4)
+  salePrice     Decimal @default(0) @db.Decimal(15, 2)
 
-  updatedAt   DateTime @updatedAt
-  updatedById Int?
-  isActive    Boolean  @default(true)
+  // --- STOCK ---
+  minStock      Int     @default(0)
 
-  business  Business        @relation(fields: [businessId], references: [id])
-  category  Category        @relation(fields: [categoryId], references: [id])
-  unit      MeasurementUnit @relation(fields: [unitId], references: [id]) // <--- Relación
-  updatedBy User?           @relation(fields: [updatedById], references: [id])
+  updatedAt     DateTime @updatedAt
+  isActive      Boolean  @default(true)
+  updatedById   Int?
 
-  taxId       Int      
-  tax         Tax      @relation(fields: [taxId], references: [id])
+  // RELACIONES
+  business      Business        @relation(fields: [businessId], references: [id])
+  category      Category        @relation(fields: [categoryId], references: [id])
+  unit          MeasurementUnit @relation(fields: [unitId], references: [id])
+  tax           Tax             @relation(fields: [taxId], references: [id])
+  updatedBy     User?           @relation(fields: [updatedById], references: [id])
 
-  stockLots      StockLot[]
-  saleItems      SaleItem[]
-  purchaseItems  PurchaseItem[]
-  stockMovements StockMovement[]
-  presentations  ProductPresentation[] // <--- Cajas, Packs
-  creditNotes    CreditNoteItem[]
+  // Relaciones Transaccionales
+  stockLots       StockLot[]
+  saleItems       SaleItem[]
+  purchaseItems   PurchaseItem[]
+  stockMovements  StockMovement[]
+  presentations   ProductPresentation[]
+  creditNotes     CreditNoteItem[]
+
+  // --- RELACIONES DE RECETAS / COMBOS (La Magia) ---
+  // 1. Si este producto es un PLATO (Composite), aquí están sus ingredientes:
+  components      ProductComponent[] @relation("ParentProduct")
+
+  // 2. Si este producto es un INGREDIENTE (Simple), aquí dice en qué platos se usa:
+  componentOf     ProductComponent[] @relation("ChildProduct")
 
   @@index([businessId, sku])
+}
+
+// TABLA DE RELACIÓN (La Receta / BOM)
+model ProductComponent {
+  id              Int @id @default(autoincrement())
+  
+  parentProductId Int // El ID del Plato (Hamburguesa)
+  childProductId  Int // El ID del Ingrediente (Carne)
+  
+  // Cantidad necesaria para hacer 1 unidad del padre
+  quantity        Decimal @db.Decimal(10, 4) 
+
+  parent  Product @relation("ParentProduct", fields: [parentProductId], references: [id])
+  child   Product @relation("ChildProduct", fields: [childProductId], references: [id])
+
+  @@index([parentProductId])
+  @@index([childProductId])
 }
 
 model ProductPresentation {
