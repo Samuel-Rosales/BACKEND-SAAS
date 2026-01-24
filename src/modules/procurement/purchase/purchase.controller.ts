@@ -101,4 +101,96 @@ export class PurchaseController {
             });
         }
     }
+
+    async addPayment(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user;
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            const purchaseId = Number(req.params.id);
+
+            if (!purchaseId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El ID de la compra es inválido.',
+                    data: null
+                });
+            }
+
+            const paymentData = req.body;
+
+            const {data, status, message} = await service.addPayment(businessId, purchaseId, paymentData);
+
+            return res.status(status).json({ data, status, message });
+        } catch (error) {
+            console.error('Error en PurchaseController.addPayment:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al agregar el pago a la compra',
+                data: null
+            });
+        }
+    }
+
+    async findPayables(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user;
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+            const {data, status, message} = await service.findPayables(businessId);
+
+            return res.status(status).json({ data, status, message });
+
+        } catch (error) {
+            console.error('Error en PurchaseController.findPayables:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al obtener las cuentas por pagar',
+                data: null
+            });
+        }
+    }
+
+    async getPurchasePaymentDetails(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user;
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+            const purchaseId = Number(req.params.id);
+            if (!purchaseId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El ID de la compra es inválido.',
+                    data: null
+                });
+            }
+            const {data, status, message} = await service.getPurchasePaymentDetails(businessId, purchaseId);
+
+            return res.status(status).json({ data, status, message });
+        } catch (error) {
+            console.error('Error en PurchaseController.getPurchasePaymentDetails:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al obtener los detalles de pago de la compra',
+                data: null
+            });
+        }
+    }
 }

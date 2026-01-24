@@ -125,5 +125,14 @@ export class PurchaseValidator {
     param('id')
       .isInt().withMessage('ID de compra inválido')
       .toInt()
+      .custom(async (id, { req }) => {
+        const businessId = req.user.businessId;
+        if (!businessId) return true;
+        const purchase = await prisma.purchase.findFirst({
+          where: { id: Number(id), businessId: Number(businessId) }
+        });
+        if (!purchase) throw new Error('La compra no existe o no pertenece a tu negocio.');
+        return true;
+      })
   ];
 }

@@ -35,6 +35,25 @@ router.get(
     controller.findOne
 );
 
+router.post(
+    '/:id/purchase-payment',
+    validator.validateId,
+    handleValidationErrors,
+    controller.addPayment
+);
+
+router.get(
+    '/payables',
+    controller.findPayables
+);
+
+router.get(
+    '/:id/purchase-payment/details',
+    validator.validateId,
+    handleValidationErrors,
+    controller.getPurchasePaymentDetails
+);
+
 export const PurchaseRoute = router;
 
 export default router;
