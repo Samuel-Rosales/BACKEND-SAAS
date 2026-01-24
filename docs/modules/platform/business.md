@@ -11,6 +11,7 @@ Base URL: `/api/v1/platform/business`
 - `GET /my-businesses` — Listar negocios del usuario
 - `GET /:id` — Obtener negocio
 - `PATCH /:id` — Actualizar negocio
+- `PATCH /:id/exchange-rate-config` — Configurar tasa de cambio del negocio
 
 ## 📍 Endpoints
 
@@ -62,7 +63,6 @@ Authorization: Bearer <token>
 ```json
 {
   "message": "Negocio creado exitosamente",
-  "status": 201,
   "data": {
     "id": 1,
     "name": "Mi Super Negocio",
@@ -113,7 +113,6 @@ Authorization: Bearer <token>
 ```json
 {
   "message": "Negocios obtenidos exitosamente",
-  "status": 200,
   "data": [
     {
       "id": 1,
@@ -152,7 +151,6 @@ Authorization: Bearer <token>
 ```json
 {
   "message": "Empresa obtenida exitosamente",
-  "status": 200,
   "data": {
     "id": 1,
     "name": "Mi Super Negocio",
@@ -175,7 +173,6 @@ Authorization: Bearer <token>
 ```json
 {
   "message": "Empresa no encontrada o no tienes acceso.",
-  "status": 404,
   "data": null
 }
 ```
@@ -204,9 +201,7 @@ Authorization: Bearer <token>
   "name": "Mi Negocio Actualizado",
   "address": "Nueva Dirección 456",
   "logoUrl": "https://ejemplo.com/nuevo-logo.png",
-  "businessCategoryId": 2,
-  "rateStrategy": "MANUAL",
-  "manualRate": 54.30
+  "businessCategoryId": 2
 }
 ```
 
@@ -216,15 +211,12 @@ Authorization: Bearer <token>
 - `address`: Opcional, string, 5-200 caracteres
 - `logoUrl`: Opcional, string, URL válida
 - `businessCategoryId`: Opcional, number, debe existir
-- `rateStrategy`: Opcional, enum (`MANUAL`, `API_BCV`, `API_PARALLEL`)
-- `manualRate`: Opcional, number, debe ser positivo (solo relevante si `rateStrategy = MANUAL`)
 
 #### Response (200 OK)
 
 ```json
 {
   "message": "Empresa actualizada exitosamente",
-  "status": 200,
   "data": {
     "id": 1,
     "name": "Mi Negocio Actualizado",
@@ -239,8 +231,46 @@ Authorization: Bearer <token>
 ```json
 {
   "message": "No tienes permisos para modificar esta empresa.",
-  "status": 403,
   "data": null
+}
+```
+
+---
+
+### 5. Configurar Tasa de Cambio del Negocio
+
+Actualiza la configuración de tasa del negocio (cache `currentExchangeRate`) según `rateStrategy` y crea un histórico cuando es manual.
+
+**Endpoint:** `PATCH /api/v1/platform/business/:id/exchange-rate-config`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+#### Request Body
+
+```json
+{
+  "strategy": "MANUAL",
+  "manualRate": 54.30
+}
+```
+
+#### Validaciones
+
+- `strategy`: Obligatorio, enum (`MANUAL`, `API_BCV`, `API_PARALLEL`)
+- `manualRate`: Requerido si `strategy = MANUAL`, number > 0
+
+#### Response (200 OK)
+
+```json
+{
+  "message": "Configuración de tasa actualizada exitosamente",
+  "data": {
+    "strategy": "MANUAL",
+    "currentRate": "54.3000"
+  }
 }
 ```
 

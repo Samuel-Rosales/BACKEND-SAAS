@@ -53,4 +53,16 @@ export class BusinessController {
             data 
         });
     };
+
+    updateExchangeRateConfig = async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const userId = req.user!.id;
+
+        const { status, data, message } = await this.service.updateExchangeRateConfig(+id, userId, req.body);
+
+        res.status(status).json({
+            message,
+            data
+        });
+    };
 }

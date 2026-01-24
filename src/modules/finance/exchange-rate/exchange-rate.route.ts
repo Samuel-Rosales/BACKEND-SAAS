@@ -22,7 +22,6 @@ router.get('/', controller.findAll);
 
 router.get(
     '/latest',
-    handleValidationErrors,
     controller.findLatest
 );
 

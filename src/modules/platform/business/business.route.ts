@@ -34,6 +34,13 @@ router.patch(
   controller.update
 );
 
+router.patch(
+  '/:id/exchange-rate-config',
+  validator.validateUpdateExchangeRateConfig,
+  handleValidationErrors,
+  controller.updateExchangeRateConfig
+);
+
 export const BusinessRoute = router;
 
 export default router;

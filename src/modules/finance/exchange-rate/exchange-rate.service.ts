@@ -3,18 +3,39 @@ import { CreateExchangeRateInterface, UpdateExchangeRateInterface } from './inte
 
 export class ExchangeRateService {
 
-    async create(userId: number, data: CreateExchangeRateInterface) {
+    async create(businessId: number, data: CreateExchangeRateInterface) {
         try {
-            
-            const exchangeRate = await prisma.exchangeRate.create({
-                data: {
-                    rate: data.rate,
-                },
-                select: {
-                    id: true,
-                    rate: true,
-                    createdAt: true,
+
+            const shouldBeActive = data.isActive !== undefined ? data.isActive : true;
+
+            const exchangeRate = await prisma.$transaction(async (tx) => {
+                if (shouldBeActive) {
+                    await tx.exchangeRate.updateMany({
+                        where: {
+                            businessId,
+                            isActive: true,
+                        },
+                        data: { isActive: false },
+                    });
                 }
+
+                return tx.exchangeRate.create({
+                    data: {
+                        businessId,
+                        rate: data.rate,
+                        source: data.source ?? 'MANUAL',
+                        isActive: shouldBeActive,
+                        ...(data.createdAt ? { createdAt: new Date(data.createdAt) } : {}),
+                    },
+                    select: {
+                        id: true,
+                        businessId: true,
+                        rate: true,
+                        source: true,
+                        isActive: true,
+                        createdAt: true,
+                    },
+                });
             });
 
             if (!exchangeRate) {
@@ -44,12 +65,12 @@ export class ExchangeRateService {
         }
     }
 
-    async findAll() {
+    async findAll(businessId: number) {
         try {
 
             const exchangeRates = await prisma.exchangeRate.findMany({
                 where: {
-                    isActive: true
+                    businessId,
                 },
                 orderBy: {
                     createdAt: 'desc',
@@ -83,16 +104,26 @@ export class ExchangeRateService {
     }
 
     // 3. OBTENER LA ÚLTIMA TASA POR MONEDA
-    async findLatest() {
+    async findLatest(businessId: number) {
         try {
-            const exchangeRate = await prisma.exchangeRate.findFirst({
-                where: {
-                    isActive: true
-                },
-                orderBy: {
-                    createdAt: 'desc'
-                }
-            });
+            const exchangeRate =
+                (await prisma.exchangeRate.findFirst({
+                    where: {
+                        businessId,
+                        isActive: true,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                })) ??
+                (await prisma.exchangeRate.findFirst({
+                    where: {
+                        businessId,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                }));
 
             if (!exchangeRate) {
                 return {
@@ -121,12 +152,12 @@ export class ExchangeRateService {
     }
 
     // 4. BUSCAR UNO
-    async findOne(id: number) {
+    async findOne(id: number, businessId: number) {
         try {
             const exchangeRate = await prisma.exchangeRate.findFirst({
                 where: { 
                     id,
-                    isActive: true
+                    businessId
                 },
             });
 
@@ -157,7 +188,7 @@ export class ExchangeRateService {
     }
 
     // 5. ACTUALIZAR
-    async update(id: number, data: UpdateExchangeRateInterface) {
+    async update(id: number, businessId: number, data: UpdateExchangeRateInterface) {
 
         try {
 
@@ -165,7 +196,7 @@ export class ExchangeRateService {
             const existingRate = await prisma.exchangeRate.findFirst({
                 where: { 
                     id,
-                    isActive: true
+                    businessId
                 }
             });
 
@@ -177,9 +208,25 @@ export class ExchangeRateService {
                 };
             }
 
-            const updatedExchangeRate = await prisma.exchangeRate.update({
-                where: { id },
-                data: data
+            const updatedExchangeRate = await prisma.$transaction(async (tx) => {
+                if (data.isActive === true) {
+                    await tx.exchangeRate.updateMany({
+                        where: {
+                            businessId,
+                            isActive: true,
+                            NOT: { id },
+                        },
+                        data: { isActive: false },
+                    });
+                }
+
+                return tx.exchangeRate.update({
+                    where: { id },
+                    data: {
+                        ...data,
+                        ...(data.createdAt ? { createdAt: new Date(data.createdAt) } : {}),
+                    },
+                });
             });
 
             if (!updatedExchangeRate) {
@@ -209,11 +256,11 @@ export class ExchangeRateService {
     }
 
     // 6. ELIMINAR
-    async remove(id: number) {
+    async remove(id: number, businessId: number) {
         try {
             // 1. Buscar la tasa con sus relaciones
             const exchangeRate = await prisma.exchangeRate.findFirst({
-                where: { id },
+                where: { id, businessId },
                 include: {
                     _count: {
                         select: {

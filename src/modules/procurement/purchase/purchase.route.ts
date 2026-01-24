@@ -27,6 +27,11 @@ router.get(
     controller.findAll
 );
 
+router.get(
+    '/payables',
+    controller.findPayables
+);
+
 // 3. Obtener una Compra por ID
 router.get(
     '/:id', 
@@ -40,11 +45,6 @@ router.post(
     validator.validateId,
     handleValidationErrors,
     controller.addPayment
-);
-
-router.get(
-    '/payables',
-    controller.findPayables
 );
 
 router.get(

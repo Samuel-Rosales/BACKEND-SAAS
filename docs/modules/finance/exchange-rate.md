@@ -14,7 +14,7 @@ Base URL: `/api/v1/finance/exchange-rate`
 - `PATCH /:id` — Actualizar tasa
 - `DELETE /:id` — Eliminar tasa
 
-**Nota:** Enviar `x-business-id` para contexto de negocio si aplica.
+**Nota:** Enviar `x-business-id` para contexto de negocio (requerido).
 
 ## 📍 Endpoints
 
@@ -43,7 +43,9 @@ x-business-id: 1
 ```json
 {
   "rate": 54.3000,
-  "source": "MANUAL" 
+  "source": "MANUAL",
+  "isActive": true,
+  "createdAt": "2026-01-24T10:30:00.000Z"
 }
 ```
 
@@ -51,24 +53,21 @@ x-business-id: 1
 
 - `rate`: Obligatorio, number, debe ser > 0 (4 decimales de precisión)
 - `source`: Opcional, enum (`MANUAL`, `API_BCV`, `API_PARALLEL`) (default: `MANUAL`)
+- `isActive`: Opcional, boolean (default: `true`). Si es `true`, se desactivan otras tasas activas del mismo negocio.
+- `createdAt`: Opcional, fecha ISO (si quieres cargar histórico)
 
 #### Response (201 Created)
 
 ```json
 {
   "message": "Tasa de cambio creada exitosamente",
-  "status": 201,
   "data": {
     "id": 1,
     "businessId": 1,
     "rate": 54.3000,
     "source": "MANUAL",
     "isActive": true,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "business": {
-      "id": 1,
-      "name": "Mi Negocio"
-    }
+    "createdAt": "2024-01-15T10:30:00.000Z"
   }
 }
 ```
@@ -81,7 +80,7 @@ x-business-id: 1
 
 ### 2. Listar Tasas de Cambio
 
-Obtiene todas las tasas de cambio del negocio, ordenadas por fecha descendente (más recientes primero).
+Obtiene todas las tasas de cambio del negocio (activas e inactivas), ordenadas por fecha descendente (más recientes primero).
 
 **Endpoint:** `GET /api/v1/finance/exchange-rate`
 
@@ -96,7 +95,6 @@ x-business-id: 1
 ```json
 {
   "message": "Tasas de cambio obtenidas exitosamente",
-  "status": 200,
   "data": [
     {
       "id": 1,
@@ -111,7 +109,7 @@ x-business-id: 1
       "businessId": 1,
       "rate": 54.5000,
       "source": "MANUAL",
-      "isActive": true,
+      "isActive": false,
       "createdAt": "2024-01-14T10:30:00.000Z"
     }
   ]
@@ -126,7 +124,7 @@ x-business-id: 1
 
 ### 3. Obtener Última Tasa
 
-Obtiene la tasa de cambio más reciente (por negocio). Útil para inicializar el POS.
+Obtiene la tasa de cambio más reciente por negocio. Primero intenta traer la última activa; si no existe activa, retorna la más reciente (aunque esté inactiva).
 
 **Endpoint:** `GET /api/v1/finance/exchange-rate/latest`
 
@@ -141,7 +139,6 @@ x-business-id: 1
 ```json
 {
   "message": "Tasa de cambio obtenida exitosamente",
-  "status": 200,
   "data": {
     "id": 1,
     "businessId": 1,
@@ -176,18 +173,13 @@ x-business-id: 1
 ```json
 {
   "message": "Tasa de cambio obtenida exitosamente",
-  "status": 200,
   "data": {
     "id": 1,
     "businessId": 1,
     "rate": 54.3000,
     "source": "MANUAL",
     "isActive": true,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "business": {
-      "id": 1,
-      "name": "Mi Negocio"
-    }
+    "createdAt": "2024-01-15T10:30:00.000Z"
   }
 }
 ```
@@ -229,13 +221,13 @@ x-business-id: 1
 - `rate`: Opcional, number, debe ser > 0
 - `source`: Opcional, enum (`MANUAL`, `API_BCV`, `API_PARALLEL`)
 - `isActive`: Opcional, boolean
+- `createdAt`: Opcional, fecha ISO
 
 #### Response (200 OK)
 
 ```json
 {
   "message": "Tasa de cambio actualizada exitosamente",
-  "status": 200,
   "data": {
     "id": 1,
     "businessId": 1,

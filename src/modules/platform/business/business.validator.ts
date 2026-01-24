@@ -1,5 +1,6 @@
 import { body, param, ValidationChain } from 'express-validator';
 import { prisma } from '@/configs';
+import { ExchangeRateStrategy } from '@prisma/client';
 
 export class BusinessValidator {
   
@@ -70,10 +71,29 @@ export class BusinessValidator {
         }
         return true;
       }),
+  ];
 
-    body('exchangeRate')
+  public validateUpdateExchangeRateConfig: ValidationChain[] = [
+    param('id').isInt().toInt().withMessage('ID inválido'),
+
+    body('strategy')
+      .notEmpty().withMessage('La estrategia es obligatoria')
+      .isIn(Object.values(ExchangeRateStrategy)).withMessage('Estrategia inválida'),
+
+    body('manualRate')
       .optional()
-      .isFloat({ min: 0.0001 }).withMessage('La tasa de cambio debe ser un número positivo mayor a 0'),
+      .isFloat({ min: 0.0001 }).withMessage('La tasa manual debe ser un número positivo mayor a 0')
+      .toFloat(),
+
+    body('manualRate')
+      .custom((manualRate, { req }) => {
+        if (req.body?.strategy === ExchangeRateStrategy.MANUAL) {
+          if (manualRate === undefined || manualRate === null || Number(manualRate) <= 0) {
+            throw new Error('Para la estrategia MANUAL, se requiere una tasa válida mayor a 0.');
+          }
+        }
+        return true;
+      })
   ];
 
   public validateId: ValidationChain[] = [
