@@ -1,344 +1,259 @@
-# Módulo Procurement - Compras
+# Módulo Procurement - Compras (v2)
 
-## ✅ Endpoints actuales (v2026-01-23)
-
-Base URL: `/api/v1/procurement/purchase`
-
-**Autenticación:** ✅ Requerida
-
-**Endpoints:**
-- `POST /` — Crear compra
-- `GET /` — Listar compras (query: `page`, `limit`, `startDate`, `endDate`)
-- `GET /:id` — Obtener compra
-
-**Nota:** Enviar `x-business-id` para contexto de negocio.
-
-## 📍 Endpoints
+## ✅ Resumen de Endpoints
 
 Base URL: `/api/v1/procurement/purchase`
 
-**Autenticación:** ✅ Requerida
+**Autenticación:** ✅ Requerida (Bearer Token)
+**Header Multi-tenant:** 🟢 Requerido (`x-business-id`)
 
-**Header Multi-tenant:** `x-business-id: <businessId>`
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `POST` | `/` | **Registrar Compra** (Contado o Crédito con Cuotas) |
+| `GET` | `/` | **Listar Compras** (Histórico general) |
+| `GET` | `/:id` | **Obtener Compra** (Detalle operativo) |
+| `POST` | `/:id/purchase-payment` | **Abonar a Deuda** (Registrar pago a proveedor) |
+| `GET` | `/payables` | **Cuentas por Pagar** (Listado de deudas pendientes) |
+| `GET` | `/:id/purchase-payment/details` | **Detalle Financiero** (Historial de pagos y estado de cuotas) |
 
 ---
 
+## 📍 Detalle de Endpoints
+
 ### 1. Crear Compra
 
-Registra una nueva compra de productos. Este endpoint realiza múltiples operaciones en una transacción:
-- Crea la cabecera de compra
-- Registra los items de compra
-- Registra los pagos realizados
-- Actualiza el inventario (crea/actualiza lotes)
-- Registra movimientos de stock
+Registra una nueva compra. Es una **Transacción Atómica** que realiza:
+
+1. Registro de la cabecera (Deuda y Condiciones).
+2. Ingreso de Stock (Gestión de Lotes y Costos Promedio).
+3. Actualización de Costos en Cascada (Insumos -> Recetas).
+4. Registro de Pagos Iniciales (Si hubo abono).
+5. Creación de Plan de Cuotas (Si es Crédito).
 
 **Endpoint:** `POST /api/v1/procurement/purchase`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
-
 #### Request Body
+
+**Caso: Compra a Crédito con Cuotas**
 
 ```json
 {
   "supplierId": 1,
-  "exchangeRateId": 1,
-  "reference": "A-00459",
-  "observation": "Compra mensual de productos",
+  "exchangeRateId": 45,
+  "reference": "FACT-00492",
+  "observation": "Reposición de inventario semanal",
+  
+  // Montos (Validación matemática estricta en backend)
   "subTotal": 1000.00,
   "taxAmount": 160.00,
   "totalCost": 1160.00,
+
+  // --- NUEVO: Condiciones de Pago ---
+  "condition": "CREDIT", // "CASH" | "CREDIT"
+  
+  // Opcional: Solo si es CREDIT. La suma debe dar 1160.00 - (Pagos Iniciales)
+  "installments": [
+    { "number": 1, "amount": 580.00, "dueDate": "2026-02-01" },
+    { "number": 2, "amount": 580.00, "dueDate": "2026-02-15" }
+  ],
+
   "items": [
     {
-      "productId": 1,
+      "productId": 10, // Debe ser tipo SIMPLE (No recetas)
       "depotId": 1,
-      "quantity": 50,
-      "unitCost": 20.00,
-      "expirationDate": "2024-12-31"
-    },
-    {
-      "productId": 2,
-      "depotId": 1,
-      "productPresentationId": 1,
-      "quantity": 5,
-      "unitCost": 25.00
+      "productPresentationId": 2, // Opcional (ej: Caja x12)
+      "quantity": 5, // 5 Cajas
+      "unitCost": 24.00, // Costo de la Caja (Backend calcula unitario)
+      "expirationDate": "2026-12-31"
     }
   ],
-  "payments": [
-    {
-      "paymentMethodId": 1,
-      "exchangeRateId": 1,
-      "amount": 600.00,
-      "currency": "USD",
-      "reference": "TRF-123456"
-    },
-    {
-      "paymentMethodId": 2,
-      "exchangeRateId": 1,
-      "amount": 560.00,
-      "currency": "VES",
-      "reference": "ZELLE-789012"
-    }
-  ]
+
+  // Opcional: Si das un abono inicial (ej: $0 si es crédito puro)
+  "payments": [] 
 }
+
 ```
 
-#### Validaciones
+#### Validaciones Clave
 
-**Cabecera:**
-- `supplierId`: Obligatorio, number, debe existir el proveedor y estar activo
-- `exchangeRateId`: Obligatorio, number, debe existir la tasa de cambio
-- `subTotal`: Obligatorio, number, debe ser >= 0
-- `taxAmount`: Obligatorio, number, debe ser >= 0
-- `totalCost`: Obligatorio, number, debe ser >= 0 (debe ser igual a subTotal + taxAmount)
-- `reference`: Opcional, string, número de factura del proveedor
-- `observation`: Obligatorio, string, notas adicionales
-
-**Items:**
-- `productId`: Obligatorio, number, debe existir el producto
-- `depotId`: Obligatorio, number, debe existir el depósito
-- `quantity`: Obligatorio, number, debe ser > 0
-- `unitCost`: Obligatorio, number, debe ser >= 0
-- `expirationDate`: Opcional, string (YYYY-MM-DD), obligatorio si el producto es perecedero
-
-**Pagos:**
-- `paymentMethodId`: Obligatorio, number, debe existir el método de pago
-- `exchangeRateId`: Obligatorio, number, debe existir la tasa de cambio
-- `amount`: Obligatorio, number, debe ser > 0
-- `currency`: Obligatorio, enum (`USD`, `VES`)
-- `reference`: Opcional, string, referencia bancaria o de pago
-
-**Validaciones Adicionales:**
-- La suma de `items.quantity * items.unitCost` debe coincidir con `subTotal` (con tolerancia de 0.05)
-- Los productos perecederos deben incluir `expirationDate`
-- Todos los productos y depósitos deben pertenecer al negocio
+* **Productos Compuestos:** ❌ No se pueden comprar productos tipo `COMPOSITE` (Recetas). Debes comprar sus ingredientes.
+* **Matemática:** `subTotal + taxAmount === totalCost`.
+* **Cuotas:** Si es `CREDIT`, la suma de `installments` debe ser igual al `totalCost` menos lo que hayas pagado en `payments`.
+* **Costo:** Si envías `productPresentationId`, el sistema dividirá el costo automáticamente para valorar el inventario unitario.
 
 #### Response (201 Created)
 
 ```json
 {
-  "message": "Compra registrada exitosamente",
   "status": 201,
+  "message": "Compra registrada exitosamente",
   "data": {
-    "id": 1,
-    "businessId": 1,
-    "memberId": 5,
-    "supplierId": 1,
-    "exchangeRateId": 1,
-    "subTotal": 1000.00,
-    "taxAmount": 160.00,
-    "totalCost": 1160.00,
+    "id": 105,
     "status": "COMPLETED",
-    "reference": "A-00459",
-    "observation": "Compra mensual de productos",
-    "date": "2024-01-15T10:30:00.000Z",
-    "items": [
-      {
-        "id": 1,
-        "purchaseId": 1,
-        "productId": 1,
-        "depotId": 1,
-        "quantity": 50,
-        "unitCost": 20.00,
-        "expirationDate": "2024-12-31T00:00:00.000Z",
-        "product": {
-          "id": 1,
-          "name": "Producto A",
-          "sku": "PROD-A-001"
-        }
-      }
-    ],
-    "payments": [
-      {
-        "id": 1,
-        "purchaseId": 1,
-        "paymentMethodId": 1,
-        "amount": 600.00,
-        "currency": "USD",
-        "reference": "TRF-123456"
-      }
-    ]
+    "paymentStatus": "PENDING", // PENDING, PARTIAL, PAID
+    "remainingBalance": "1160.00",
+    "paymentDueDate": "2026-02-15T00:00:00.000Z"
+    // ... resto de la data
   }
 }
+
 ```
-
-#### Errores
-
-- `404`: La tasa de cambio no existe
-- `404`: El proveedor no existe o está inactivo
-- `404`: Uno o más productos no existen
-- `404`: Uno o más almacenes no existen
-- `404`: Uno o más métodos de pago no existen
-- `400`: Error matemático: La suma de items no coincide con el SubTotal
-- `400`: El producto es perecedero y requiere fecha de vencimiento
 
 ---
 
-### 2. Listar Compras
+### 2. Listar Compras (Histórico)
 
-Obtiene todas las compras del negocio con paginación y filtros opcionales por fecha.
+Listado general paginado.
 
 **Endpoint:** `GET /api/v1/procurement/purchase`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
+#### Query Params
 
-#### Query Parameters
-
-- `page`: Opcional, number, número de página (default: 1)
-- `limit`: Opcional, number, cantidad de resultados por página (default: 20)
-- `fromDate`: Opcional, string (YYYY-MM-DD), fecha inicial del rango
-- `toDate`: Opcional, string (YYYY-MM-DD), fecha final del rango
-
-**Nota:** Si se proporcionan `fromDate` y `toDate`, se filtran las compras por ese rango.
-
-#### Response (200 OK)
-
-```json
-{
-  "message": "Compras obtenidas",
-  "status": 200,
-  "data": [
-    {
-      "id": 1,
-      "businessId": 1,
-      "supplierId": 1,
-      "subTotal": 1000.00,
-      "taxAmount": 160.00,
-      "totalCost": 1160.00,
-      "status": "COMPLETED",
-      "reference": "A-00459",
-      "date": "2024-01-15T10:30:00.000Z",
-      "supplier": {
-        "nameCompany": "Distribuidora ABC S.A."
-      },
-      "member": {
-        "user": {
-          "name": "Carlos Comprador"
-        }
-      },
-      "exchangeRate": {
-        "rate": 36.50,
-        "currency": "USD"
-      },
-      "_count": {
-        "items": 2
-      }
-    }
-  ],
-  "meta": {
-    "total": 1,
-    "page": 1,
-    "lastPage": 1
-  }
-}
-```
+* `page`: number (def: 1)
+* `limit`: number (def: 20)
+* `fromDate`: string (YYYY-MM-DD)
+* `toDate`: string (YYYY-MM-DD)
 
 ---
 
 ### 3. Obtener Compra por ID
 
-Obtiene una compra específica con todos sus items y pagos.
+Devuelve la "Foto" de la compra tal cual se registró (Items, Precios de ese momento, Depósitos destino).
 
 **Endpoint:** `GET /api/v1/procurement/purchase/:id`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
+---
 
-#### Parámetros de URL
+### 4. Cuentas por Pagar (Find Payables) 🆕
 
-- `id` (number): ID de la compra
+Lista todas las facturas de proveedores que tienen saldo pendiente (`remainingBalance > 0`). Ideal para la pantalla de "Cuentas por Pagar".
+
+**Endpoint:** `GET /api/v1/procurement/purchase/payables`
 
 #### Response (200 OK)
 
 ```json
 {
-  "message": "Compra obtenida exitosamente",
   "status": 200,
-  "data": {
-    "id": 1,
-    "businessId": 1,
-    "memberId": 5,
-    "supplierId": 1,
-    "exchangeRateId": 1,
-    "subTotal": 1000.00,
-    "taxAmount": 160.00,
-    "totalCost": 1160.00,
-    "status": "COMPLETED",
-    "reference": "A-00459",
-    "observation": "Compra mensual de productos",
-    "date": "2024-01-15T10:30:00.000Z",
-    "items": [
-      {
-        "id": 1,
-        "purchaseId": 1,
-        "productId": 1,
-        "depotId": 1,
-        "quantity": 50,
-        "unitCost": 20.00,
-        "expirationDate": "2024-12-31T00:00:00.000Z",
-        "product": {
-          "id": 1,
-          "name": "Producto A",
-          "sku": "PROD-A-001"
-        }
-      }
-    ],
-    "payments": [
-      {
-        "id": 1,
-        "purchaseId": 1,
-        "paymentMethodId": 1,
-        "amount": 600.00,
-        "currency": "USD",
-        "reference": "TRF-123456"
-      }
-    ],
-    "supplier": {
-      "id": 1,
-      "nameCompany": "Distribuidora ABC S.A."
+  "message": "Cuentas por pagar obtenidas exitosamente",
+  "data": [
+    {
+      "id": 105,
+      "invoiceNumber": "FACT-00492",
+      "supplierName": "Distribuidora Polar",
+      "contact": "Juan Perez",
+      "totalDebt": 1160,
+      "pendingDebt": 580,
+      "paidAmount": 580,
+      "dueDate": "2026-02-15T00:00:00.000Z",
+      "status": "PARTIAL",
+      "daysUntilDue": 12 // Días faltantes (o negativos si está vencida)
     }
-  }
+  ]
 }
-```
 
-#### Response (404 Not Found)
-
-```json
-{
-  "message": "Compra no encontrada",
-  "status": 404,
-  "data": null
-}
 ```
 
 ---
 
-## 🔒 Seguridad
+### 5. Abonar a Deuda (Add Payment) 🆕
 
-- Todos los endpoints requieren autenticación
-- Filtrado multi-tenant por `businessId` (header `x-business-id`)
-- Un negocio solo puede gestionar sus propias compras
-- Validación matemática del subtotal en el backend
-- Transacciones atómicas: si falla algo, se revierte todo
+Registra un pago a una compra existente. Utiliza lógica de **Cascada (Waterfall)**: el pago cubre primero las cuotas más antiguas.
 
-## 📝 Notas
+**Endpoint:** `POST /api/v1/procurement/purchase/:id/purchase-payment`
 
-- **Actualización de Inventario:** Al crear una compra, automáticamente:
-  - Se crean o actualizan lotes de stock (FIFO)
-  - Se registran movimientos de stock tipo `IN`
-  - Se actualiza el stock general por depósito
-- **Productos Perecederos:** Si un producto tiene `isPerishable: true`, debe incluirse `expirationDate` en el item
-- **Múltiples Depósitos:** Cada item puede ir a un depósito diferente
-- **Pagos Múltiples:** Se pueden registrar múltiples pagos con diferentes métodos y monedas
-- **Estado:** Las compras se crean con estado `COMPLETED` automáticamente
-- **Referencia:** El campo `reference` es opcional y puede contener el número de factura del proveedor
+#### Request Body
+
+```json
+{
+  "paymentMethodId": 1, // Ej: Zelle, Efectivo, Pago Móvil
+  "exchangeRateId": 50, // ID de la tasa DEL DÍA DEL PAGO
+  "amount": 100.00,     // Monto NOMINAL (ej: 100 Bs o 100 USD)
+  "reference": "REF-998877"
+}
+
+```
+
+> **Nota:** El `amount` es lo que el usuario escribe. El backend usa `exchangeRateId` y la moneda del método para convertirlo a Dólares y descontarlo de la deuda.
+
+#### Response (200 OK)
+
+```json
+{
+  "status": 200,
+  "message": "Abono a proveedor registrado",
+  "data": {
+    "newBalance": 480.00,
+    "status": "PARTIAL", // PARTIAL o PAID
+    "payment": { "id": 55, "amount": 100, ... }
+  }
+}
+
+```
+
+---
+
+### 6. Detalle Financiero (Payment Details) 🆕
+
+Obtiene la radiografía financiera de una compra específica: qué se ha pagado y qué falta (incluyendo el estado de cada cuota individual).
+
+**Endpoint:** `GET /api/v1/procurement/purchase/:id/purchase-payment/details`
+
+#### Response (200 OK)
+
+```json
+{
+  "status": 200,
+  "message": "Detalle financiero obtenido",
+  "data": {
+    "header": {
+      "supplier": "Distribuidora Polar",
+      "invoice": "FACT-00492",
+      "status": "PARTIAL",
+      "isCredit": true
+    },
+    "summary": {
+      "totalDebt": 1160,
+      "pending": 580,
+      "paid": 580
+    },
+    "installments": [ // El Plan de Pagos
+      { "number": 1, "amount": 580, "dueDate": "...", "status": "PAID", "paidAt": "..." },
+      { "number": 2, "amount": 580, "dueDate": "...", "status": "PENDING", "paidAt": null }
+    ],
+    "history": [ // Los Pagos Reales
+      {
+        "id": 55,
+        "date": "2026-01-24...",
+        "methodName": "Zelle",
+        "amountOriginal": 580,
+        "amountUSD": 580
+      }
+    ]
+  }
+}
+
+```
+
+---
+
+## ⚠️ Enums Importantes (Frontend)
+
+Para evitar errores `400 Bad Request`, usa estos valores exactos:
+
+**Conditions:**
+
+* `CASH`
+* `CREDIT`
+
+**PaymentStatus (Estados de la Deuda):**
+
+* `PENDING` (No se ha pagado nada)
+* `PARTIAL` (Se abonó algo)
+* `PAID` (Deuda saldada)
+
+**InstallmentStatus (Estados de la Cuota):**
+
+* `PENDING`
+* `PAID`
+* `OVERDUE` (Calculado visualmente por fecha)
