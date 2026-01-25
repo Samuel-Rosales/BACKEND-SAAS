@@ -21,7 +21,7 @@ import { cashCounts } from "./finance/cash-count.data";
 // Inventory
 import { measurementUnits } from "./inventory/measurement-unit.data";
 import { categories } from "./inventory/category.data";
-import { taxes } from "./inventory/tax.data";
+import { taxes } from "./finance/tax.data";
 import { products } from "./inventory/product.data";
 import { productComponents } from "./inventory/product-component.data";
 import { productPresentations } from "./inventory/product-presentation.data";
