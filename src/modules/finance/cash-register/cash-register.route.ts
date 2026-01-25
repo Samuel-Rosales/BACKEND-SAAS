@@ -2,15 +2,15 @@ import { Router } from 'express';
 import { CashRegisterController } from './cash-register.controller';
 import { CashRegisterValidator } from './cash-register.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
-import { authMiddleware } from '@/middlewares/auth.middleware';
+import { authMiddleware } from '@/middlewares/auth.middleware'; // Tu middleware
 
 const router = Router();
 const controller = new CashRegisterController();
 const validator = new CashRegisterValidator();
 
-// Todas las rutas requieren autenticación
 router.use(authMiddleware);
 
+// 1. Abrir Caja
 router.post(
   '/open', 
   validator.validateOpen, 
@@ -18,17 +18,20 @@ router.post(
   controller.open
 );
 
-router.get('/', controller.findAll);
-
-router.get('/open', controller.findOpen);
-
+// 2. Dashboard del Cajero (Saber cuánto tengo que tener)
+// IMPORTANTE: Pon esta ruta ANTES de /:id para que no confunda "status" con un ID
 router.get(
-    '/:id', 
-    validator.validateId,
-    handleValidationErrors,
-    controller.findOne
+  '/status', 
+  controller.findMyStatus
 );
 
+// 3. Histórico General (Admin)
+router.get(
+  '/', 
+  controller.findAll
+);
+
+// 4. Cerrar Caja
 router.patch(
   '/:id/close', 
   validator.validateClose, 
@@ -37,5 +40,3 @@ router.patch(
 );
 
 export const CashRegisterRoute = router;
-
-export default router;

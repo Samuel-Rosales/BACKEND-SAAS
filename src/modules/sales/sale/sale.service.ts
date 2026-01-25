@@ -17,8 +17,13 @@ export class SaleService {
             // =================================================================
             // FASE 0: AUTORIDAD DE TASA (ANTI-SORPRESAS)
             // =================================================================
+
+            // 1. VALIDAR CAJA ABIERTA (Lo primero de todo)
+            // Usamos 'prisma' (global) porque aún no estamos en transacción.
+            const activeRegister = await this.getOpenRegisterOrFail(prisma, memberId, businessId);
+
+            // 2. VALIDAR TASA DE CAMBIO
             // Buscamos la tasa activa "REAL" en la base de datos para este negocio
-            // Asumimos que tienes un campo 'isActive' o te basas en la fecha más reciente
             const currentRateRecord = await resolveBusinessExchangeRate(businessId, prisma);
 
             if (!currentRateRecord) {
@@ -362,7 +367,8 @@ export class SaleService {
                             paymentMethodId: p.paymentMethodId,
                             amount: p.amount,
                             exchangeRateId: currentRateRecord.id, // Tasa validada
-                            reference: p.reference || "N/A"
+                            reference: p.reference || "N/A",
+                            cashRegisterId: activeRegister.id
                         }))
                     });
                 }
@@ -377,6 +383,25 @@ export class SaleService {
             if (error instanceof BusinessError) return { status: error.status, message: error.message, data: null };
             return { status: 500, message: 'Error interno al procesar la venta', data: null };
         }
+    }
+
+    // En SaleService
+    private async getOpenRegisterOrFail(tx: Prisma.TransactionClient | typeof prisma, memberId: number, businessId: number) {
+        const register = await tx.cashRegister.findFirst({
+            where: {
+                businessId,
+                memberId,
+                status: 'OPEN' // O CashStatus.OPEN
+            }
+        });
+
+        if (!register) {
+            throw new BusinessError(
+                '⚠️ No tienes una caja abierta. Debes realizar la Apertura de Caja antes de vender.',
+                409 // Conflict
+            );
+        }
+        return register;
     }
 
     // =================================================================

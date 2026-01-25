@@ -12,5 +12,7 @@ export const exchangeRates = [
   { businessId: 3, rate: 321.1, createdAt: new Date("2026-01-12T00:00:00Z").toISOString(), isActive: true, source: "MANUAL" },
 
   // Business 4 (Agencia Creativa)
-  { businessId: 4, rate: 320.3, createdAt: new Date("2026-01-10T00:00:00Z").toISOString(), isActive: true, source: "MANUAL" }
+  { businessId: 4, rate: 320.3, createdAt: new Date("2026-01-10T00:00:00Z").toISOString(), isActive: true, source: "MANUAL" },
+
+  { businessId: null, rate: 320.3, createdAt: new Date("2026-01-10T00:00:00Z").toISOString(), isActive: true, source: "API_BCV" }
 ];

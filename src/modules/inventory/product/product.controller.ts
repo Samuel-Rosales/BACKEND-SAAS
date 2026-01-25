@@ -8,9 +8,8 @@ export class ProductController {
     // 1. CREAR
     async create(req: Request, res: Response) {
         try {
-            // TypeScript necesita saber que user existe. 
-            // Si tienes definido Express.Request, usa req.user. Sino (req as any).user
-            const { businessId, id: userId } = req.user;
+            
+            const { businessId, membershipId } = req.user;
 
             if (!businessId) {
                 return res.status(400).json({
@@ -20,7 +19,15 @@ export class ProductController {
                 });
             }
 
-            const result = await service.create(businessId, userId, req.body);
+            if (!membershipId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la membresía en el header.',
+                    data: null
+                });
+            }
+
+            const result = await service.create(businessId, membershipId, req.body);
 
             return res.status(result.status).json(result);
 

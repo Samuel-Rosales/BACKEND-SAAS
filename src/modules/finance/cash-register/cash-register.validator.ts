@@ -3,33 +3,38 @@ import { body, param, ValidationChain } from 'express-validator';
 export class CashRegisterValidator {
   
     public validateOpen: ValidationChain[] = [
+        body('memberId').isInt().withMessage('ID de miembro requerido'),
         
-        body('memberId')
-        .isInt().withMessage('El ID del miembro debe ser un número entero'),
-
         body('initialAmount')
-        .optional()
-        .isFloat({ min: 0 }).withMessage('El monto inicial debe ser un número positivo o cero')
-        .toFloat(),
+            .isFloat({ min: 0 }).withMessage('Monto inicial debe ser >= 0')
+            .toFloat(),
+
+        // Validación Opcional de Array de Billetes (Apertura)
+        body('denominations').optional().isArray().withMessage('Debe ser un arreglo de denominaciones'),
+        body('denominations.*.denomination').isFloat().withMessage('Denominación inválida'),
+        body('denominations.*.quantity').isInt({ min: 1 }).withMessage('Cantidad inválida'),
+        body('denominations.*.currency').isIn(['USD', 'VES']).withMessage('Moneda inválida'),
+        body('denominations.*.exchangeRateId').isInt().withMessage('ID de tasa requerido')
     ];
 
     public validateClose: ValidationChain[] = [
-
         param('id').isInt().toInt(),
-        
-        body('finalAmount')
-        .optional()
-        .isFloat({ min: 0 }).withMessage('El monto final debe ser un número positivo o cero')
-        .toFloat(),
 
-        body('closeTime')
-        .optional()
-        .isISO8601().withMessage('La fecha de cierre debe ser una fecha válida (ISO 8601)')
-        .toDate(),
+        body('finalAmount')
+            .isFloat({ min: 0 }).withMessage('Monto final requerido')
+            .toFloat(),
+        
+        // Validación OBLIGATORIA de Array de Billetes (Cierre)
+        // Un cierre serio requiere conteo físico explícito
+        body('counts').isArray({ min: 1 }).withMessage('Debes registrar el conteo de billetes para cerrar'),
+        
+        body('counts.*.denomination').isFloat().withMessage('Denominación inválida'),
+        body('counts.*.quantity').isInt({ min: 1 }).withMessage('Cantidad debe ser entero positivo'),
+        body('counts.*.currency').isIn(['USD', 'VES']).withMessage('Moneda inválida'),
+        body('counts.*.exchangeRateId').isInt().withMessage('Tasa de cambio requerida para el conteo')
     ];
 
     public validateId: ValidationChain[] = [
-
-        param('id').isInt().toInt().withMessage('ID inválido')
+        param('id').isInt().toInt()
     ];
 }

@@ -1,367 +1,175 @@
 import { prisma } from '@/configs';
-import { CreateCashRegisterInterface, UpdateCashRegisterInterface } from './interfaces';
+import { CreateCashRegisterInterface, CloseCashRegisterInterface } from './interfaces';
+import { CashStatus, CashCountType, PaymentStatus, Currency } from '@prisma/client';
+import { BusinessError } from '@/utils/catch-errors.util'; // Asumo que tienes esto
+import { Decimal } from '@prisma/client/runtime/client';
 
 export class CashRegisterService {
 
-    // 1. ABRIR CAJA
-    async open(businessId: number, data: CreateCashRegisterInterface) {
+    // 1. ABRIR CAJA (Con Transacción)
+    async open(businessId: number, memberShipId: number, data: CreateCashRegisterInterface) {
+
+        // Verificar miembro y negocio (Validaciones básicas)
+        const member = await prisma.businessMember.findFirst({
+            where: { id: memberShipId, businessId, isActive: true }
+        });
+
+        if (!member) return { status: 404, message: 'Miembro no válido', data: null };
+
+        // A. REGLA DE NEGOCIO: Un miembro no puede tener dos cajas abiertas
+        const existingRegister = await prisma.cashRegister.findFirst({
+            where: { memberId: memberShipId, status: CashStatus.OPEN }
+        });
+
+        if (existingRegister) {
+            return { status: 409, message: 'Ya tienes una caja abierta. Debes cerrarla primero.', data: null };
+        }
+
+        // B. CREACIÓN ATÓMICA (Caja + Billetes Iniciales)
         try {
-            
-            // Verificar que el negocio existe
-            const business = await prisma.business.findUnique({
-                where: { id: businessId }
+            const result = await prisma.$transaction(async (tx) => {
+                const register = await tx.cashRegister.create({
+                    data: {
+                        businessId,
+                        memberId: memberShipId,
+                        status: CashStatus.OPEN,
+                        initialAmount: data.initialAmount || 0,
+                        openTime: new Date(),
+                        
+                        // Si mandan detalle de billetes (Apertura detallada)
+                        counts: data.denominations && data.denominations.length > 0 ? {
+                            create: data.denominations.map(c => ({
+                                denomination: c.denomination,
+                                quantity: c.quantity,
+                                currency: c.currency,
+                                exchangeRateId: c.exchangeRateId,
+                                type: CashCountType.INITIAL
+                            }))
+                        } : undefined
+                    },
+                    include: { member: { include: { user: { select: { name: true } } } } }
+                });
+                return register;
             });
 
-            if (!business) {
-                return {
-                    message: 'Negocio no encontrado',
-                    status: 404,
-                    data: null
-                };
-            }
-
-            // Verificar que el miembro existe y pertenece al negocio
-            const member = await prisma.businessMember.findFirst({
-                where: { 
-                    id: data.memberId,
-                    businessId: businessId,
-                    isActive: true
-                }
-            });
-
-            if (!member) {
-                return {
-                    message: 'Miembro no encontrado, no pertenece a este negocio o está inactivo',
-                    status: 404,
-                    data: null
-                };
-            }
-
-            // Verificar si ya hay una caja abierta para este negocio
-            const openRegister = await prisma.cashRegister.findFirst({
-                where: {
-                    businessId: businessId,
-                    status: 'OPEN'
-                }
-            });
-
-            if (openRegister) {
-                return {
-                    message: 'Ya existe una caja abierta para este negocio. Debe cerrarla antes de abrir una nueva.',
-                    status: 400,
-                    data: null
-                };
-            }
-
-            const cashRegister = await prisma.cashRegister.create({
-                data: {
-                    businessId: businessId,
-                    memberId: data.memberId,
-                    status: 'OPEN',
-                    initialAmount: data.initialAmount || 0
-                },
-                include: {
-                    member: {
-                        select: {
-                            id: true,
-                            user: {
-                                select: {
-                                    id: true,
-                                    name: true
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-            if (!cashRegister) {
-                return {
-                    message: 'No se pudo abrir la caja',
-                    status: 400,
-                    data: null
-                };
-            }
-
-            return {
-                message: 'Caja abierta exitosamente',
-                status: 201,
-                data: cashRegister
-            };
+            return { status: 201, message: 'Caja abierta exitosamente', data: result };
 
         } catch (error) {
-
-            console.error('Error al abrir la caja:', error);
-
-            return {
-                message: 'Error al abrir la caja',
-                status: 500,
-                data: null
-            };
-
+            console.error('Error open register:', error);
+            return { status: 500, message: 'Error interno al abrir caja', data: null };
         }
     }
 
-    // 2. LISTAR TODAS LAS CAJAS (de un negocio)
+    // 2. LISTAR CAJAS (Histórico)
     async findAll(businessId: number) {
         try {
-
-            const cashRegisters = await prisma.cashRegister.findMany({
-                where: {
-                    businessId: businessId
-                },
+            const registers = await prisma.cashRegister.findMany({
+                where: { businessId },
                 include: {
-                    member: {
-                        select: {
-                            id: true,
-                            user: {
-                                select: {
-                                    id: true,
-                                    name: true
-                                }
-                            }
-                        }
-                    },
-                    _count: {
-                        select: {
-                            counts: true
-                        }
-                    }
+                    member: { include: { user: { select: { name: true } } } },
+                    _count: { select: { payments: true } } // Contamos cuántos pagos recibió
                 },
-                orderBy: {
-                    openTime: 'desc'
-                }
+                orderBy: { openTime: 'desc' },
+                take: 50 // Paginación recomendada
             });
-
-            if (cashRegisters.length === 0) {
-                return {
-                    message: 'No hay cajas registradas',
-                    status: 404,
-                    data: []
-                };
-            }
-
-            return {
-                message: 'Cajas obtenidas exitosamente',
-                status: 200,
-                data: cashRegisters
-            };
-
+            return { status: 200, message: 'Histórico obtenido', data: registers };
         } catch (error) {
-
-            console.error('Error al obtener las cajas:', error);
-
-            return {
-                message: 'Error al obtener las cajas',
-                status: 500,
-                data: null
-            };
+            return { status: 500, message: 'Error interno', data: null };
         }
     }
 
-    // 3. OBTENER CAJA ABIERTA
-    async findOpen(businessId: number) {
+    // 3. OBTENER MI CAJA ACTUAL (Dashboard del Cajero)
+    async findMyOpenRegister(businessId: number, memberId: number) {
         try {
-            const cashRegister = await prisma.cashRegister.findFirst({
-                where: {
-                    businessId: businessId,
-                    status: 'OPEN'
-                },
+            const register = await prisma.cashRegister.findFirst({
+                where: { businessId, memberId, status: CashStatus.OPEN },
                 include: {
-                    member: {
-                        select: {
-                            id: true,
-                            user: {
-                                select: {
-                                    id: true,
-                                    name: true
-                                }
-                            }
-                        }
-                    },
-                    counts: {
-                        where: {
-                            type: 'INITIAL'
-                        },
-                        include: {
-                            exchangeRate: {
-                                select: {
-                                    id: true,
-                                    // currency: true,
-                                    rate: true
-                                }
-                            }
-                        }
-                    }
+                    member: { include: { user: { select: { name: true } } } }
                 }
             });
 
-            if (!cashRegister) {
-                return {
-                    message: 'No hay caja abierta',
-                    status: 404,
-                    data: null
-                };
-            }
+            if (!register) return { status: 404, message: 'No tienes caja abierta', data: null };
 
-            return {
-                message: 'Caja abierta obtenida exitosamente',
-                status: 200,
-                data: cashRegister
-            };
-
-         } catch (error) {
-
-            console.error('Error al obtener la caja abierta:', error);
-
-            return {
-                message: 'Error al obtener la caja abierta',
-                status: 500,
-                data: null
-            };
-        }
-    }
-
-    // 4. BUSCAR UNA CAJA
-    async findOne(businessId: number, id: number) {
-        try {
-            const cashRegister = await prisma.cashRegister.findFirst({
-                where: { 
-                    id,
-                    businessId: businessId
-                },
-                include: {
-                    member: {
-                        select: {
-                            id: true,
-                            user: {
-                                select: {
-                                    id: true,
-                                    name: true
-                                }
-                            }
-                        }
-                    },
-                    counts: {
-                        include: {
-                            exchangeRate: {
-                                select: {
-                                    id: true,
-                                    // currency: true,
-                                    rate: true
-                                }
-                            }
-                        },
-                        orderBy: {
-                            type: 'asc'
-                        }
-                    }
-                }
+            // === AQUI VIENE LA MAGIA DEL SISTEMA ===
+            // Calculamos cuánto dinero debería haber según los pagos registrados
+            const paymentsGrouped = await prisma.salePayment.groupBy({
+                by: ['paymentMethodId'],
+                where: { cashRegisterId: register.id },
+                _sum: { amount: true }
             });
 
-            if (!cashRegister) {
-                return {
-                    message: 'Caja no encontrada',
-                    status: 404,
-                    data: null
-                };
-            }
-
-            return {
-                message: 'Caja obtenida exitosamente',
-                status: 200,
-                data: cashRegister
-            };
-
-         } catch (error) {
-
-            console.error('Error al obtener la caja:', error);
-
-            return {
-                message: 'Error al obtener la caja',
-                status: 500,
-                data: null
-            };
-        }
-    }
-
-    // 5. CERRAR CAJA
-    async close(businessId: number, id: number, data: UpdateCashRegisterInterface) {
-
-        try {
-
-            const cashRegister = await prisma.cashRegister.findFirst({
-                where: { 
-                    id,
-                    businessId: businessId,
-                    status: 'OPEN'
-                }
+            // Enriquecemos con nombres de métodos
+            const methods = await prisma.paymentMethod.findMany({
+                where: { id: { in: paymentsGrouped.map(p => p.paymentMethodId) } }
             });
 
-            if (!cashRegister) {
+            const systemTotals = paymentsGrouped.map(pg => {
+                const method = methods.find(m => m.id === pg.paymentMethodId);
                 return {
-                    message: 'Caja no encontrada o ya está cerrada',
-                    status: 404,
-                    data: null
+                    method: method?.name,
+                    type: method?.type, // CASH, ZELLE, ETC
+                    currency: method?.currency,
+                    total: pg._sum.amount
                 };
-            }
+            });
 
-            const updatedCashRegister = await prisma.cashRegister.update({
-                where: { id },
+            return { 
+                status: 200, 
+                message: 'Estado de caja obtenido', 
                 data: {
-                    status: 'CLOSED',
-                    finalAmount: data.finalAmount,
-                    closeTime: data.closeTime || new Date()
-                },
-                include: {
-                    member: {
-                        select: {
-                            id: true,
-                            user: {
-                                select: {
-                                    id: true,
-                                    name: true
-                                }
-                            }
-                        }
-                    },
-                    counts: {
-                        include: {
-                            exchangeRate: {
-                                select: {
-                                    id: true,
-                                    // currency: true,
-                                    rate: true
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-            if (!updatedCashRegister) {
-                return {
-                    message: 'No se pudo cerrar la caja',
-                    status: 400,
-                    data: null
-                };
-            }
-
-            return {
-                message: 'Caja cerrada exitosamente',
-                status: 200,
-                data: updatedCashRegister
+                    ...register,
+                    systemSummary: systemTotals // El frontend usa esto para comparar contra lo físico
+                } 
             };
 
         } catch (error) {
+            return { status: 500, message: 'Error interno', data: null };
+        }
+    }
 
-            console.error('Error al cerrar la caja:', error);
-            
-            return {
-                message: 'Error al cerrar la caja',
-                status: 500,
-                data: null
-            };
+    // 4. CERRAR CAJA (El Arqueo Final)
+    async close(businessId: number, id: number, data: CloseCashRegisterInterface) {
+        try {
+            const register = await prisma.cashRegister.findFirst({
+                where: { id, businessId, status: CashStatus.OPEN }
+            });
+
+            if (!register) return { status: 404, message: 'Caja no encontrada o ya cerrada', data: null };
+
+            const result = await prisma.$transaction(async (tx) => {
+                
+                // A. Guardar la evidencia física (Conteo de billetes)
+                if (data.counts && data.counts.length > 0) {
+                    await tx.cashCount.createMany({
+                        data: data.counts.map(c => ({
+                            cashRegisterId: register.id,
+                            denomination: c.denomination,
+                            quantity: c.quantity,
+                            currency: c.currency,
+                            exchangeRateId: c.exchangeRateId,
+                            type: CashCountType.FINAL
+                        }))
+                    });
+                }
+
+                // B. Cerrar el ciclo
+                const updated = await tx.cashRegister.update({
+                    where: { id: register.id },
+                    data: {
+                        status: CashStatus.CLOSED,
+                        finalAmount: data.finalAmount, // Total calculado por el front (suma de counts)
+                        closeTime: data.closeTime || new Date()
+                    }
+                });
+
+                return updated;
+            });
+
+            return { status: 200, message: 'Caja cerrada correctamente', data: result };
+
+        } catch (error) {
+            console.error('Error closing register:', error);
+            return { status: 500, message: 'Error al cerrar caja', data: null };
         }
     }
 }

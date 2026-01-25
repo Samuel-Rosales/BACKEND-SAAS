@@ -4,111 +4,100 @@ import { prisma } from '@/configs';
 export class SaleValidator {
 
   public validateCreate: ValidationChain[] = [
-    // Cabecera
+    // -----------------------------------------------------
+    // 1. CABECERA Y SEGURIDAD
+    // -----------------------------------------------------
     body('clientId')
-      .notEmpty().withMessage('El ID del cliente es obligatorio')
-      .isInt({ min: 1 }).withMessage('El ID del cliente debe ser un número entero positivo')
+      .isInt({ min: 1 }).withMessage('ID de cliente inválido')
+      .toInt()
+      .custom(async (value, { req }) => {
+        const businessId = req.user?.businessId; // Asumiendo que el middleware auth ya inyectó esto
+        // Optimizamos usando count en lugar de findFirst para ser más ligero
+        const count = await prisma.client.count({
+          where: { id: value, businessId: Number(businessId), isActive: true }
+        });
+        if (count === 0) throw new Error('Cliente no encontrado o inactivo');
+        return true;
+      }),
+
+    // 🔒 SEGURIDAD CRÍTICA: Validar que la tasa sea del negocio
+    body('exchangeRateId')
+      .isInt({ min: 1 }).withMessage('ID de tasa inválido')
       .toInt()
       .custom(async (value, { req }) => {
         const businessId = req.user?.businessId;
-        if (!businessId) return true;
-
-        const client = await prisma.client.findFirst({
-          where: { id: value, businessId: Number(businessId) }
+        
+        const rate = await prisma.exchangeRate.findFirst({
+          where: { 
+            id: value, 
+            isActive: true,
+            // AQUÍ ESTÁ EL CAMBIO "SENIOR":
+            OR: [
+                { businessId: Number(businessId) }, // Caso A: Es mi tasa manual personalizada
+                { businessId: null }                // Caso B: Es la tasa del BCV (Global / Sistema)
+            ]
+          }
         });
-        if (!client) {
-          throw new Error('El cliente no existe o no pertenece a este negocio');
-        }
+
+        if (!rate) throw new Error('Tasa de cambio inválida, inactiva o no autorizada');
         return true;
       }),
 
-    body('memberId')
+    // --- NUEVOS CAMPOS ---
+    body('depotId')
       .optional()
-      .isInt({ min: 1 }).withMessage('El ID del vendedor debe ser un número entero positivo')
+      .isInt({ min: 1 }).withMessage('ID de depósito inválido')
       .toInt(),
 
-    body('exchangeRateId')
-      .notEmpty().withMessage('El ID de la tasa de cambio es obligatorio')
-      .isInt({ min: 1 }).withMessage('El ID de la tasa de cambio debe ser un número entero positivo')
-      .toInt()
-      .custom(async (value) => {
-        const exchangeRate = await prisma.exchangeRate.findUnique({
-          where: { id: value, isActive: true }
-        });
-        if (!exchangeRate) {
-          throw new Error('La tasa de cambio no existe o está inactiva');
-        }
-        return true;
+    body('condition')
+      .isIn(['CASH', 'CREDIT']).withMessage('Condición debe ser CASH o CREDIT'),
+
+    // Validamos estructura de cuotas si es crédito
+    body('installments')
+      .if(body('condition').equals('CREDIT'))
+      .isArray({ min: 1 }).withMessage('Venta a crédito requiere cuotas')
+      .custom((value) => {
+         // Validación básica de estructura interna
+         const isValid = value.every((i: any) => i.amount > 0 && i.dueDate);
+         if (!isValid) throw new Error('Estructura de cuotas inválida');
+         return true;
       }),
 
-    body('type')
-      .optional()
-      .isIn(['RETAIL', 'WHOLESALE']).withMessage('El tipo de venta debe ser RETAIL o WHOLESALE'),
-
-    body('status')
-      .optional()
-      .isIn(['PENDING', 'COMPLETED', 'CANCELLED', 'REFUNDED']).withMessage('El estado debe ser válido'),
-
-    body('totalAmount')
-      .notEmpty().withMessage('El total de la venta es obligatorio')
-      .isFloat({ min: 0 }).withMessage('El total debe ser un número positivo')
-      .toFloat(),
-
-    body('remainingBalance')
-      .optional()
-      .isFloat({ min: 0 }).withMessage('El saldo pendiente debe ser un número positivo')
-      .toFloat(),
-
-    body('paymentDueDate')
-      .optional()
-      .isISO8601().withMessage('La fecha de vencimiento debe tener formato válido (YYYY-MM-DD)'),
-
-    // Items
+    // -----------------------------------------------------
+    // 2. ITEMS
+    // -----------------------------------------------------
     body('items')
-      .isArray({ min: 1 }).withMessage('Debes agregar al menos un producto a la venta'),
+      .isArray({ min: 1 }).withMessage('El carrito no puede estar vacío'),
 
     body('items.*.productId')
-      .isInt({ min: 1 }).withMessage('El ID del producto debe ser un entero positivo')
-      .toInt(),
-
-    body('items.*.productPresentationId')
-      .optional()
-      .isInt({ min: 1 }).withMessage('El ID de la presentación debe ser un entero positivo')
+      .isInt({ min: 1 }).withMessage('Producto inválido')
       .toInt(),
 
     body('items.*.quantity')
-      .isInt({ min: 1 }).withMessage('La cantidad debe ser mayor a 0')
-      .toInt(),
-
-    body('items.*.unitPrice')
-      .isFloat({ min: 0 }).withMessage('El precio unitario no puede ser negativo')
+      // Permitimos decimales si vendes por Kilo, o int si es unitario. 
+      // isFloat es más seguro para ambos casos.
+      .isFloat({ min: 0.001 }).withMessage('Cantidad inválida')
       .toFloat(),
 
-    body('items.*.subTotal')
-      .isFloat({ min: 0 }).withMessage('El subtotal no puede ser negativo')
-      .toFloat(),
+    // NOTA: unitPrice y subTotal son opcionales en el DTO de entrada 
+    // porque el Backend DEBE recalcularlos para evitar fraudes.
+    // Si los pides, es solo referencial.
 
-    // Pagos
+    // -----------------------------------------------------
+    // 3. PAGOS
+    // -----------------------------------------------------
     body('payments')
-      .isArray().withMessage('El campo pagos debe ser un arreglo'),
+      .optional()
+      .isArray(),
     
     body('payments.*.paymentMethodId')
-      .isInt({ min: 1 }).withMessage('El método de pago debe ser un ID válido')
-      .toInt(),
-
-    body('payments.*.exchangeRateId')
-      .isInt({ min: 1 }).withMessage('El ID de la tasa de cambio del pago debe ser un número entero positivo')
-      .toInt(),
+      .if(body('payments').exists())
+      .isInt({ min: 1 }).toInt(),
 
     body('payments.*.amount')
-      .isFloat({ min: 0.01 }).withMessage('El monto del pago debe ser mayor a 0')
+      .if(body('payments').exists())
+      .isFloat({ min: 0.01 }).withMessage('Monto de pago inválido')
       .toFloat(),
-      
-    body('payments.*.reference')
-      .optional()
-      .trim()
-      .isString()
-      .isLength({ max: 200 }).withMessage('La referencia no puede exceder 200 caracteres')
   ];
 
   public validateUpdate: ValidationChain[] = [

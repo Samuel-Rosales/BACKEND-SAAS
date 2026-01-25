@@ -489,6 +489,9 @@ model SalePayment {
   reference       String // Nro de referencia bancaria
   date            DateTime      @default(now())
 
+  cashRegisterId  Int? 
+  cashRegister    CashRegister? @relation(fields: [cashRegisterId], references: [id])
+
   sale         Sale         @relation(fields: [saleId], references: [id])
   exchangeRate ExchangeRate @relation(fields: [exchangeRateId], references: [id])
 }
@@ -614,6 +617,7 @@ model CashRegister {
   business Business       @relation(fields: [businessId], references: [id])
   member   BusinessMember @relation(fields: [memberId], references: [id])
   counts   CashCount[]
+  payments SalePayment[] // Relación inversa
 }
 
 model CashCount {
