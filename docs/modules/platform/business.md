@@ -163,6 +163,12 @@ Authorization: Bearer <token>
           "ci": "12345678"
         }
       }
+    ],
+    "exchangeRates": [
+      {
+        "id": 123,
+        "rate": "54.3000"
+      }
     ]
   }
 }

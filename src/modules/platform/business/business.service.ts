@@ -7,13 +7,13 @@ export class BusinessService {
 
   // 1. CREAR NEGOCIO + SUSCRIPCIÓN + MIEMBRO ADMIN
   async create(userId: number, data: CreateBusinessInterface) {
-    
+
     return await prisma.$transaction(async (tx) => {
       try {
         // A. Buscar el rol OWNER para asignarlo
         // (Si no tienes seeds, esto fallará. Asegúrate de tener roles en DB)
         const adminRole = await tx.role.findUnique({
-          where: { code: 'OWNER' } 
+          where: { code: 'OWNER' }
         });
 
         if (!adminRole) {
@@ -62,11 +62,11 @@ export class BusinessService {
         };
       } catch (error) {
         console.error('Error al crear el negocio:', error);
-          return {
-            message: 'Por favor contacte al administrador',
-            status: 500,
-            data: null
-          };
+        return {
+          message: 'Por favor contacte al administrador',
+          status: 500,
+          data: null
+        };
       }
     });
   }
@@ -85,7 +85,7 @@ export class BusinessService {
         include: {
           subscription: { select: { status: true, planType: true, endDate: true } },
           members: { where: { userId: userId }, select: { role: { select: { name: true } } } },
-          businessCategory: { select: { name: true } }    
+          businessCategory: { select: { name: true } }
         }
       });
 
@@ -107,7 +107,7 @@ export class BusinessService {
 
       const formattedBusinesses = businesses.map(business => {
         const memberRole = business.members[0]?.role?.name || 'Miembro';
-        return {  
+        return {
           ...business,
           memberRole: memberRole
         };
@@ -122,7 +122,7 @@ export class BusinessService {
     } catch (error) {
 
       console.error('Error al obtener los negocios:', error);
-      
+
       return {
         message: 'Por favor contacte al administrador',
         status: 500,
@@ -146,6 +146,14 @@ export class BusinessService {
         include: {
           members: {
             include: { user: { select: { name: true, ci: true } } }
+          },
+          exchangeRates: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              rate: true,
+            }
           }
         }
       });
@@ -178,7 +186,7 @@ export class BusinessService {
 
   // 4. ACTUALIZAR DATOS
   async update(businessId: number, userId: number, data: UpdateBusinessInterface) {
-    
+
     try {
       // Primero verificamos acceso (podrías mover esto a un middleware de permisos más adelante)
       const member = await this.verifyAccess(businessId, userId);
@@ -217,7 +225,7 @@ export class BusinessService {
     }
   }
 
-  async updateExchangeRateConfig( businessId: number, userId: number, data: UpdateExchangeConfigInterface ) {
+  async updateExchangeRateConfig(businessId: number, userId: number, data: UpdateExchangeConfigInterface) {
     try {
       // A. Verificación de seguridad (Solo dueños o admins deberían tocar dinero)
       // Reutilizamos tu método privado verifyAccess
@@ -245,8 +253,8 @@ export class BusinessService {
               isActive: true
             }
           });
-        } 
-        
+        }
+
         // --- CASO 2: ESTRATEGIA API (BCV o PARALELO) ---
         else {
           // 2.1 Buscar la última tasa GLOBAL disponible en el sistema para esa estrategia
@@ -270,7 +278,7 @@ export class BusinessService {
           }
 
           newCurrentRate = Number(globalRate.rate);
-          
+
           // NOTA: Aquí NO creamos un registro en ExchangeRate. 
           // El negocio simplemente se "suscribe" a la tasa global existente.
         }
