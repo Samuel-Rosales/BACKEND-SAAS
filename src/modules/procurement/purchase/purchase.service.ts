@@ -43,7 +43,8 @@ export class PurchaseService {
             )];
 
             // --- CONSULTAS PARALELAS ---
-            const [supplier, products, depots, validPaymentMethods, presentations] = await Promise.all([
+            const [tax, supplier, products, depots, validPaymentMethods, presentations] = await Promise.all([
+                prisma.tax.findUnique({ where: { id: data.taxId } }),
 
                 prisma.supplier.findUnique({ where: { id: data.supplierId } }),
 
@@ -61,6 +62,8 @@ export class PurchaseService {
             ]);
     
             // --- VALIDACIONES DE EXISTENCIA ---
+            if (!tax) return { message: 'Impuesto no encontrado', status: 404, data: null };
+
             if (!supplier) return { message: 'Proveedor no encontrado', status: 404, data: null };
 
             if (!supplier.isActive) return { message: 'Proveedor inactivo', status: 400, data: null };
@@ -88,7 +91,7 @@ export class PurchaseService {
             }
     
             // Constantes convertidas a Decimal para operaciones
-            const taxRate = new Decimal(IVA); // Asumo que IVA es 0.16 o similar
+            const taxRate = new Decimal(tax.rate); // Asumo que IVA es 0.16 o similar
             const zero = new Decimal(0);
             const tolerance = new Decimal(0.001); // Reemplazo de EPSILON para tolerar redondeos mínimos
 
@@ -133,8 +136,12 @@ export class PurchaseService {
             }
 
             // B. Validar IVA
-            const calculatedTax = calculatedSubTotal.mul(taxRate); // Subtotal * 0.16
+            // IMPORTANTE: Aplicamos redondeo fiscal (2 decimales) al resultado calculado
+            const calculatedTax = calculatedSubTotal
+                .mul(taxRate)
+                .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
+            // Ahora sí comparamos peras con peras
             if (calculatedTax.sub(inputTax).abs().gt(tolerance)) {
                 return {
                     message: `Error en montos del IVA. Calculado: ${calculatedTax.toFixed(2)}, Enviado: ${inputTax}`,
@@ -144,7 +151,7 @@ export class PurchaseService {
             }
 
             // C. Validar Total
-            const calculatedTotal = calculatedSubTotal.add(calculatedTax); // Subtotal + IVA
+            const calculatedTotal = calculatedSubTotal.add(calculatedTax); // Sumamos el Subtotal (puro) + el Impuesto (ya redondeado)
 
             if (calculatedTotal.sub(inputTotalCost).abs().gt(tolerance)) {
                 return {
@@ -184,7 +191,8 @@ export class PurchaseService {
             // ==========================================
             // 4. LÓGICA DE ESTADOS Y CRÉDITO
             // ==========================================
-            let paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' = 'PAID';
+            let paymentStatus:
+             'PENDING' | 'PARTIAL' | 'PAID' = 'PAID';
             
             // Si remainingBalance > 0 (Usamos .isPositive() o .gt(0))
             // OJO: Hay que tener cuidado con 0.0000001, mejor usar tolerancia o redondeo previo
@@ -239,6 +247,7 @@ export class PurchaseService {
                 const purchase = await tx.purchase.create({
                     data: {
                         businessId,
+                        taxId: data.taxId,
                         memberId: userId,
                         supplierId: data.supplierId,
                         exchangeRateId: currentRateRecord.id,
