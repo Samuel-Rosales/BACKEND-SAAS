@@ -450,9 +450,11 @@ model CreditNoteItem {
   id           Int     @id @default(autoincrement())
   creditNoteId Int
   productId    Int
-  quantity     Decimal // Cantidad que entra de vuelta al stock
-  unitPrice    Decimal // Precio al que se vendió originalmente
-  subTotal     Decimal
+  quantity     Decimal @db.Decimal(18, 6) // Cantidad que entra de vuelta al stock
+  unitPrice    Decimal @db.Decimal(16, 2)// Precio al que se vendió originalmente
+  subTotal     Decimal @db.Decimal(16, 2)
+
+  returnToStock Boolean @default(true)
 
   creditNote CreditNote @relation(fields: [creditNoteId], references: [id])
   product    Product    @relation(fields: [productId], references: [id])
