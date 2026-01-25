@@ -122,25 +122,55 @@ Obtiene el catálogo con paginación y **Stock Actual Calculado** (suma de lotes
 
 ```json
 {
-  "status": 200,
   "message": "Productos obtenidos exitosamente",
+  "status": 200,
   "data": [
+    // CASO A: PRODUCTO SIMPLE (Físico)
+    // El stock es la SUMA de sus lotes reales.
     {
-      "id": 100,
-      "name": "Harina Pan 1kg",
-      "sku": "HAR-001",
-      "category": { "name": "Víveres" },
-      "unit": { "symbol": "und" },
-      "salePrice": "1.30",
+      "id": 101,
+      "name": "Coca Cola 1.5L",
+      "sku": "BEB-001",
       "type": "SIMPLE",
-      // Campo calculado en backend (Suma de todos los lotes en todos los depósitos)
+      "isPerishable": true,
+      "salePrice": "2.50",
+      "unit": { "id": 1, "symbol": "und" },
+      "category": { "id": 5, "name": "Bebidas" },
+      
+      // La magia: El backend sumó los lotes y te devolvió solo el total
       "currentStock": 150 
+    },
+
+    // CASO B: PRODUCTO COMPUESTO (Receta/Combo)
+    // El stock es CÁLCULADO (Factor Limitante).
+    // Ej: Tienes 100 panes y 12 carnes -> Stock = 12.
+    {
+      "id": 205,
+      "name": "Hamburguesa Royal",
+      "sku": "PLATO-055",
+      "type": "COMPOSITE",
+      "isPerishable": false, 
+      "salePrice": "8.00",
+      "unit": { "id": 1, "symbol": "und" },
+      "category": { "id": 8, "name": "Comida Rápida" },
+
+      // La magia: El backend revisó la receta, dividió el stock de ingredientes
+      // y te dijo "Solo puedes fabricar 12 ahora mismo".
+      "currentStock": 12 
+    },
+
+    // CASO C: SERVICIO
+    {
+      "id": 300,
+      "name": "Delivery Zona Centro",
+      "sku": "SRV-001",
+      "type": "SERVICE",
+      "currentStock": 0 // NO TIENEN
     }
   ],
   "meta": {
-    "total": 50,
+    "total": 3,
     "page": 1,
-    "lastPage": 3,
     "limit": 20
   }
 }

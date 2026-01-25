@@ -190,7 +190,7 @@ export class ProductService {
                 // =========================================================
 
                 if (product.type === 'SERVICE') {
-                    calculatedStock = new Decimal(999999); 
+                    calculatedStock = new Decimal(0); 
                 } 
                 
                 else if (product.type === 'SIMPLE') {
