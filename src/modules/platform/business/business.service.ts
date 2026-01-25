@@ -164,10 +164,15 @@ export class BusinessService {
         };
       }
 
+      const formattedBusinesses = {
+        ...business,
+        memberRole: business.members[0]?.role?.name || 'Miembro'
+      };
+
       return {
         message: 'Empresa obtenida exitosamente',
         status: 200,
-        data: business
+        data: formattedBusinesses
       };
 
     } catch (error) {
