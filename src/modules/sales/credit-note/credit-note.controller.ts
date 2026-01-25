@@ -7,22 +7,20 @@ export class CreditNoteController {
 
     create = async (req: Request, res: Response) => {
         const businessId = req.user.businessId;
-        const memberId = req.user.memberShipId;
+        const memberId = req.user.membershipId;
 
-        if (!businessId) { 
-            return { 
-                message: "El ID del negocio es requerido.",
-                status: 400,
-                data: null 
-            } 
+        if (!businessId) {
+            return res.status(400).json({
+                message: 'El ID del negocio es requerido. Verifica el header x-business-id.',
+                data: null
+            });
         }
 
         if (!memberId) {
-            return {
-                message: "El ID del miembro es requerido.",
-                status: 400,
+            return res.status(400).json({
+                message: 'No se pudo resolver la membresía del usuario para este negocio. Verifica el header x-business-id y tus permisos.',
                 data: null
-            }
+            });
         }
         
         const data: CreateCreditNoteInterface = req.body; 
@@ -41,11 +39,10 @@ export class CreditNoteController {
         const query = req.query; // Express ya parsea el query string
 
         if (!businessId) {
-            return { 
-                message: "El ID del negocio es requerido.",
-                status: 400,
-                data: null 
-            } 
+            return res.status(400).json({
+                message: 'El ID del negocio es requerido. Verifica el header x-business-id.',
+                data: null
+            });
         }
 
         const { status, message, data } = await this.service.findAll(businessId, query);

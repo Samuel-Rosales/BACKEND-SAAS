@@ -42,7 +42,7 @@ x-business-id: 1
 ```json
 {
   "name": "Juan Pérez",
-  "ci": "V-12345678",
+  "ci": "12345678",
   "phone": "+58 212 1234567",
   "email": "juan.perez@example.com",
   "address": "Av. Principal 123, Caracas"
@@ -52,7 +52,7 @@ x-business-id: 1
 #### Validaciones
 
 - `name`: Obligatorio, string, 2-200 caracteres
-- `ci`: Obligatorio, string, 3-20 caracteres, único por negocio (cédula/RIF/DNI)
+- `ci`: Obligatorio, string, **solo números**, 6-10 dígitos, único por negocio
 - `phone`: Opcional, string, 1-50 caracteres
 - `email`: Opcional, string, formato de email válido, máximo 255 caracteres
 - `address`: Opcional, string, máximo 500 caracteres
@@ -67,7 +67,7 @@ x-business-id: 1
     "id": 1,
     "businessId": 1,
     "name": "Juan Pérez",
-    "ci": "V-12345678",
+    "ci": "12345678",
     "phone": "+58 212 1234567",
     "email": "juan.perez@example.com",
     "address": "Av. Principal 123, Caracas"

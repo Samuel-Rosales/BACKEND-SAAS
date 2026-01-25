@@ -22,7 +22,7 @@ export class ProductController {
             if (!membershipId) {
                 return res.status(400).json({
                     status: 400,
-                    message: 'Falta el ID de la membresía en el header.',
+                    message: 'No se pudo resolver la membresía del usuario para este negocio. Verifica el header x-business-id y tus permisos.',
                     data: null
                 });
             }

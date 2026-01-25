@@ -6,7 +6,7 @@ import { stream, connectDB } from '../configs';
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } from '../modules/aim';
 import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute } from '../modules/platform';
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
-import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute } from '../modules/finance';
+import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute } from '../modules/finance';
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
 import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
 
@@ -43,6 +43,7 @@ export class Server {
             paymentMethods: `${this.prefix}/finance/payment-method`,
             cashRegisters: `${this.prefix}/finance/cash-register`,
             cashCounts: `${this.prefix}/finance/cash-count`,
+            taxes: `${this.prefix}/finance/tax`,
             suppliers: `${this.prefix}/procurement/supplier`,
             purchases: `${this.prefix}/procurement/purchase`,
             purchasePayments: `${this.prefix}/procurement/purchase-payment`,
@@ -87,6 +88,7 @@ export class Server {
         this.app.use(this.paths.paymentMethods, PaymentMethodRoute);
         this.app.use(this.paths.cashRegisters, CashRegisterRoute);
         this.app.use(this.paths.cashCounts, CashCountRoute);
+        this.app.use(this.paths.taxes, TaxRoute);
         this.app.use(this.paths.suppliers, SupplierRoute);
         this.app.use(this.paths.purchases, PurchaseRoute);
         this.app.use(this.paths.purchasePayments, PurchasePaymentRoute);

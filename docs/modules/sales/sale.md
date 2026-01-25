@@ -1,19 +1,22 @@
 # Módulo Sales - Ventas (POS & B2B)
 
-## ✅ Resumen de Endpoints
+## ✅ Resumen de Endpoints (v2026-01-25)
 
-**Base URL:** `/api/v1/sales`
+**Base URL:** `/api/v1/sales/sale`
+
 **Autenticación:** ✅ Requerida (Bearer Token)
+
 **Header Multi-tenant:** 🟢 Requerido (`x-business-id`)
 
 | Método | Endpoint | Descripción |
 | --- | --- | --- |
-| `POST` | `/` | **Registrar Venta** (Facturación, descargo de stock y pagos) |
-| `GET` | `/` | **Listar Ventas** (Histórico general con filtros) |
-| `GET` | `/:id` | **Obtener Venta** (Detalle completo, items y trazabilidad) |
-| `POST` | `/:id/payment` | **Registrar Pago** (Abono a Cuentas por Cobrar) |
-| `GET` | `/credits` | **Cuentas por Cobrar** (Listado de clientes con deuda) |
-| `GET` | `/:id/payment-history` | **Detalle Financiero** (Resumen de pagos y saldos) |
+| `POST` | `/` | Registrar Venta (facturación, descargo de stock y pagos) |
+| `GET` | `/` | Listar Ventas (histórico con filtros + paginado) |
+| `GET` | `/credit` | Cuentas por Cobrar (ventas con saldo pendiente) |
+| `GET` | `/:id` | Obtener Venta (detalle completo) |
+| `GET` | `/:id/sale-payment` | Historial de Pagos (detalle financiero) |
+| `POST` | `/:id/sale-payment` | Registrar Pago (abono) |
+| `PATCH` | `/:id` | Actualizar Venta (status/saldo/fecha venc.) |
 
 ---
 
@@ -28,7 +31,7 @@ Es el corazón del sistema. Ejecuta una **Transacción Atómica** compleja:
 3. **Inventario:** Descuenta stock FIFO y genera trazabilidad (Lotes -> SaleItems).
 4. **Finanzas:** Calcula impuestos, descuentos prorrateados y registra pagos iniciales.
 
-**Endpoint:** `POST /api/v1/sales`
+**Endpoint:** `POST /api/v1/sales/sale`
 
 #### Request Body
 
@@ -38,44 +41,44 @@ Es el corazón del sistema. Ejecuta una **Transacción Atómica** compleja:
 ```json
 {
   "clientId": 45,
-  "exchangeRateId": 102, // ID de la tasa ACTUAL mostrada en pantalla
-  "type": "RETAIL",      // "RETAIL" | "WHOLESALE"
-  "conditions": "CREDIT", // "CASH" | "CREDIT"
-  "depotId": 1,          // ⚠️ IMPORTANTE: Almacén de origen (Header)
-  "paymentDueDate": "2026-02-28", // Fecha límite de pago
+  "exchangeRateId": 102,
+  "type": "RETAIL",
+  "condition": "CREDIT",
+  "depotId": 1,
+  "paymentDueDate": "2026-02-28",
 
-  "discount": 0,         // Descuento Global (Monto, no porcentaje)
+  "discount": 0,
 
-  // --- ITEMS (Carrito de Compra) ---
   "items": [
     {
       "productId": 10,
-      "quantity": 2,     // Cantidad visual
-      "productPresentationId": 5 // Opcional (ej: Pack x6)
+      "quantity": 2,
+      "productPresentationId": 5
     }
-    // Nota: El backend calculará precios, impuestos y recetas automáticamente.
   ],
 
-  // --- PAGOS INICIALES (Abono) ---
   "payments": [
     {
-      "paymentMethodId": 2, // Zelle
-      "amount": 50.00,      // Monto en moneda del método
-      "reference": "REF-12345",
-      "exchangeRateId": 102 // Recomendado (si no se envía, se asume la misma tasa de la venta)
+      "paymentMethodId": 2,
+      "amount": 50.0,
+      "reference": "REF-12345"
     }
+  ],
+
+  "installments": [
+    { "number": 1, "amount": 50.0, "dueDate": "2026-02-10" },
+    { "number": 2, "amount": 95.5, "dueDate": "2026-02-28" }
   ]
 }
-
 ```
 
 #### Validaciones Clave (Backend)
 
-* **Stock:** Si envías `depotId`, se descuenta solo de ese almacén. Si es `null`, busca globalmente. Si es un `SERVICE`, no valida stock.
-* **Tasa:** Si el `exchangeRateId` enviado es diferente al activo en BD, devuelve `409 Conflict`. El front debe refrescar la tasa.
+* **Stock:** Si envías `depotId`, se descuenta solo de ese almacén. Si no lo envías, puede resolver globalmente.
+* **Tasa:** Si el `exchangeRateId` enviado es diferente a la tasa actual, devuelve `409 Conflict`.
 * **Matemática:** El sistema usa `Decimal` (precisión bancaria).
-* `Cash`: Si `pagos < total`, error 400.
-* `Credit`: Se guarda `remainingBalance` y `paymentDueDate` para gestión de cobranza.
+* `CASH`: Si `pagos < total`, error 400.
+* `CREDIT`: Requiere `installments` y la suma de cuotas debe cuadrar con la deuda.
 
 
 
@@ -103,7 +106,7 @@ Es el corazón del sistema. Ejecuta una **Transacción Atómica** compleja:
 
 Listado general con filtros avanzados.
 
-**Endpoint:** `GET /api/v1/sales`
+**Endpoint:** `GET /api/v1/sales/sale`
 
 #### Query Params
 
@@ -116,11 +119,11 @@ Listado general con filtros avanzados.
 
 ---
 
-### 3. Cuentas por Cobrar (Find Credits) 🆕
+### 3. Cuentas por Cobrar (Find Credits)
 
 Endpoint optimizado para la gestión de cobranza. Devuelve solo las ventas que tienen saldo pendiente (`remainingBalance > 0`).
 
-**Endpoint:** `GET /api/v1/sales/credits`
+**Endpoint:** `GET /api/v1/sales/sale/credit`
 
 #### Response (200 OK)
 
@@ -150,7 +153,7 @@ Endpoint optimizado para la gestión de cobranza. Devuelve solo las ventas que t
 
 Registra un abono a una venta existente. Usa lógica **Waterfall (Cascada)**: el pago cubre automáticamente las cuotas más antiguas primero.
 
-**Endpoint:** `POST /api/v1/sales/:id/payment`
+**Endpoint:** `POST /api/v1/sales/sale/:id/sale-payment`
 
 #### Request Body
 
@@ -195,7 +198,7 @@ Registra un abono a una venta existente. Usa lógica **Waterfall (Cascada)**: el
 
 Obtiene la radiografía completa de los pagos de una venta. Útil para auditoría o para mostrar al cliente "qué ha pagado".
 
-**Endpoint:** `GET /api/v1/sales/:id/payment-history`
+**Endpoint:** `GET /api/v1/sales/sale/:id/sale-payment`
 
 #### Response (200 OK)
 

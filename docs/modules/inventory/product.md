@@ -140,7 +140,8 @@ Obtiene el catálogo con paginación y **Stock Actual Calculado** (suma de lotes
   "meta": {
     "total": 50,
     "page": 1,
-    "lastPage": 3
+    "lastPage": 3,
+    "limit": 20
   }
 }
 
@@ -156,6 +157,8 @@ Devuelve la radiografía completa del producto.
 
 #### Response (200 OK)
 
+**Nota:** Este endpoint retorna un objeto **sanitizado** para el frontend (no devuelve lotes completos).
+
 ```json
 {
   "status": 200,
@@ -163,32 +166,37 @@ Devuelve la radiografía completa del producto.
   "data": {
     "id": 100,
     "name": "Hamburguesa Clásica",
+    "sku": "FOOD-HAM-001",
+    "description": "",
+    "imageUrl": null,
     "type": "COMPOSITE",
-    "currentStock": 0, // Stock físico directo (para recetas suele ser 0)
-    
-    // 1. Dónde está mi stock (si es físico)
-    "stockLots": [
-       { "quantity": 10, "depot": { "name": "Almacén Central" }, "expirationDate": "..." }
+    "isPerishable": false,
+
+    "price": 5,
+    "minStock": 0,
+    "currentStock": 0,
+
+    "category": { "id": 10, "name": "Comida" },
+    "unit": { "id": 1, "name": "Unidad", "symbol": "und" },
+
+    "presentations": [
+      { "id": 5, "name": "Pack x6", "factor": 6, "price": 30 }
     ],
 
-    // 2. Si soy Receta, qué ingredientes llevo
     "components": [
-       { "childProductId": 50, "quantity": 1, "child": { "name": "Pan Burger" } }
+      {
+        "id": 1,
+        "ingredientName": "Pan Burger",
+        "quantityRequired": 1,
+        "unitSymbol": "und"
+      }
     ],
 
-    // 3. Si soy Ingrediente, en qué platos me usan
-    "componentOf": [
-       { "parent": { "id": 200, "name": "Combo Familiar" } }
-    ],
-
-    // 4. Estadísticas rápidas
-    "_count": {
-       "saleItems": 450, // Veces vendido
-       "purchaseItems": 0
+    "stockByDepot": {
+      "Almacén Central": 10
     }
   }
 }
-
 ```
 
 ---

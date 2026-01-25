@@ -143,10 +143,7 @@ export class ProductService {
 
             const whereClause: any = { businessId };
 
-            if (categoryId) {
-                whereClause.categoryId = categoryId;
-            }
-
+            if (categoryId) whereClause.categoryId = categoryId;
             if (search) {
                 whereClause.OR = [
                     { name: { contains: search, mode: 'insensitive' } },
@@ -162,29 +159,98 @@ export class ProductService {
                     orderBy: { id: 'desc' },
                     include: {
                         category: { select: { id: true, name: true } },
-                        unit: { select: { id: true, symbol: true } }, // <--- ÚTIL PARA EL FRONTEND
-                        presentations: true, // <--- Include presentations
-                        // Opcional: Traer stock total sumado de los lotes
-                        stockLots: { select: { quantity: true } }
+                        unit: { select: { id: true, symbol: true } },
+                        presentations: true,
+                        
+                        // --- CAMBIO 1: Traemos el stock físico (para productos Simples) ---
+                        stockLots: { select: { quantity: true } },
+
+                        // --- CAMBIO 2: Traemos la receta y el stock de los ingredientes (para Compuestos) ---
+                        components: {
+                            include: {
+                                child: { // El producto "Ingrediente"
+                                    select: {
+                                        // Necesitamos sumar sus lotes para saber cuánto hay
+                                        stockLots: { select: { quantity: true } }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }),
                 prisma.product.count({ where: whereClause })
             ]);
 
             const formattedProducts = products.map(product => {
-                // 1. Inicializamos con un Decimal(0)
-                const totalStock = product.stockLots.reduce(
-                    (acc, lot) => acc.add(lot.quantity), 
-                    new Decimal(0)
-                );
+                // Inicializamos como Decimal para mantener la cadena de precisión
+                let calculatedStock = new Decimal(0);
 
-                // 2. Retornamos el objeto limpio
+                // =========================================================
+                // LÓGICA DE CÁLCULO CON DECIMAL.JS
+                // =========================================================
+
+                if (product.type === 'SERVICE') {
+                    calculatedStock = new Decimal(999999); 
+                } 
+                
+                else if (product.type === 'SIMPLE') {
+                    // SUMA PRECIS: Usamos .add() en lugar de +
+                    calculatedStock = product.stockLots.reduce(
+                        (acc, lot) => acc.add(new Decimal(lot.quantity)), 
+                        new Decimal(0)
+                    );
+                } 
+                
+                else if (product.type === 'COMPOSITE') {
+                    // LÓGICA DEL FACTOR LIMITANTE (Reactivo Limitante)
+                    
+                    if (!product.components || product.components.length === 0) {
+                        calculatedStock = new Decimal(0);
+                    } else {
+                        // Mapeamos a un array de Decimals con la cantidad posible por ingrediente
+                        const possibleQuantities = product.components.map(component => {
+                            const requiredQty = new Decimal(component.quantity);
+                            
+                            // Evitar división por cero
+                            if (requiredQty.isZero() || requiredQty.isNegative()) return new Decimal(0);
+
+                            // 1. Sumamos el stock del ingrediente (child)
+                            const ingredientTotalStock = component.child.stockLots.reduce(
+                                (acc, lot) => acc.add(new Decimal(lot.quantity)), 
+                                new Decimal(0)
+                            );
+
+                            // 2. División precisa: StockDisponible / CantidadRequerida
+                            // Ej: 1000g Harina / 250g Receta = 4 Pasteles
+                            // Usamos .floor() porque no podemos hacer 3.9 pasteles completos
+                            return ingredientTotalStock.div(requiredQty).floor();
+                        });
+
+                        // 3. Encontrar el Mínimo (Cuello de botella)
+                        // Decimal.min(...array) funciona si usas la librería directa, 
+                        // pero para mayor compatibilidad con Prisma iteramos:
+                        if (possibleQuantities.length > 0) {
+                            calculatedStock = possibleQuantities.reduce((min, current) => 
+                                current.lessThan(min) ? current : min
+                            );
+                        } else {
+                            calculatedStock = new Decimal(0);
+                        }
+                    }
+                }
+
+                // =========================================================
+                // SALIDA PARA EL FRONTEND
+                // =========================================================
                 return {
                     ...product,
-                    stockLots: undefined, 
-                    // Si quieres que el frontend reciba un número normal: .toNumber()
-                    // Si quieres mantener precisión total: se queda como objeto Decimal
-                    currentStock: totalStock
+                    stockLots: undefined,
+                    components: undefined,
+                    
+                    // FINALMENTE convertimos a Number para que el JSON sea ligero
+                    // y el frontend (React) pueda hacer cálculos simples o mostrarlo.
+                    // Usamos toNumber() de la librería Decimal.
+                    currentStock: calculatedStock.toNumber()
                 };
             });
 
@@ -201,7 +267,6 @@ export class ProductService {
         }
     }
 
-    // 3. BUSCAR UNO
     async findOne(businessId: number, id: number) {
         try {
             const product = await prisma.product.findFirst({
@@ -209,60 +274,99 @@ export class ProductService {
                 include: {
                     category: { select: { id: true, name: true } },
                     unit: { select: { id: true, name: true, symbol: true } },
-                    presentations: true,
+                    presentations: { where: { isActive: true } }, // Solo activas
+                    
+                    // OJO: Solo traemos lotes con stock positivo para el frontend
+                    // Así no envías 500 lotes vacíos viejos.
                     stockLots: { 
+                        where: { quantity: { gt: 0 } }, 
                         include: { 
-                            depot: { 
-                                select: { 
-                                    id: true, 
-                                    name: true 
-                                }
-                            } 
-                        } 
+                            depot: { select: { id: true, name: true } } 
+                        },
+                        orderBy: { expirationDate: 'asc' } // FEFO (Primero en vencer)
                     },
                     components: {
                         include: {
-                            child: { // Traer datos del ingrediente (Hijo)
-                                select: { 
-                                    id: true, 
-                                    name: true, 
-                                    sku: true,
-                                    unit: { select: { symbol: true } }
-                                }
+                            child: {
+                                select: { id: true, name: true, unit: { select: { symbol: true } } }
                             }
                         }
                     },
-                    componentOf: {
-                        include: {
-                            parent: { select: { id: true, name: true } }
-                        }
-                    },
-                    _count: {
-                        select: {
-                            stockLots: true,
-                            saleItems: true,
-                            purchaseItems: true,
-                            stockMovements: true
-                        }
-                    }
+                    componentOf: true, // Saber si es ingrediente de algo
+                    _count: true
                 }
             });
 
             if (!product) return { message: 'Producto no encontrado', status: 404, data: null };
 
-            // Calculamos el stock total sumado de los lotes
-            const totalStock = product.stockLots.reduce((acc, lot) => acc.add(lot.quantity), new Decimal(0));
-            const productWithStock = {
-                ...product,
-                currentStock: totalStock
+            // =========================================================
+            // LÓGICA DE STOCK TOTAL (Vital para el Front)
+            // =========================================================
+            // Sumamos lo que hay en los lotes
+            const totalStockDecimal = product.stockLots.reduce((acc, lot) => acc.add(lot.quantity), new Decimal(0));
+
+            // =========================================================
+            // MAPEO (TRANSFORMACIÓN) PARA EL FRONTEND
+            // =========================================================
+            const sanitizedProduct = {
+                id: product.id,
+                name: product.name,
+                sku: product.sku,
+                description: product.description,
+                imageUrl: product.imageUrl,
+                type: product.type,
+                isPerishable: product.isPerishable,
+                
+                // Conversión de Decimal a Number (JS nativo)
+                price: new Decimal(product.salePrice).toNumber(),
+                minStock: product.minStock,
+                
+                // Info Calculada
+                currentStock: totalStockDecimal.toNumber(),
+                
+                // Relaciones limpias
+                category: product.category,
+                unit: product.unit,
+                
+                // Presentaciones con precios convertidos
+                presentations: product.presentations.map(p => ({
+                    ...p,
+                    price: new Decimal(p.price).toNumber(),
+                    factor: new Decimal(p.factor).toNumber()
+                })),
+
+                // Componentes (Si es Receta)
+                components: product.components.map(c => ({
+                    id: c.id,
+                    ingredientName: c.child.name,
+                    quantityRequired: new Decimal(c.quantity).toNumber(),
+                    unitSymbol: c.child.unit.symbol
+                })),
+
+                // NOTA: No enviamos 'stockLots' completos para no revelar costos.
+                // Si necesitas mostrar desglose por almacén, crea un objeto resumido:
+                stockByDepot: this.groupStockByDepot(product.stockLots) 
             };
 
-            return { message: 'Producto encontrado', status: 200, data: productWithStock };
+            return { message: 'Producto encontrado', status: 200, data: sanitizedProduct };
 
         } catch (error) {
             console.error('Error al obtener el producto:', error);
             return { message: 'Error interno', status: 500, data: null };
         }
+    }
+
+    // Helper para agrupar stock visualmente sin dar costos
+    private groupStockByDepot(lots: any[]) {
+        const summary: Record<string, number> = {};
+        lots.forEach(lot => {
+            const depotName = lot.depot.name;
+            const qty = new Decimal(lot.quantity).toNumber();
+            if (!summary[depotName]) summary[depotName] = 0;
+            summary[depotName] += qty;
+        });
+        // Retorna: { "Almacén Principal": 50, "Cocina": 10 }
+        return summary;
     }
 
     // 4. ACTUALIZAR

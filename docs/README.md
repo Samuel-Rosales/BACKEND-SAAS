@@ -31,6 +31,7 @@ Documentación completa de la API REST del sistema SaaS.
 ### Módulo Finance
 - [Tasas de Cambio (Exchange Rate)](./modules/finance/exchange-rate.md)
 - [Métodos de Pago (Payment Method)](./modules/finance/payment-method.md)
+- [Impuestos (Tax)](./modules/finance/tax.md)
 - [Caja Registradora (Cash Register)](./modules/finance/cash-register.md)
 - [Conteo de Caja (Cash Count)](./modules/finance/cash-count.md)
 
@@ -43,6 +44,7 @@ Documentación completa de la API REST del sistema SaaS.
 ### Módulo Sales
 - [Clientes (Client)](./modules/sales/client.md)
 - [Ventas (Sale)](./modules/sales/sale.md)
+- [Notas de Crédito (Credit Note)](./modules/sales/credit-note.md)
 
 ## 🔗 Base URL
 
