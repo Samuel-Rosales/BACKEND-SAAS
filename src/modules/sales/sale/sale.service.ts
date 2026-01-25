@@ -44,11 +44,13 @@ export class SaleService {
             // =================================================================
             
             // 1. Cargar Cliente y Vendedor
-            const [client, member] = await Promise.all([
+            const [client, member, business] = await Promise.all([
                 prisma.client.findFirst({ where: { id: data.clientId, businessId } }),
-                prisma.businessMember.findFirst({ where: { id: memberId, businessId } })
+                prisma.businessMember.findFirst({ where: { id: memberId, businessId } }),
+                prisma.business.findUnique({ where: { id: businessId } })
             ]);
 
+            if (!business) throw new BusinessError('Negocio no encontrado', 404);
             if (!client) throw new BusinessError('Cliente no encontrado o no pertenece al negocio', 404);
             if (!member) throw new BusinessError('Vendedor no autorizado', 403);
 
@@ -224,6 +226,44 @@ export class SaleService {
             // Asumimos que 'totalAmount' viene de la Fase 2 y YA ES un Decimal
             const remainingBalance = totalAmount.sub(totalPaidFinal).toDecimalPlaces(2);
 
+            // =================================================================
+            // VALIDACIÓN DE CRÉDITO
+            // =================================================================
+            
+            // Usamos remainingBalance, que es exactamente lo que se va a crédito
+            if (data.condition === Conditions.CREDIT && remainingBalance.gt(0)) {
+
+                // 1. ¿El negocio permite crédito globalmente?
+                if (!business.enableGlobalCredit) {
+                    throw new BusinessError('Las ventas a crédito están deshabilitadas temporalmente en el negocio.', 409);
+                }
+
+                // 2. ¿Este cliente está bloqueado para créditos?
+                if (!client.allowCredit) {
+                    throw new BusinessError('Este cliente no tiene permitido realizar compras a crédito.', 409);
+                }
+
+                // 3. CALCULAR EL LÍMITE EFECTIVO
+                const effectiveLimit = client.useCustomLimit 
+                    ? new Decimal(client.customLimit) 
+                    : new Decimal(business.defaultCreditLimit);
+
+                const currentDebt = new Decimal(client.currentDebt);
+                
+                // 4. Validar Disponibilidad
+                const projectedDebt = currentDebt.add(remainingBalance);
+
+                if (projectedDebt.gt(effectiveLimit)) {
+                    const available = effectiveLimit.sub(currentDebt);
+                    // Protegemos si el disponible es negativo
+                    const safeAvailable = available.lt(0) ? new Decimal(0) : available;
+
+                    throw new BusinessError(
+                        `Límite de crédito excedido. Cupo: $${effectiveLimit.toFixed(2)}. Disponible: $${safeAvailable.toFixed(2)}. Intentas sumar: $${remainingBalance.toFixed(2)}`, 
+                        409
+                    );
+                }
+            }
 
             // =================================================================
             // VALIDACIONES DE NEGOCIO
@@ -370,6 +410,16 @@ export class SaleService {
                             reference: p.reference || "N/A",
                             cashRegisterId: activeRegister.id
                         }))
+                    });
+                }
+                 
+                // Si quedó debiendo algo (remainingBalance > 0), se lo sumamos a su cuenta.
+                if (remainingBalance.gt(0)) {
+                    await tx.client.update({
+                        where: { id: client.id }, // Usamos el objeto 'client' que cargamos al principio
+                        data: { 
+                            currentDebt: { increment: remainingBalance } 
+                        }
                     });
                 }
 

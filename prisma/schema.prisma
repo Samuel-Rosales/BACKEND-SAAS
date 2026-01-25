@@ -96,6 +96,10 @@ model Business {
   // tener que consultar la estrategia en cada lectura de producto.
   currentExchangeRate Decimal @default(1.0) @db.Decimal(10, 4) 
 
+  // POLÍTICA GLOBAL
+  defaultCreditLimit Decimal @default(100) @db.Decimal(15, 2) // Ej: Todos nacen con $100
+  enableGlobalCredit Boolean @default(true) // Interruptor general
+
   // Relaciones
   exchangeRates ExchangeRate[] // Historial de tasas creadas por este negocio
 
@@ -352,6 +356,12 @@ model Client {
   email      String?
   address    String?
   isActive   Boolean @default(true)
+
+  currentDebt Decimal @default(0) @db.Decimal(15, 2)
+
+  allowCredit     Boolean @default(true)  // ¿Este cliente específico puede pedir fiado?
+  useCustomLimit  Boolean @default(false) // ¿Ignoramos el límite del negocio?
+  customLimit     Decimal @default(0) @db.Decimal(15, 2) // Solo se usa si useCustomLimit = true
 
   business Business @relation(fields: [businessId], references: [id])
   sales    Sale[]
