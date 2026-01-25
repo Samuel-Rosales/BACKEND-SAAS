@@ -144,9 +144,7 @@ export class BusinessService {
           }
         },
         include: {
-          members: {
-            include: { user: { select: { name: true, ci: true } } }
-          },
+          members: { where: { userId: userId }, select: { role: { select: { name: true } } } },
           exchangeRates: {
             orderBy: { createdAt: 'desc' },
             take: 1,

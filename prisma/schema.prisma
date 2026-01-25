@@ -167,7 +167,7 @@ model Tax {
   isActive    Boolean  @default(true)
 
   products    Product[]
-  
+  purchases   Purchase[]
   // Opcional: Si los impuestos son estándar para todos los tenants, quita businessId
   //business    Business @relation(fields: [businessId], references: [id])
 }
@@ -550,6 +550,9 @@ model Purchase {
   
   remainingBalance Decimal @default(0) @db.Decimal(15, 2) // Cuánto falta por pagar
   paymentDueDate   DateTime? // Fecha límite final (o fecha de la primera cuota, según lógica)
+
+  taxId     Int 
+  tax       Tax @relation(fields: [taxId], references: [id])
 
   // Relación con las nuevas Cuotas
   installments    PurchaseInstallment[]

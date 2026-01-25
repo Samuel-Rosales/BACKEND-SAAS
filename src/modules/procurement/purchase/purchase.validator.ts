@@ -28,6 +28,11 @@ export class PurchaseValidator {
       .isInt().withMessage('El ID de la tasa debe ser un número entero')
       .toInt(),
 
+    body('taxId')
+      .notEmpty().withMessage('El ID del impuesto es obligatorio (envía el ID de Exento si no aplica)')
+      .isInt().withMessage('El ID del impuesto debe ser un entero')
+      .toInt(),
+
     body('reference')
       .optional()
       .trim()
