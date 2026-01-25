@@ -1,68 +1,76 @@
 import { prisma } from "@/configs";
-import { Prisma, PrismaClient } from "@prisma/client";
-import { calculatePriceWithMargin } from "./calculate-price-margin.util";
+import { Prisma } from "@prisma/client";
+import { Decimal } from '@prisma/client/runtime/client';
+import { calculatePriceWithMarkup } from "./calculate-price-margin.util";
 
 type PrismaTx = Prisma.TransactionClient;
-/**
- * Actualiza en cascada los costos de los productos compuestos (Recetas).
- * Se llama cuando cambia el costo de un insumo.
- * * @param tx - La transacción actual (OBLIGATORIO para consistencia de datos)
- * @param productId - El ID del producto que acaba de cambiar de precio (Hijo)
- */
+
 export async function updateRecursiveRecipeCosts(tx: PrismaTx = prisma, productId: number) {
     
-    // 1. BUSCAR PADRES: ¿Quién usa este producto como ingrediente?
-    // Esto es lo primero que debemos hacer. Si nadie lo usa, terminamos.
+    // 1. BUSCAR PADRES
     const parents = await tx.productComponent.findMany({
         where: { childProductId: productId },
         select: { parentProductId: true }
     });
 
-    if (parents.length === 0) return; // Caso base: Nadie usa este producto
+    if (parents.length === 0) return;
 
-    // 2. RECORRER PADRES (Las Recetas que se vieron afectadas)
+    // 2. RECORRER PADRES
     for (const relation of parents) {
         const parentId = relation.parentProductId;
 
-        // A. Traemos la receta completa del Padre para recalcularlo
         const parentProduct = await tx.product.findUnique({
             where: { id: parentId },
             include: { 
                 components: { 
-                    include: { child: true } // Necesitamos el costo actual de cada hijo
+                    include: { child: true } 
                 } 
             }
         });
 
         if (!parentProduct || parentProduct.components.length === 0) continue;
 
-        // B. Recálculo Matemático (Sumatoria de Costo * Cantidad)
-        let newTotalCost = 0;
+        // B. Recálculo Matemático (USANDO DECIMAL) 🧮
+        // Inicializamos en 0 modo Decimal
+        let newTotalCost = new Decimal(0);
         
         for (const component of parentProduct.components) {
-            // Formula: Costo Insumo * Cantidad en Receta
-            const componentCost = Number(component.child.costPrice) * Number(component.quantity);
-            newTotalCost += componentCost;
+            // Prisma ya devuelve estos valores como Decimal, pero por seguridad instanciamos
+            const cost = new Decimal(component.child.costPrice); 
+            const qty = new Decimal(component.quantity);
+
+            // Operación: Costo * Cantidad
+            // .add() = Sumar
+            // .mul() = Multiplicar
+            newTotalCost = newTotalCost.add(cost.mul(qty));
         }
 
-        // C. Actualizar al Padre
-        // Solo escribimos en BD si el costo cambió para evitar spam en los logs
-        if (Math.abs(Number(parentProduct.costPrice) - newTotalCost) > 0.001) {
+        // C. Verificar cambio (Diff > 0.001)
+        // Usamos .sub() para restar y .abs() para valor absoluto
+        const currentCost = new Decimal(parentProduct.costPrice);
+        const difference = currentCost.sub(newTotalCost).abs();
+
+        // Comparamos con un Decimal(0.001)
+        if (difference.gt(new Decimal(0.001))) {
             
-            console.log(`[COSTOS] Actualizando ${parentProduct.name}: ${parentProduct.costPrice} -> ${newTotalCost}`);
+            console.log(`[COSTOS] Actualizando ${parentProduct.name}: ${currentCost} -> ${newTotalCost}`);
+
+            // NOTA: Para tu utilidad de precio de venta, convertimos a Number
+            // porque esa función matemática simple trabaja con JS nativo.
+            const newSalePrice = calculatePriceWithMarkup(
+                Number(parentProduct.profitMargin), 
+                newTotalCost.toNumber() // <--- Conversión segura solo para UI/Venta
+            );
 
             await tx.product.update({
                 where: { id: parentId },
                 data: { 
-                    costPrice: newTotalCost,
-                    // Opcional: Si quieres actualizar precio de venta automáticamente manteniendo el margen
-                    salePrice: calculatePriceWithMargin(Number(parentProduct.profitMargin), newTotalCost)
+                    costPrice: newTotalCost, // Prisma acepta el objeto Decimal directo
+                    salePrice: newSalePrice
                 }
             });
 
-            // D. RECURSIVIDAD (Nivel Dios)
-            // Ahora el Padre (ej: Salsa Boloñesa) ha cambiado de precio.
-            // Debemos avisar a sus propios padres (ej: Pasticho) que actualicen.
+            // D. RECURSIVIDAD
             await updateRecursiveRecipeCosts(tx, parentId);
         }
     }

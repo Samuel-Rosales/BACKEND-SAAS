@@ -1,4 +1,5 @@
 import { Conditions } from "@prisma/client";
+import { Decimal } from "@prisma/client/runtime/client";
 
 export interface CreatePurchaseInstallment {
     number: number;
@@ -11,24 +12,24 @@ export interface CreatePurchaseItemDto {
     productId: number;
     depotId: number;    // <--- NUEVO: Cada producto puede ir a un almacén distinto
     productPresentationId?: number; // Opcional (si es null, es la unidad base)
-    quantity: number;
-    unitCost: number;   // Costo unitario según factura
+    quantity: Decimal;
+    unitCost: Decimal;   // Costo unitario según factura
     expirationDate?: string; // "YYYY-MM-DD" (Opcional. Backend pondrá 2099 si falta)
 }
 
 // DTO para los pagos (Soporte bi-monetario)
 export interface PurchasePaymentDto {
     paymentMethodId: number;
-    amount: number;       // El monto tal cual lo pagó el usuario (Ej: 100 Bs)
+    amount: Decimal;       // El monto tal cual lo pagó el usuario (Ej: 100 Bs)
     reference: string;   // Referencia bancaria / Zelle
 }
 
 // DTO Principal de Creación (Cabecera)
 export interface CreatePurchaseInterface {
     supplierId: number;
-    subTotal: number;
-    taxAmount: number;
-    totalCost: number;
+    subTotal: Decimal;
+    taxAmount: Decimal;
+    totalCost: Decimal;
     exchangeRateId: number; // Validación de seguridad
     reference?: string;
     observation?: string;
@@ -50,7 +51,7 @@ export interface CreatePaymentDto {
     exchangeRateId: number;  
 
     // 3. ¿Cuánto paga? (El número que sale en el comprobante bancario)
-    amount: number;          
+    amount: Decimal;          
 
     // 4. ¿Cuál es el comprobante? (Opcional, pues Efectivo no suele tener)
     reference?: string;      

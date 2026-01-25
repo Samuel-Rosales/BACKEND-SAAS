@@ -587,8 +587,8 @@ model PurchaseItem {
   productId             Int
   depotId               Int
   productPresentationId Int? // <--- NUEVO: Presentación usada (caja, pack, unidad)
-  quantity              Int
-  unitCost              Decimal  @db.Decimal(15, 2)
+  quantity              Decimal  @db.Decimal(18, 6)
+  unitCost              Decimal  @db.Decimal(18, 6)
   expirationDate        DateTime @db.Date
 
   purchase            Purchase             @relation(fields: [purchaseId], references: [id])
