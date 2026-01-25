@@ -26,6 +26,6 @@ export const products = [
   { businessId: 3, categoryId: 9, unitId: 1, taxId: 1, name: "Protector Solar SPF50", sku: "SOL-50", description: "Cuidado de la piel", imageUrl: null, type: "SIMPLE", isPerishable: false, costPrice: 4.5, profitMargin: 0.35, salePrice: 6.08, minStock: 8, updatedById: 1, isActive: true },
 
   // Business 4 (Servicios)
-  { businessId: 4, categoryId: 10, unitId: 6, taxId: 1, name: "Consultoría (1 hora)", sku: "CONS-1H", description: "Servicio profesional", imageUrl: null, type: "SERVICE", isPerishable: false, costPrice: 0.0, profitMargin: 1.0, salePrice: 25.0, minStock: 0, updatedById: 1, isActive: true },
-  { businessId: 4, categoryId: 10, unitId: 6, taxId: 1, name: "Diseño de Logo", sku: "DES-LOGO", description: "Entrega digital", imageUrl: null, type: "SERVICE", isPerishable: false, costPrice: 0.0, profitMargin: 1.0, salePrice: 60.0, minStock: 0, updatedById: 1, isActive: true }
+  { businessId: 4, categoryId: 10, unitId: 4, taxId: 1, name: "Consultoría (1 hora)", sku: "CONS-1H", description: "Servicio profesional", imageUrl: null, type: "SERVICE", isPerishable: false, costPrice: 0.0, profitMargin: 1.0, salePrice: 25.0, minStock: 0, updatedById: 1, isActive: true },
+  { businessId: 4, categoryId: 10, unitId: 4, taxId: 1, name: "Diseño de Logo", sku: "DES-LOGO", description: "Entrega digital", imageUrl: null, type: "SERVICE", isPerishable: false, costPrice: 0.0, profitMargin: 1.0, salePrice: 60.0, minStock: 0, updatedById: 1, isActive: true }
 ];

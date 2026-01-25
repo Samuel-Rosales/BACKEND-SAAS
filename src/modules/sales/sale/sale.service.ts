@@ -164,7 +164,7 @@ export class SaleService {
                     ...item, 
                     // Conversión segura para stock (cantidad * factor de presentación)
                     // Usamos Decimal para la multiplicacion para evitar 3 * 0.1 = 0.3000000004
-                    quantityToDeductFromStock: new Decimal(item.quantity).mul(item.factor).toNumber(),
+                    quantityToDeductFromStock: new Decimal(item.quantity).mul(item.factor),
                     
                     // Guardamos los valores finales como Decimal para la BD
                     finalLinePrice: lineNetAmount, 
@@ -389,7 +389,7 @@ export class SaleService {
         saleId: number,
         saleItemId: number,
         product: any, 
-        quantityToRemove: number,
+        quantityToRemove: Decimal,
         depotId: number // <--- Recibimos el Depósito (Opcional)
     ) {
         // =========================================================
@@ -423,18 +423,22 @@ export class SaleService {
             let remainingToDeduct = quantityToRemove;
 
             for (const lot of lots) {
-                if (remainingToDeduct <= 0) break;
+                if (remainingToDeduct.lte(0)) break; // lte = Less Than or Equal (<=)
 
-                // Tomamos lo que hay en el lote o lo que falta (lo menor de los dos)
-                const deduction = Math.min(lot.quantity, remainingToDeduct);
+                // 1. Convertimos la cantidad del lote a Decimal por seguridad
+                const lotQty = new Decimal(lot.quantity);
 
-                // A. Actualizar Lote (Restar cantidad)
+                // 2. Lógica de "Deduction": ¿Cuál es el menor?
+                // Usamos el operador ternario con .lessThan()
+                const deduction = lotQty.lessThan(remainingToDeduct) ? lotQty : remainingToDeduct;
+
+                // A. Actualizar Lote
                 await tx.stockLot.update({
                     where: { id: lot.id },
                     data: { quantity: { decrement: deduction } }
                 });
 
-                // B. Trazabilidad (Vincular Lote específico con Item de Venta)
+                // B. Trazabilidad
                 await tx.saleItemLot.create({
                     data: {
                         saleItemId: saleItemId,
@@ -443,25 +447,26 @@ export class SaleService {
                     }
                 });
 
-                // C. Kardex (Histórico de Movimiento)
+                // C. Kardex
                 await tx.stockMovement.create({
                     data: {
                         businessId,
                         productId: product.id,
                         memberId: memberId,
-                        depotId: lot.depotId, // Importante: Guardamos de qué deposito salió este lote
-                        type: MovementType.OUT,
+                        depotId: lot.depotId,
+                        type: 'OUT',
                         quantity: deduction,
-                        historicalCost: lot.lotCost, // Costo real al momento de compra (FIFO)
+                        historicalCost: lot.lotCost,
                         reason: `Venta #${saleId}`
                     }
                 });
 
-                remainingToDeduct -= deduction;
+                // 3. Restamos usando .sub() para mantener precisión
+                remainingToDeduct = remainingToDeduct.sub(deduction);
             }
 
             // Safety Check: Aunque validamos antes, si alguien robó el stock milisegundos antes, esto explota aquí.
-            if (remainingToDeduct > 0) {
+            if (remainingToDeduct.gt(0)) {
                 throw new BusinessError(`Inconsistencia de inventario en "${product.name}". Faltan ${remainingToDeduct}.`, 409);
             }
         }
@@ -474,20 +479,29 @@ export class SaleService {
                 throw new BusinessError(`El combo "${product.name}" no tiene configuración de receta.`, 400);
             }
 
+            // 1. Aseguramos que quantityToRemove sea Decimal
+            const qtyToSell = new Decimal(quantityToRemove);
+
             for (const comp of product.components) {
-                // Calculamos cuánto del ingrediente necesitamos
-                const ingredientQty = quantityToRemove * Number(comp.quantity);
+                // 2. Multiplicación de alta precisión: (Cantidad Vendida) * (Cantidad en Receta)
+                // Ejemplo: 10 hamburguesas * 0.150 kg de carne = 1.500 kg
+                const ingredientQty = qtyToSell.mul(new Prisma.Decimal(comp.quantity));
+
+                // 3. Validación de seguridad: no procesar cantidades en cero o negativas
+                if (ingredientQty.lte(0)) continue;
 
                 const childProduct = await tx.product.findUnique({
                     where: { id: comp.childProductId },
-                    // Importante: Traer componentes del hijo por si es una receta dentro de otra receta
                     include: { components: { include: { child: true } } } 
                 });
 
-                if (!childProduct) throw new BusinessError(`Ingrediente ID ${comp.childProductId} no encontrado`, 500);
+                if (!childProduct) {
+                    throw new BusinessError(`Ingrediente "${comp.child?.name || comp.childProductId}" no encontrado`, 500);
+                }
 
-                // Recursividad con Contexto
-                // Pasamos el MISMO depotId para que los ingredientes salgan del mismo almacén que el padre
+                // 4. Recursividad con Contexto
+                // Pasamos ingredientQty como Decimal. 
+                // Tu función processStockExit debe estar preparada para recibir number | Decimal
                 await this.processStockExit(
                     tx, 
                     businessId, 
@@ -495,8 +509,8 @@ export class SaleService {
                     saleId, 
                     saleItemId, 
                     childProduct, 
-                    ingredientQty, 
-                    depotId // <--- Pasamos el filtro hacia abajo
+                    ingredientQty, // Se envía el objeto Decimal con precisión total
+                    depotId 
                 );
             }
         }
@@ -517,44 +531,47 @@ export class SaleService {
      */
     private async verifyStockAvailability(
         tx: Prisma.TransactionClient,
-        items: any[], // Tus items procesados
-        depotId: number // Opcional
+        items: any[], 
+        depotId: number 
     ): Promise<void> {
 
-        // 1. Aplanamos la lista de necesidades (Desglosamos Recetas)
-        // Map: ProductID -> Cantidad Total Requerida
-        const requirements = new Map<number, number>();
+        // 1. Aplanamos la lista de necesidades usando Decimal en el Map
+        // Map: ProductID -> Prisma.Decimal (Cantidad Total Requerida)
+        const requirements = new Map<number, Prisma.Decimal>();
 
         for (const item of items) {
+            // Asegúrate de que accumulateRequirements reciba y sume usando .add()
             await this.accumulateRequirements(tx, requirements, item.product, item.quantityToDeductFromStock);
         }
 
-        // 2. Consultamos Stock Físico en Masa (Bulk Query)
+        // 2. Consultamos Stock Físico
         const productIds = Array.from(requirements.keys());
         
-        // Agrupamos por producto para saber el TOTAL disponible en los almacenes elegidos
         const stockSummary = await tx.stockLot.groupBy({
             by: ['productId'],
             _sum: { quantity: true },
             where: {
                 productId: { in: productIds },
                 quantity: { gt: 0 },
-                ...(depotId ? { depotId } : {}) // Filtro opcional
+                ...(depotId ? { depotId } : {})
             }
         });
 
         // 3. Comparamos Requerido vs Disponible
         for (const [productId, requiredQty] of requirements.entries()) {
             const stock = stockSummary.find(s => s.productId === productId);
-            const available = stock?._sum.quantity || 0;
+            
+            // Prisma.groupBy devuelve objetos Decimal en los campos de suma
+            const available = new Prisma.Decimal(stock?._sum.quantity || 0);
 
-            if (available < requiredQty) {
-                // Buscamos el nombre para dar un error amigable
+            // COMPARACIÓN CRÍTICA: available < requiredQty
+            if (available.lt(requiredQty)) {
+                // Buscamos el nombre para el error
                 const prodName = items.find(i => i.productId === productId)?.product.name 
                     || `Producto ID ${productId} (Ingrediente)`;
                     
                 throw new BusinessError(
-                    `Stock insuficiente para "${prodName}". Requerido: ${requiredQty}, Disponible: ${available}`, 
+                    `Stock insuficiente para "${prodName}". Requerido: ${requiredQty.toNumber()}, Disponible: ${available.toNumber()}`, 
                     409
                 );
             }
@@ -564,33 +581,36 @@ export class SaleService {
     // Helper Recursivo para desglosar recetas
     private async accumulateRequirements(
         tx: Prisma.TransactionClient,
-        map: Map<number, number>,
+        map: Map<number, Prisma.Decimal>, // Cambiamos el tipo del Map
         product: any,
-        qtyNeeded: number
+        qtyNeeded: number | Prisma.Decimal // Aceptamos ambos para flexibilidad
     ) {
-        if (product.type === ProductType.SIMPLE) {
-            if (product.isService) return; // Ignorar servicios
+        // 1. Normalizamos la cantidad a Decimal
+        const needed = new Prisma.Decimal(qtyNeeded);
 
-            const current = map.get(product.id) || 0;
-            map.set(product.id, current + qtyNeeded);
+        if (product.type === ProductType.SIMPLE) {
+            if (product.isService) return;
+
+            // 2. Obtenemos el valor actual del mapa o inicializamos en 0
+            const current = map.get(product.id) || new Prisma.Decimal(0);
+            
+            // 3. Sumamos usando .add() para mantener precisión total
+            map.set(product.id, current.add(needed));
         } 
         else if (product.type === ProductType.COMPOSITE) {
-            // Si es receta, buscamos sus componentes
-            // NOTA: Asumimos que 'product' ya viene con 'components' cargados en la query inicial (FASE 1)
             if (product.components) {
                 for (const comp of product.components) {
-                    // Obtenemos el hijo (Ingrediente)
-                    // OJO: Aquí podrías necesitar una pequeña query si el hijo no está cargado profundamente,
-                    // pero idealmente deberías cargar niveles necesarios en Fase 1.
-                    // Para simplificar, asumiremos que haces un fetch rápido si falta data.
-                    
                     const childProduct = await tx.product.findUnique({
                         where: { id: comp.childProductId },
-                        include: { components: true } // Para recursividad multinivel
+                        include: { components: true } 
                     });
                     
                     if (childProduct) {
-                        const ingredientQty = qtyNeeded * Number(comp.quantity);
+                        // 4. Multiplicación de alta precisión: 
+                        // (Cantidad de combos) * (Cantidad que lleva la receta)
+                        const ingredientQty = needed.mul(new Prisma.Decimal(comp.quantity));
+                        
+                        // 5. Llamada recursiva con el nuevo Decimal
                         await this.accumulateRequirements(tx, map, childProduct, ingredientQty);
                     }
                 }

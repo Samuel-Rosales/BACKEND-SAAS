@@ -2,6 +2,7 @@ import { prisma } from '@/configs';
 import { CreateProductInterface, UpdateProductInterface } from './interfaces';
 import { ProductType } from '@prisma/client';
 import { BusinessError } from '@/utils';
+import { Decimal } from '@prisma/client/runtime/client';
 
 export class ProductService {
 
@@ -171,14 +172,19 @@ export class ProductService {
             ]);
 
             const formattedProducts = products.map(product => {
-                // 1. Calculamos la suma
-                const totalStock = product.stockLots.reduce((acc, lot) => acc + lot.quantity, 0);
+                // 1. Inicializamos con un Decimal(0)
+                const totalStock = product.stockLots.reduce(
+                    (acc, lot) => acc.add(lot.quantity), 
+                    new Decimal(0)
+                );
 
-                // 2. Retornamos un nuevo objeto limpio (sin el array stockLots si no es necesario)
+                // 2. Retornamos el objeto limpio
                 return {
                     ...product,
-                    stockLots: undefined, // Opcional: Eliminamos la lista de lotes para no ensuciar el payload
-                    currentStock: totalStock // Agregamos la propiedad calculada
+                    stockLots: undefined, 
+                    // Si quieres que el frontend reciba un número normal: .toNumber()
+                    // Si quieres mantener precisión total: se queda como objeto Decimal
+                    currentStock: totalStock
                 };
             });
 
@@ -245,7 +251,7 @@ export class ProductService {
             if (!product) return { message: 'Producto no encontrado', status: 404, data: null };
 
             // Calculamos el stock total sumado de los lotes
-            const totalStock = product.stockLots.reduce((acc, lot) => acc + lot.quantity, 0);
+            const totalStock = product.stockLots.reduce((acc, lot) => acc.add(lot.quantity), new Decimal(0));
             const productWithStock = {
                 ...product,
                 currentStock: totalStock

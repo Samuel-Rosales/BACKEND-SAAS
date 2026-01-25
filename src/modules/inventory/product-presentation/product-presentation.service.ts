@@ -8,11 +8,25 @@ export class ProductPresentationService {
         try {
             // A. Verificar que el producto existe y es de MI negocio
             const product = await prisma.product.findFirst({
-                where: { id: data.productId, businessId }
+                where: { id: data.productId, businessId },
+                include: { unit: true }
             });
 
             if (!product) {
                 return { message: 'El producto no existe o no pertenece a tu negocio', status: 404, data: null };
+            }
+
+            if (product.unit.type === 'UNIT') {
+                const isInteger = Number.isInteger(data.factor); 
+                // O también: data.factor % 1 === 0
+                
+                if (!isInteger) {
+                    return {
+                        status: 400,
+                        message: `Para productos medidos por unidades (como ${product.unit.symbol}), el factor de presentación no puede tener decimales. No puedes tener media pieza.`,
+                        data: null
+                    };
+                }
             }
 
             const duplicate = await prisma.productPresentation.findFirst({
@@ -99,6 +113,28 @@ export class ProductPresentationService {
 
             if (!presentation) {
                 return { message: 'Presentación no encontrada o sin permisos', status: 404, data: null };
+            }
+
+            const product = await prisma.product.findFirst({
+                where: { id: presentation.productId, businessId },
+                include: { unit: true }
+            });
+
+            if (!product) {
+                return { message: 'El producto no existe o no pertenece a tu negocio', status: 404, data: null };
+            }
+
+            if (product.unit.type === 'UNIT') {
+                const isInteger = Number.isInteger(data.factor); 
+                // O también: data.factor % 1 === 0
+                
+                if (!isInteger) {
+                    return {
+                        status: 400,
+                        message: `Para productos medidos por unidades (como ${product.unit.symbol}), el factor de presentación no puede tener decimales. No puedes tener media pieza.`,
+                        data: null
+                    };
+                }
             }
 
             // B. Actualizar

@@ -5,10 +5,8 @@ export class MeasurementUnitController {
     private service = new MeasurementUnitService();
 
     create = async (req: Request, res: Response) => {
-        
-        const { name, symbol } = req.body;
 
-        const {message, status, data} = await this.service.create({ name, symbol });
+        const {message, status, data} = await this.service.create(req.body);
 
         res.status(status).json({ 
             message, 

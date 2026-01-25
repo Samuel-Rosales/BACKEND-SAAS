@@ -189,6 +189,7 @@ model MeasurementUnit {
   id       Int     @id @default(autoincrement())
   name     String // "Kilogramo", "Unidad", "Litro"
   symbol   String // "kg", "und", "L"
+  type     UnitType
   isActive Boolean @default(true)
 
   products Product[]
@@ -228,9 +229,9 @@ model Product {
   isPerishable  Boolean @default(false) 
 
   // --- FINANZAS ---
-  costPrice     Decimal @default(0) @db.Decimal(15, 2)
+  costPrice     Decimal @default(0) @db.Decimal(18, 6)
   profitMargin  Decimal @default(0) @db.Decimal(5, 4)
-  salePrice     Decimal @default(0) @db.Decimal(15, 2)
+  salePrice     Decimal @default(0) @db.Decimal(18, 2)
 
   // --- STOCK ---
   minStock      Int     @default(0)
@@ -272,7 +273,7 @@ model ProductComponent {
   childProductId  Int // El ID del Ingrediente (Carne)
   
   // Cantidad necesaria para hacer 1 unidad del padre
-  quantity        Decimal @db.Decimal(10, 4) 
+  quantity        Decimal @db.Decimal(18, 6) 
 
   parent  Product @relation("ParentProduct", fields: [parentProductId], references: [id])
   child   Product @relation("ChildProduct", fields: [childProductId], references: [id])
@@ -285,7 +286,7 @@ model ProductPresentation {
   id        Int     @id @default(autoincrement())
   productId Int
   name      String // "Caja x12"
-  factor    Decimal @db.Decimal(10, 4)
+  factor    Decimal @db.Decimal(18, 6)
   barCode   String?
   price     Decimal @db.Decimal(15, 2)
 
@@ -302,9 +303,9 @@ model StockLot {
   id             Int      @id @default(autoincrement())
   productId      Int
   depotId        Int
-  quantity       Int
+  quantity       Decimal @db.Decimal(18, 6)
   expirationDate DateTime @db.Date
-  lotCost        Decimal  @db.Decimal(15, 2)
+  lotCost        Decimal  @db.Decimal(18, 6)
   createdAt      DateTime @default(now())
 
   product Product @relation(fields: [productId], references: [id])
@@ -324,10 +325,10 @@ model StockMovement {
   memberId   Int
   depotId    Int
   type       MovementType
-  quantity   Int
+  quantity   Decimal @db.Decimal(18, 6)
 
   // --- SNAPSHOT FINANCIERO ---
-  historicalCost Decimal @default(0) @db.Decimal(15, 2) // Cuánto costaba unitariamente en ese momento
+  historicalCost Decimal @default(0) @db.Decimal(18, 6) // Cuánto costaba unitariamente en ese momento
 
   reason String?
   date   DateTime @default(now())
@@ -453,7 +454,7 @@ model SaleItem {
   saleId                Int
   productId             Int
   productPresentationId Int? // <--- NUEVO: Presentación usada (caja, pack, unidad)
-  quantity              Int
+  quantity              Decimal @db.Decimal(18, 6)
   unitPrice             Decimal @db.Decimal(15, 2) // Precio al momento de la venta
   subTotal              Decimal @db.Decimal(15, 2)
 
@@ -471,7 +472,7 @@ model SaleItemLot {
   id         Int @id @default(autoincrement())
   saleItemId Int
   stockLotId Int
-  quantity   Int // Cuántos items se sacaron de ESTE lote específico
+  quantity   Decimal @db.Decimal(18, 6)// Cuántos items se sacaron de ESTE lote específico
 
   saleItem SaleItem @relation(fields: [saleItemId], references: [id])
   stockLot StockLot @relation(fields: [stockLotId], references: [id])
@@ -743,4 +744,10 @@ enum Currency {
   USD
   VES
   EUR
+}
+
+enum UnitType {
+  MASS    // kg, g
+  VOLUME  // L, ml
+  UNIT    // pza, caja, sobre
 }

@@ -269,7 +269,10 @@ export class PurchaseService {
                             expirationDate: expiration,
                             // Importante: Buscamos lotes que cuesten lo mismo UNITARIAMENTE ($2)
                             // Usamos un rango pequeño (EPSILON) por si hay decimales flotantes
-                            lotCost: { equals: unitCostByPresentation } 
+                            lotCost: {
+                                gte: unitCostByPresentation - 0.0001,
+                                lte: unitCostByPresentation + 0.0001,
+                            } 
                         }
                     });
     

@@ -26,8 +26,9 @@ export class MeasurementUnitService {
 
             const unit = await prisma.measurementUnit.create({
                 data: {
-                name: data.name,
-                symbol: data.symbol
+                    name: data.name,
+                    symbol: data.symbol,
+                    type: data.type
                 }
             });
 
