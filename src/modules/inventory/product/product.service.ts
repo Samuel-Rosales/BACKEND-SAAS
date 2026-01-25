@@ -5,20 +5,17 @@ import { BusinessError } from '@/utils';
 
 export class ProductService {
 
-    // 1. CREAR (Soporta Recetas y Combos)
     async create(businessId: number, userId: number, data: CreateProductInterface) {
         try {
             // =================================================================
-            // FASE 1: VALIDACIONES BÁSICAS
+            // FASE 1: VALIDACIONES BÁSICAS (Paralelizadas)
             // =================================================================
             const [business, category, unit, tax, existingSku] = await Promise.all([
                 prisma.business.findUnique({ where: { id: businessId } }),
                 prisma.category.findFirst({ where: { id: data.categoryId, businessId } }),
                 prisma.measurementUnit.findUnique({ where: { id: data.unitId } }),
                 prisma.tax.findUnique({ where: { id: data.taxId } }),
-                data.sku
-                    ? prisma.product.findFirst({ where: { sku: data.sku, businessId } })
-                    : Promise.resolve(null)
+                data.sku ? prisma.product.findFirst({ where: { sku: data.sku, businessId } }) : null
             ]);
 
             if (!business) return { message: 'Negocio no encontrado', status: 404, data: null };
@@ -27,75 +24,95 @@ export class ProductService {
             if (!tax) return { message: 'Impuesto inválido', status: 404, data: null };
             if (existingSku) return { message: `SKU "${data.sku}" ya existe`, status: 400, data: null };
 
+            // Variable mutable para el costo final
+            let finalCostPrice = data.costPrice; 
+
             // =================================================================
-            // FASE 1.5: VALIDACIÓN DE RECETA (Si es COMPOSITE)
+            // FASE 1.5: LÓGICA DE RECETAS (COMPOSITE)
             // =================================================================
             if (data.type === ProductType.COMPOSITE) {
+                
                 if (!data.components || data.components.length === 0) {
-                    return { message: 'Un producto compuesto (Receta/Combo) debe tener ingredientes.', status: 400, data: null };
+                    return { message: 'Un producto compuesto debe tener ingredientes.', status: 400, data: null };
                 }
 
-                // Verificar que los ingredientes existan y sean del mismo negocio
-                const ingredientIds = data.components.map(c => c.childProductId);
-                const countIngredients = await prisma.product.count({
+                // 1. Eliminar duplicados de IDs enviados para evitar errores
+                const uniqueComponentIds = [...new Set(data.components.map(c => c.childProductId))];
+
+                if (uniqueComponentIds.length !== data.components.length) {
+                    return { message: 'No puedes repetir el mismo ingrediente dos veces.', status: 400, data: null };
+                }
+
+                // 2. Buscar ingredientes y sus COSTOS actuales
+                const ingredients = await prisma.product.findMany({
                     where: {
-                        id: { in: ingredientIds },
-                        businessId: businessId // Seguridad: Que no use productos de otro negocio
-                    }
+                        id: { in: uniqueComponentIds },
+                        businessId: businessId // Seguridad de Tenant
+                    },
+                    select: { id: true, costPrice: true } // Necesitamos el costo
                 });
 
-                if (countIngredients !== ingredientIds.length) {
-                    return { message: 'Uno o más ingredientes no existen o no pertenecen a tu negocio.', status: 400, data: null };
+                if (ingredients.length !== uniqueComponentIds.length) {
+                    return { message: 'Uno o más ingredientes no existen o no son válidos.', status: 400, data: null };
                 }
+
+                // 3. CALCULO AUTOMÁTICO DE COSTO (La Magia)
+                // Costo Padre = Suma(Costo Hijo * Cantidad Receta)
+                let calculatedCost = 0;
+                
+                for (const comp of data.components) {
+                    const ingredient = ingredients.find(i => i.id === comp.childProductId);
+                    if (ingredient) {
+                        // Convertimos a Number para calcular, asumiendo que Prisma devuelve Decimal o Number
+                        const cost = Number(ingredient.costPrice); 
+                        const qty = Number(comp.quantity);
+                        calculatedCost += (cost * qty);
+                    }
+                }
+                
+                // Sobreescribimos el costo que envió el usuario
+                finalCostPrice = calculatedCost; 
             }
 
             // =================================================================
-            // FASE 2: CREACIÓN TRANSACCIONAL
+            // FASE 2: CREACIÓN
             // =================================================================
-            // Prisma permite crear el Padre y sus relaciones (Hijos) en una sola query.
-            
             const product = await prisma.product.create({
                 data: {
                     businessId,
                     updatedById: userId,
-                    
-                    // Datos Básicos
                     name: data.name,
                     sku: data.sku || null,
                     description: data.description,
                     imageUrl: data.imageUrl || null,
-                    
-                    // Relaciones
                     categoryId: data.categoryId,
                     unitId: data.unitId,
                     taxId: data.taxId,
+                    type: data.type,
+                    isPerishable: data.isPerishable || false,
 
-                    // --- EL CORAZÓN DEL CAMBIO ---
-                    type: data.type, // Enum: SIMPLE, COMPOSITE, SERVICE
-                    isPerishable: data.isPerishable || false, // Ya no existe isService
-
-                    // Finanzas
-                    costPrice: data.costPrice,
+                    // USAMOS EL COSTO CALCULADO O EL MANUAL
+                    costPrice: finalCostPrice, 
+                    
                     profitMargin: data.profitMargin,
                     salePrice: data.salePrice,
                     minStock: data.minStock || 0,
-                    
-                    // Si es COMPOSITE, creamos la "Receta" aquí mismo
+
+                    // Creación de relaciones
                     components: data.type === ProductType.COMPOSITE && data.components 
                         ? {
                             create: data.components.map(comp => ({
                                 childProductId: comp.childProductId,
-                                quantity: comp.quantity // Ej: 0.200 (200 gramos)
+                                quantity: comp.quantity
                             }))
-                          }
+                        }
                         : undefined
                 },
                 include: {
                     unit: { select: { symbol: true } },
-                    // Devolvemos los componentes creados para confirmar al frontend
                     components: {
                         include: {
-                            child: { select: { id: true, name: true, unit: { select: { symbol: true } } } }
+                            child: { select: { id: true, name: true } }
                         }
                     }
                 }
@@ -109,7 +126,8 @@ export class ProductService {
 
         } catch (error) {
             console.error('Error al crear producto:', error);
-            return { message: 'Error interno', status: 500, data: null };
+            // Tip: En desarrollo devuelve error.message, en producción un mensaje genérico
+            return { message: 'Error interno al procesar la solicitud', status: 500, data: null };
         }
     }
 
