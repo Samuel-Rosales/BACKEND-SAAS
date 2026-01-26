@@ -25,3 +25,15 @@ export interface CreateProductInterface {
     salePrice: number;
     minStock?: number;
 }
+
+export interface StockLotInterface {
+  quantity: number;
+  expirationDate: Date;
+  lotCost: number;
+}
+
+export interface DepotInterface {
+    depotId: number;
+    name: string;
+    stockLots?: StockLotInterface[];
+}

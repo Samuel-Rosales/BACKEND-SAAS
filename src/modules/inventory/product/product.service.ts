@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { CreateProductInterface, UpdateProductInterface } from './interfaces';
+import { CreateProductInterface, DepotInterface, StockLotInterface, UpdateProductInterface } from './interfaces';
 import { ProductType } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -319,6 +319,9 @@ export class ProductService {
 
                 // Conversión de Decimal a Number (JS nativo)
                 price: new Decimal(product.salePrice).toNumber(),
+                costPrice: new Decimal(product.costPrice).toNumber(),
+                profitMargin: new Decimal(product.profitMargin).toNumber(),
+
                 minStock: product.minStock,
 
                 // Info Calculada
@@ -369,16 +372,37 @@ export class ProductService {
     }
 
     // Helper para agrupar stock visualmente sin dar costos
-    private groupStockByDepot(lots: any[]) {
-        const summary: Record<string, number> = {};
+    private groupStockByDepot(lots: any[]): DepotInterface[] {
+        // 1. Usamos un Map para garantizar unicidad por ID de depósito y acceso rápido
+        const depotMap = new Map<number, DepotInterface>();
+
         lots.forEach(lot => {
-            const depotName = lot.depot.name;
-            const qty = new Decimal(lot.quantity).toNumber();
-            if (!summary[depotName]) summary[depotName] = 0;
-            summary[depotName] += qty;
+            // Asumo que 'lot.depot' tiene 'id' y 'name'
+            const { id: depotId, name: depotName } = lot.depot;
+
+            // 2. Si el depósito no existe en el mapa, lo inicializamos
+            if (!depotMap.has(depotId)) {
+                depotMap.set(depotId, {
+                    depotId: depotId,
+                    name: depotName,
+                    stockLots: [] // Inicializamos el array vacío
+                });
+            }
+
+            // 3. Mapeamos el lote crudo a tu interfaz StockLotInterface
+            const stockLot: StockLotInterface = {
+                quantity: new Decimal(lot.quantity).toNumber(),
+                expirationDate: new Date(lot.expirationDate), // Aseguramos que sea objeto Date
+                lotCost: new Decimal(lot.cost || 0).toNumber() // Asumiendo que 'cost' viene en el lote
+            };
+
+            // 4. Agregamos el lote al depósito correspondiente
+            // El uso de '!' es seguro aquí porque acabamos de garantizar que existe en el paso 2
+            depotMap.get(depotId)!.stockLots!.push(stockLot);
         });
-        // Retorna: { "Almacén Principal": 50, "Cocina": 10 }
-        return summary;
+
+        // 5. Convertimos los valores del mapa a un array limpio
+        return Array.from(depotMap.values());
     }
 
     // 4. ACTUALIZAR
