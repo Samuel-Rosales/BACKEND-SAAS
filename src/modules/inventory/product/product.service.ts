@@ -302,7 +302,6 @@ export class ProductService {
             // =========================================================
             // LÓGICA DE STOCK TOTAL (Vital para el Front)
             // =========================================================
-            // Sumamos lo que hay en los lotes
             let calculatedStock = new Decimal(0);
 
             if (product.type === 'SERVICE') {
