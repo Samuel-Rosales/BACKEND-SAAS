@@ -6,26 +6,26 @@ export class BusinessController {
 
     // 1. CREAR NEGOCIO
     create = async (req: Request, res: Response) => {
-        const userId = req.user!.membershipId;
+        const { id } = req.user;
 
-        if (!userId) {
-            return res.status(400).json({ message: 'User membership ID is required' });
+        if (!id) {
+            return res.status(400).json({ message: 'User ID is required' });
         }
 
-        const { status, data, message } = await this.service.create(userId, req.body);
+        const { status, data, message } = await this.service.create(id, req.body);
 
         res.status(status).json({ message, data });
     };
 
     // 2. LISTAR MIS NEGOCIOS
     findAllByUser = async (req: Request, res: Response) => {
-        const userId = req.user!.membershipId;
+        const { id } = req.user;
 
-        if (!userId) {
-            return res.status(400).json({ message: 'User membership ID is required' });
+        if (!id) {
+            return res.status(400).json({ message: 'User ID is required' });
         }
 
-        const { status, data, message } = await this.service.findAllByUser(userId);
+        const { status, data, message } = await this.service.findAllByUser(id);
         res.status(status).json({ message, data });
     };
 
@@ -33,13 +33,13 @@ export class BusinessController {
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
 
-        const userId = req.user!.membershipId;
+        const { membershipId } = req.user;
 
-        if (!userId) {
+        if (!membershipId) {
             return res.status(400).json({ message: 'User membership ID is required' });
         }
 
-        const { status, data, message } = await this.service.findOne(+id, userId);
+        const { status, data, message } = await this.service.findOne(+id, membershipId);
         res.status(status).json({ message, data });
     };
 
@@ -48,10 +48,10 @@ export class BusinessController {
     getSettings = async (req: Request, res: Response) => {
         const { id } = req.params;
 
-        const userId = req.user!.membershipId;
+        const { id: userId } = req.user;
 
         if (!userId) {
-            return res.status(400).json({ message: 'User membership ID is required' });
+            return res.status(400).json({ message: 'User ID is required' });
         }
         
         const { status, data, message } = await this.service.findOneForSettings(+id, userId);
@@ -63,10 +63,10 @@ export class BusinessController {
     updateGeneral = async (req: Request, res: Response) => {
         const { id } = req.params;
 
-        const userId = req.user!.membershipId;
+        const { id: userId } = req.user;
 
         if (!userId) {
-            return res.status(400).json({ message: 'User membership ID is required' });
+            return res.status(400).json({ message: 'User ID is required' });
         }
 
         const { status, data, message } = await this.service.updateGeneralInfo(+id, userId, req.body);
@@ -78,10 +78,10 @@ export class BusinessController {
     updatePolicies = async (req: Request, res: Response) => {
         const { id } = req.params;
 
-        const userId = req.user!.membershipId;
+        const { id: userId } = req.user;
 
         if (!userId) {
-            return res.status(400).json({ message: 'User membership ID is required' });
+            return res.status(400).json({ message: 'User ID is required' });
         }
 
         const { status, data, message } = await this.service.updatePolicies(+id, userId, req.body);
@@ -93,10 +93,10 @@ export class BusinessController {
     updateExchangeRateConfig = async (req: Request, res: Response) => {
         const { id } = req.params;
 
-        const userId = req.user!.membershipId;
+        const { id: userId } = req.user;
 
         if (!userId) {
-            return res.status(400).json({ message: 'User membership ID is required' });
+            return res.status(400).json({ message: 'User ID is required' });
         }
 
         const { status, data, message } = await this.service.updateExchangeRateConfig(+id, userId, req.body);
