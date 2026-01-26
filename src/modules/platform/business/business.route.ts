@@ -11,6 +11,7 @@ const validator = new BusinessValidator();
 // Aplicar autenticación a todas las rutas
 router.use(authMiddleware);
 
+// --- CREACIÓN Y LISTADOS ---
 router.post(
   '/', 
   validator.validateCreate, 
@@ -20,6 +21,9 @@ router.post(
 
 router.get('/my-businesses', controller.findAllByUser);
 
+// --- LECTURA DE DATOS ---
+
+// 1. Obtener datos básicos (Header / Dashboard)
 router.get(
     '/:id', 
     validator.validateId,
@@ -27,20 +31,39 @@ router.get(
     controller.findOne
 );
 
-router.patch(
-  '/:id', 
-  validator.validateUpdate, 
-  handleValidationErrors, 
-  controller.update
+// 2. Obtener configuración completa (Para el formulario React)
+router.get(
+    '/:id/settings',
+    validator.validateId,
+    handleValidationErrors,
+    controller.getSettings
 );
 
+// --- ACTUALIZACIONES SEGMENTADAS ---
+
+// A. Actualizar Info General (Nombre, Dirección, Logo)
+router.patch( // O PUT, dependiendo de tu preferencia
+  '/:id/general', 
+  validator.validateUpdateGeneral, 
+  handleValidationErrors, 
+  controller.updateGeneral
+);
+
+// B. Actualizar Políticas (Créditos, Reglas)
 router.patch(
-  '/:id/exchange-rate-config',
+  '/:id/policies',
+  validator.validateUpdatePolicies,
+  handleValidationErrors,
+  controller.updatePolicies
+);
+
+// C. Actualizar Tasas (Estrategia, Monto)
+router.patch(
+  '/:id/exchange-rate',
   validator.validateUpdateExchangeRateConfig,
   handleValidationErrors,
   controller.updateExchangeRateConfig
 );
 
 export const BusinessRoute = router;
-
 export default router;

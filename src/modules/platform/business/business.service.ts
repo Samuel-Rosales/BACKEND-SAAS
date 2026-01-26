@@ -51,14 +51,26 @@ export class BusinessService {
             }
           },
           include: {
-            subscription: true // Devolvemos la info de suscripción creada
+            subscription: true,
+            businessCategory: { select: { id: true, name: true } },
+            members: {
+              where: { userId },
+              select: {
+                role: { select: { id: true, name: true, code: true } }
+              }
+            }
           }
         });
+
+        const formattedBusiness = {
+          ...newBusiness,
+          memberRole: newBusiness.members[0]?.role?.name || 'Miembro'
+        };
 
         return {
           message: 'Negocio creado exitosamente',
           status: 201,
-          data: newBusiness
+          data: formattedBusiness
         };
       } catch (error) {
         console.error('Error al crear el negocio:', error);
@@ -188,43 +200,68 @@ export class BusinessService {
   }
 
   // 4. ACTUALIZAR DATOS
-  async update(businessId: number, userId: number, data: UpdateBusinessInterface) {
-
+  async updateGeneralInfo(businessId: number, userId: number, data: UpdateBusinessInterface) {
     try {
-      // Primero verificamos acceso (podrías mover esto a un middleware de permisos más adelante)
-      const member = await this.verifyAccess(businessId, userId);
+      const access = await this.verifyAccess(businessId, userId, { roleCodes: ['OWNER', 'ADMIN'] });
+      if (access.status !== 200) return access;
 
-      if (member && member.status !== 200) {
-        return member;
-      }
+      // Sanitización: Solo permitimos campos cosméticos aquí
+      const allowedData = {
+        name: data.name,
+        address: data.address,
+        logoUrl: data.logoUrl,
+        businessCategoryId: data.businessCategoryId
+      };
 
-      const updatedBusiness = await prisma.business.update({
+      const updated = await prisma.business.update({
         where: { id: businessId },
-        data: data
+        data: allowedData
       });
 
-      if (!updatedBusiness) {
-        return {
-          message: 'No se pudo actualizar la empresa.',
-          status: 400,
-          data: null
-        };
+      return {
+        message: 'Información general actualizada',
+        status: 200,
+        data: updated
+      };
+    } catch (error) {
+       // ... manejo de error estándar
+       return { status: 500, message: 'Error interno', data: null };
+    }
+  }
+
+  async updatePolicies(businessId: number, userId: number, data: { enableGlobalCredit?: boolean, defaultCreditLimit?: number }) {
+    try {
+      // Seguridad Estricta: Solo OWNER debería cambiar políticas financieras globales
+      const access = await this.verifyAccess(businessId, userId, { roleCodes: ['OWNER'] });
+      if (access.status !== 200) return access;
+
+      // VALIDACIÓN DE NEGOCIO (Lo que te faltaba)
+      if (data.defaultCreditLimit !== undefined && data.defaultCreditLimit < 0) {
+        throw new BusinessError('El límite de crédito base no puede ser negativo.', 400);
       }
 
+      const updated = await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          enableGlobalCredit: data.enableGlobalCredit,
+          defaultCreditLimit: data.defaultCreditLimit // Prisma maneja el cast a Decimal si el input es number
+        }
+      });
+
       return {
-        message: 'Empresa actualizada exitosamente',
+        message: 'Políticas de negocio actualizadas',
         status: 200,
-        data: updatedBusiness
+        data: {
+            enableGlobalCredit: updated.enableGlobalCredit,
+            defaultCreditLimit: updated.defaultCreditLimit.toNumber() // Convertir a number para el Frontend
+        }
       };
-
-    } catch (error) {
-      console.error('Error al actualizar la empresa:', error);
-
-      return {
-        message: 'Por favor contacte al administrador',
-        status: 500,
-        data: null
-      };
+    } catch (error: any) {
+        if (error instanceof BusinessError) {
+            return { message: error.message, status: error.status, data: null };
+        }
+        console.error('Error policies:', error);
+        return { message: 'Error al actualizar políticas', status: 500, data: null };
     }
   }
 
@@ -232,7 +269,7 @@ export class BusinessService {
     try {
       // A. Verificación de seguridad (Solo dueños o admins deberían tocar dinero)
       // Reutilizamos tu método privado verifyAccess
-      const accessCheck = await this.verifyAccess(businessId, userId);
+      const accessCheck = await this.verifyAccess(businessId, userId, { roleCodes: ['OWNER', 'ADMIN'] });
       if (accessCheck.status !== 200) return accessCheck;
 
       return await prisma.$transaction(async (tx) => {
@@ -301,7 +338,7 @@ export class BusinessService {
           status: 200,
           data: {
             strategy: updatedBusiness.rateStrategy,
-            currentRate: updatedBusiness.currentExchangeRate
+            currentRate: updatedBusiness.currentExchangeRate.toString()
           }
         };
       });
@@ -325,11 +362,64 @@ export class BusinessService {
     }
   }
 
+  async findOneForSettings(businessId: number, userId: number) {
+    try {
+       const business = await prisma.business.findFirst({
+        where: {
+          id: businessId,
+          members: { some: { userId: userId, isActive: true } }
+        },
+        include: {
+            businessCategory: true // Para mostrar la categoría actual en el select
+        }
+      });
+
+      if (!business) return { status: 404, message: 'Negocio no encontrado', data: null };
+
+      // TRANSFORMACIÓN DE DATOS (Mapeo DTO)
+      // Esto es crucial para que tu formulario React reciba los datos listos para usar
+      const settingsDTO = {
+          general: {
+              name: business.name,
+              address: business.address,
+              logoUrl: business.logoUrl,
+              businessCategoryId: business.businessCategoryId
+          },
+          rates: {
+              strategy: business.rateStrategy,
+              manualRate: business.manualRate?.toNumber() || 0,
+              currentRate: business.currentExchangeRate.toNumber()
+          },
+          policies: {
+              enableGlobalCredit: business.enableGlobalCredit,
+              defaultCreditLimit: business.defaultCreditLimit.toNumber()
+          }
+      };
+
+      return {
+        status: 200,
+        message: 'Configuración recuperada',
+        data: settingsDTO
+      };
+
+    } catch (error) {
+        console.error(error);
+        return { status: 500, message: 'Error al obtener configuración', data: null };
+    }
+  }
+
   // Helper privado para verificar si el usuario pertenece al negocio
-  private async verifyAccess(businessId: number, userId: number) {
+  private async verifyAccess(
+    businessId: number,
+    userId: number,
+    options?: { roleCodes?: string[] }
+  ) {
     try {
       const member = await prisma.businessMember.findFirst({
-        where: { businessId, userId, isActive: true }
+        where: { businessId, userId, isActive: true },
+        include: {
+          role: { select: { code: true, name: true } }
+        }
       });
 
       if (!member) {
@@ -340,10 +430,21 @@ export class BusinessService {
         };
       }
 
+      if (options?.roleCodes?.length) {
+        const allowed = options.roleCodes;
+        if (!allowed.includes(member.role.code)) {
+          return {
+            message: 'No tienes permisos para realizar esta acción en esta empresa.',
+            status: 403,
+            data: null
+          };
+        }
+      }
+
       return {
         message: 'Acceso verificado',
         status: 200,
-        data: null
+        data: member
       };
     } catch (error) {
       console.error('Error al verificar acceso:', error);

@@ -1,23 +1,29 @@
 # Módulo Platform - Negocios
 
-## ✅ Endpoints actuales (v2026-01-23)
+## ✅ Endpoints actuales (v2026-01-26)
 
 Base URL: `/api/v1/platform/business`
 
-**Autenticación:** ✅ Requerida
+**Autenticación:** ✅ Requerida (JWT)
 
 **Endpoints:**
-- `POST /` — Crear negocio
-- `GET /my-businesses` — Listar negocios del usuario
-- `GET /:id` — Obtener negocio
-- `PATCH /:id` — Actualizar negocio
-- `PATCH /:id/exchange-rate-config` — Configurar tasa de cambio del negocio
 
-## 📍 Endpoints
+* **Creación y Listado:**
+* `POST /` — Crear negocio
+* `GET /my-businesses` — Listar negocios del usuario
 
-Base URL: `/api/v1/platform/business`
 
-**Autenticación:** ✅ Requerida
+* **Lectura:**
+* `GET /:id` — Obtener datos básicos (Header/Dashboard)
+* `GET /:id/settings` — **[NUEVO]** Obtener configuración completa (DTO para formulario)
+
+
+* **Actualización Segmentada:**
+* `PATCH /:id/general` — **[NUEVO]** Actualizar perfil (Nombre, Logo, Dirección)
+* `PATCH /:id/policies` — **[NUEVO]** Actualizar reglas de negocio (Créditos)
+* `PATCH /:id/exchange-rate` — Actualizar configuración de tasas
+
+
 
 ---
 
@@ -26,11 +32,6 @@ Base URL: `/api/v1/platform/business`
 Crea un nuevo negocio con suscripción trial y asigna al usuario como propietario.
 
 **Endpoint:** `POST /api/v1/platform/business`
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
 
 #### Request Body
 
@@ -41,24 +42,18 @@ Authorization: Bearer <token>
   "logoUrl": "https://ejemplo.com/logo.png",
   "businessCategoryId": 1
 }
+
 ```
 
 #### Validaciones
 
-- `name`: Obligatorio, string, 2-100 caracteres
-- `address`: Obligatorio, string, 5-200 caracteres
-- `logoUrl`: Opcional, string, debe ser URL válida
-- `businessCategoryId`: Obligatorio, number, debe existir la categoría
-
-#### Comportamiento
-
-1. Busca el rol `OWNER` en el sistema
-2. Crea el negocio
-3. Crea automáticamente la relación BusinessMember (usuario como OWNER)
-4. Crea automáticamente una suscripción TRIAL (7 días)
-5. Todo en una transacción atómica
+* `name`: Obligatorio, 2-100 caracteres.
+* `address`: Obligatorio, 5-200 caracteres.
+* `businessCategoryId`: Obligatorio, ID válido.
 
 #### Response (201 Created)
+
+Se inicializa con valores por defecto: `enableGlobalCredit: true`, `defaultCreditLimit: 100`.
 
 ```json
 {
@@ -66,33 +61,14 @@ Authorization: Bearer <token>
   "data": {
     "id": 1,
     "name": "Mi Super Negocio",
-    "address": "Av. Principal 123",
-    "logoUrl": "https://ejemplo.com/logo.png",
-    "businessCategoryId": 1,
-    "rateStrategy": "MANUAL",
-    "manualRate": "1.0000",
-    "currentExchangeRate": "1.0000",
-    "createdAt": "2024-01-15T10:30:00Z",
-    "updatedAt": "2024-01-15T10:30:00Z",
-    "subscription": {
-      "id": 1,
-      "planType": "TRIAL",
-      "status": "ACTIVE",
-      "startDate": "2024-01-15T10:30:00Z",
-      "endDate": "2024-01-22T10:30:00Z"
-    },
-    "members": [
-      {
-        "role": {
-            "name": "Dueño"
-        }
-      }
-    ],
-    "businessCategory": {
-      "name": "Tecnología y desarollo de sotfware"
-    }
+    "enableGlobalCredit": true,
+    "defaultCreditLimit": "100.00",
+    "subscription": { "planType": "TRIAL", "status": "ACTIVE" },
+    "memberRole": "Dueño"
+    // ... resto de campos
   }
 }
+
 ```
 
 ---
@@ -103,11 +79,6 @@ Obtiene todos los negocios donde el usuario es miembro activo.
 
 **Endpoint:** `GET /api/v1/platform/business/my-businesses`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-```
-
 #### Response (200 OK)
 
 ```json
@@ -117,34 +88,21 @@ Authorization: Bearer <token>
     {
       "id": 1,
       "name": "Mi Super Negocio",
-      "address": "Av. Principal 123",
-      "logoUrl": "https://ejemplo.com/logo.png",
-      "subscription": {
-        "status": "ACTIVE",
-        "planType": "TRIAL",
-        "endDate": "2024-01-22T10:30:00Z"
-      }
+      "memberRole": "Dueño",
+      "subscription": { "status": "ACTIVE" }
     }
   ]
 }
+
 ```
 
 ---
 
-### 3. Obtener Negocio por ID
+### 3. Obtener Negocio (Básico)
 
-Obtiene un negocio específico (solo si el usuario es miembro).
+Obtiene la información básica del negocio. Ideal para headers, validación de acceso o dashboards generales.
 
 **Endpoint:** `GET /api/v1/platform/business/:id`
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
-
-#### Parámetros de URL
-
-- `id` (number): ID del negocio
 
 #### Response (200 OK)
 
@@ -154,119 +112,141 @@ Authorization: Bearer <token>
   "data": {
     "id": 1,
     "name": "Mi Super Negocio",
-    "address": "Av. Principal 123",
     "logoUrl": "https://ejemplo.com/logo.png",
-    "members": [
-      {
-        "user": {
-          "name": "Juan Pérez",
-          "ci": "12345678"
-        }
-      }
-    ],
-    "exchangeRates": [
-      {
-        "id": 123,
-        "rate": "54.3000"
-      }
-    ]
+    "memberRole": "Dueño",
+    "exchangeRates": [{ "rate": "54.30" }] // Última tasa histórica
   }
 }
-```
 
-#### Response (404 Not Found)
-
-```json
-{
-  "message": "Empresa no encontrada o no tienes acceso.",
-  "data": null
-}
 ```
 
 ---
 
-### 4. Actualizar Negocio
+### 4. Obtener Configuración (Settings DTO) [NUEVO]
 
-Actualiza los datos de un negocio (solo si el usuario es miembro activo).
+Devuelve un objeto estructurado específicamente para poblar el formulario de configuración (tipo VS Code/Discord). Transforma los `Decimal` de base de datos a `number` nativos.
 
-**Endpoint:** `PATCH /api/v1/platform/business/:id`
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
-
-#### Parámetros de URL
-
-- `id` (number): ID del negocio
-
-#### Request Body (todos los campos son opcionales)
-
-```json
-{
-  "name": "Mi Negocio Actualizado",
-  "address": "Nueva Dirección 456",
-  "logoUrl": "https://ejemplo.com/nuevo-logo.png",
-  "businessCategoryId": 2
-}
-```
-
-#### Validaciones
-
-- `name`: Opcional, string, 2-100 caracteres
-- `address`: Opcional, string, 5-200 caracteres
-- `logoUrl`: Opcional, string, URL válida
-- `businessCategoryId`: Opcional, number, debe existir
+**Endpoint:** `GET /api/v1/platform/business/:id/settings`
 
 #### Response (200 OK)
 
 ```json
 {
-  "message": "Empresa actualizada exitosamente",
+  "message": "Configuración recuperada",
   "data": {
-    "id": 1,
-    "name": "Mi Negocio Actualizado",
-    "address": "Nueva Dirección 456",
-    "logoUrl": "https://ejemplo.com/nuevo-logo.png"
+    "general": {
+      "name": "Mi Super Negocio",
+      "address": "Av. Principal 123",
+      "logoUrl": "https://ejemplo.com/logo.png",
+      "businessCategoryId": 1
+    },
+    "rates": {
+      "strategy": "MANUAL",
+      "manualRate": 45.50,      // number, no string
+      "currentRate": 45.50      // number, no string
+    },
+    "policies": {
+      "enableGlobalCredit": true,
+      "defaultCreditLimit": 100.00 // number, no string
+    }
   }
 }
-```
 
-#### Response (403 Forbidden)
-
-```json
-{
-  "message": "No tienes permisos para modificar esta empresa.",
-  "data": null
-}
 ```
 
 ---
 
-### 5. Configurar Tasa de Cambio del Negocio
+### 5. Actualizar General (Perfil) [NUEVO]
 
-Actualiza la configuración de tasa del negocio (cache `currentExchangeRate`) según `rateStrategy` y crea un histórico cuando es manual.
+Actualiza únicamente información cosmética o de identificación.
 
-**Endpoint:** `PATCH /api/v1/platform/business/:id/exchange-rate-config`
+**Endpoint:** `PATCH /api/v1/platform/business/:id/general`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+**Permisos:** `OWNER`, `ADMIN`.
 
 #### Request Body
 
 ```json
 {
-  "strategy": "MANUAL",
-  "manualRate": 54.30
+  "name": "Nuevo Nombre S.A.",
+  "logoUrl": "", // Enviar vacío para eliminar logo
+  "address": "Calle Nueva 123"
 }
+
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "message": "Información general actualizada",
+  "data": { "id": 1, "name": "Nuevo Nombre S.A." /*...*/ }
+}
+
+```
+
+---
+
+### 6. Actualizar Políticas (Reglas) [NUEVO]
+
+Actualiza reglas financieras y operativas globales.
+
+**Endpoint:** `PATCH /api/v1/platform/business/:id/policies`
+
+**Permisos:** Estrictamente `OWNER`.
+
+#### Request Body
+
+```json
+{
+  "enableGlobalCredit": false,
+  "defaultCreditLimit": 500.00
+}
+
 ```
 
 #### Validaciones
 
-- `strategy`: Obligatorio, enum (`MANUAL`, `API_BCV`, `API_PARALLEL`)
-- `manualRate`: Requerido si `strategy = MANUAL`, number > 0
+* `defaultCreditLimit`: Debe ser mayor o igual a 0.
+
+#### Response (200 OK)
+
+```json
+{
+  "message": "Políticas de negocio actualizadas",
+  "data": {
+    "enableGlobalCredit": false,
+    "defaultCreditLimit": 500
+  }
+}
+
+```
+
+---
+
+### 7. Configurar Tasa de Cambio
+
+Actualiza la estrategia de tasa de cambio y el valor actual (si es manual).
+
+**Endpoint:** `PATCH /api/v1/platform/business/:id/exchange-rate`
+
+**Permisos:** `OWNER`, `ADMIN`.
+
+#### Request Body
+
+```json
+{
+  "strategy": "MANUAL", // o 'API_BCV', 'API_PARALLEL'
+  "manualRate": 55.20   // Requerido solo si strategy es MANUAL
+}
+
+```
+
+#### Validaciones
+
+* `strategy`: Enum válido.
+* `manualRate`: Obligatorio si es MANUAL, debe ser > 0.
+* Si es `API_*`: El sistema debe tener una tasa global cargada previamente, de lo contrario retorna error `400`.
 
 #### Response (200 OK)
 
@@ -275,26 +255,32 @@ Authorization: Bearer <token>
   "message": "Configuración de tasa actualizada exitosamente",
   "data": {
     "strategy": "MANUAL",
-    "currentRate": "54.3000"
+    "currentRate": "55.2000"
   }
 }
+
 ```
 
 ---
 
-## 🔒 Seguridad
+## 🔒 Seguridad y Permisos (RBAC)
 
-- Todas las rutas requieren autenticación
-- El `userId` se obtiene del token JWT (`req.user.id`)
-- Solo se pueden ver/modificar negocios donde el usuario es miembro activo
-- Se valida pertenencia antes de actualizar
+1. **Nivel Rutas:** Todas requieren token Bearer válido.
+2. **Nivel Recurso:** El usuario debe ser miembro activo (`isActive: true`) del negocio `id`.
+3. **Nivel Acción (Roles):**
+* **Lectura (`GET`):** Cualquier miembro activo.
+* **General (`PATCH .../general`):** `OWNER`, `ADMIN`.
+* **Tasas (`PATCH .../exchange-rate`):** `OWNER`, `ADMIN`.
+* **Políticas (`PATCH .../policies`):** Solo `OWNER` (Protección crítica de activos).
 
-## 📝 Notas
 
-- Al crear un negocio, se crea automáticamente:
-  - Suscripción TRIAL de 7 días
-  - Relación BusinessMember con rol OWNER
-- Todo se hace en una transacción atómica
-- El rol `OWNER` debe existir en el sistema antes de crear negocios
-- La tasa usada por el frontend se expone como `currentExchangeRate` (cache).
-- Si `rateStrategy = MANUAL`, el valor de referencia es `manualRate`.
+
+## ⚠️ Códigos de Error Clave
+
+* **400 Bad Request:** Datos inválidos (ej. límite de crédito negativo, tasa manual <= 0).
+* **403 Forbidden:**
+* Usuario no pertenece al negocio.
+* Usuario intenta editar Políticas sin ser `OWNER`.
+
+
+* **404 Not Found:** Negocio no existe.

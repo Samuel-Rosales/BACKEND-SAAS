@@ -4,65 +4,103 @@ import { BusinessService } from './business.service';
 export class BusinessController {
     private service = new BusinessService();
 
+    // 1. CREAR NEGOCIO
     create = async (req: Request, res: Response) => {
-        // req.user está garantizado por authMiddleware
-        const userId = req.user!.id;
+        const userId = req.user!.membershipId;
 
-        const {status, data, message} = await this.service.create(userId, req.body);
+        if (!userId) {
+            return res.status(400).json({ message: 'User membership ID is required' });
+        }
 
-        res.status(status).json({ 
-            message, 
-            data 
-        });
+        const { status, data, message } = await this.service.create(userId, req.body);
+
+        res.status(status).json({ message, data });
     };
 
+    // 2. LISTAR MIS NEGOCIOS
     findAllByUser = async (req: Request, res: Response) => {
-        // req.user está garantizado por authMiddleware
-        const userId = req.user!.id;
+        const userId = req.user!.membershipId;
 
-        const {status, data, message} = await this.service.findAllByUser(userId);
-        
-        res.status(status).json({ 
-            message, 
-            data 
-        });
+        if (!userId) {
+            return res.status(400).json({ message: 'User membership ID is required' });
+        }
+
+        const { status, data, message } = await this.service.findAllByUser(userId);
+        res.status(status).json({ message, data });
     };
 
+    // 3. OBTENER UN NEGOCIO (General / Header)
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        // req.user está garantizado por authMiddleware
-        const userId = req.user!.id;
 
-        const {status, data, message} = await this.service.findOne(+id, userId);
+        const userId = req.user!.membershipId;
 
-        res.status(status).json({ 
-            message, 
-            data 
-        });
+        if (!userId) {
+            return res.status(400).json({ message: 'User membership ID is required' });
+        }
+
+        const { status, data, message } = await this.service.findOne(+id, userId);
+        res.status(status).json({ message, data });
     };
 
-    update = async (req: Request, res: Response) => {
+    // 4. OBTENER CONFIGURACIÓN COMPLETA (Para el formulario React)
+    // Este endpoint devuelve el DTO estructurado (general, rates, policies)
+    getSettings = async (req: Request, res: Response) => {
         const { id } = req.params;
-        // req.user está garantizado por authMiddleware
-        const userId = req.user!.id;
 
-        const {status, data, message} = await this.service.update(+id, userId, req.body);
+        const userId = req.user!.membershipId;
+
+        if (!userId) {
+            return res.status(400).json({ message: 'User membership ID is required' });
+        }
         
-        res.status(status).json({ 
-            message, 
-            data 
-        });
+        const { status, data, message } = await this.service.findOneForSettings(+id, userId);
+        
+        res.status(status).json({ message, data });
     };
 
+    // 5. ACTUALIZAR INFORMACIÓN GENERAL (Nombre, Logo, Dirección)
+    updateGeneral = async (req: Request, res: Response) => {
+        const { id } = req.params;
+
+        const userId = req.user!.membershipId;
+
+        if (!userId) {
+            return res.status(400).json({ message: 'User membership ID is required' });
+        }
+
+        const { status, data, message } = await this.service.updateGeneralInfo(+id, userId, req.body);
+        
+        res.status(status).json({ message, data });
+    };
+
+    // 6. ACTUALIZAR POLÍTICAS (Créditos, Switches Globales)
+    updatePolicies = async (req: Request, res: Response) => {
+        const { id } = req.params;
+
+        const userId = req.user!.membershipId;
+
+        if (!userId) {
+            return res.status(400).json({ message: 'User membership ID is required' });
+        }
+
+        const { status, data, message } = await this.service.updatePolicies(+id, userId, req.body);
+        
+        res.status(status).json({ message, data });
+    };
+
+    // 7. ACTUALIZAR TASAS (Moneda y Estrategias)
     updateExchangeRateConfig = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const userId = req.user!.id;
+
+        const userId = req.user!.membershipId;
+
+        if (!userId) {
+            return res.status(400).json({ message: 'User membership ID is required' });
+        }
 
         const { status, data, message } = await this.service.updateExchangeRateConfig(+id, userId, req.body);
 
-        res.status(status).json({
-            message,
-            data
-        });
+        res.status(status).json({ message, data });
     };
 }
