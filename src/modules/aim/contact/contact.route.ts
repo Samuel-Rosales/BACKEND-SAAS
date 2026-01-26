@@ -20,17 +20,16 @@ router.post(
 router.get('/', controller.findAll);
 
 router.get(
-    '/:id', 
-    validator.validateId,
-    handleValidationErrors,
-    controller.findOne
+  '/user',
+  handleValidationErrors,
+  controller.findByUserId
 );
 
 router.get(
-    '/user/:userId',
-    validator.validateUserId,
-    handleValidationErrors,
-    controller.findByUserId
+  '/:id', 
+  validator.validateId,
+  handleValidationErrors,
+  controller.findOne
 );
 
 router.patch(

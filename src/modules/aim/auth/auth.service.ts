@@ -67,4 +67,46 @@ export class AuthService {
             };
         }
     }
+
+    async getMe(userId: number) {
+        try {
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: {
+                    id: true,
+                    ci: true,
+                    name: true,      
+                }
+            });
+
+            if (!user) {
+                return {
+                    message: 'Usuario no encontrado o inactivo',
+                    status: 404,
+                    data: null
+                };
+            }
+
+            // Mapeo opcional si tu frontend espera firstName/lastName pero tu DB tiene 'name'
+            // const formattedUser = {
+            //    ...user,
+            //    firstName: user.name.split(' ')[0],
+            //    lastName: user.name.split(' ').slice(1).join(' ') || ''
+            // };
+
+            return {
+                message: 'Perfil de usuario obtenido',
+                status: 200,
+                data: user // o formattedUser
+            };
+
+        } catch (error) {
+            console.error('Error en getMe:', error);
+            return {
+                message: 'Error interno del servidor',
+                status: 500,
+                data: null
+            };
+        }
+    }
 }

@@ -13,4 +13,17 @@ export class AuthController {
             message
         });
     };
+
+    getMe = async (req: Request, res: Response) => {
+        // El userId viene del token decodificado por el middleware
+        // Asegúrate de que tu Request tenga tipado el usuario (ej. req.user?.id)
+        const userId = req.user!.id; 
+
+        const { status, message, data } = await this.service.getMe(userId);
+
+        res.status(status).json({
+            message,
+            data
+        });
+    };
 }

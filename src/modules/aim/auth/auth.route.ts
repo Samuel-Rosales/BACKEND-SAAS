@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AuthController } from './auth.controller';
 import { AuthValidator } from './auth.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
+import { authMiddleware } from '@/middlewares/auth.middleware';
 
 const router = Router();
 const controller = new AuthController();
@@ -13,6 +14,12 @@ router.post(
   validator.validateAuth, 
   handleValidationErrors, 
   controller.login
+);
+
+router.get(
+    '/me', 
+    authMiddleware, // 🔒 Obligatorio: Esto valida el token e inyecta req.user
+    controller.getMe
 );
 
 export const AuthRoute = router;

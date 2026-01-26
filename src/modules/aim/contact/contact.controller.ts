@@ -42,9 +42,16 @@ export class ContactController {
 
     findByUserId = async (req: Request, res: Response) => {
 
-        const { userId } = req.params;
+        const { id } = req.user;
+
+        if (!id) {
+            return res.status(400).json({
+                message: 'User ID not found in request',
+                data: null
+            });
+        }
         
-        const {status, data, message} = await this.service.findByUserId(+userId);
+        const {status, data, message} = await this.service.findByUserId(+id);
 
         res.status(status).json({ 
             message, 

@@ -4,18 +4,6 @@ import { prisma } from '@/configs';
 export class ContactValidator {
   
     public validateCreate: ValidationChain[] = [
-        
-        body('userId')
-        .isInt().withMessage('El ID del usuario debe ser un número entero')
-        .custom(async (userId) => {
-            const user = await prisma.user.findUnique({
-                where: { id: userId }
-            });
-            if (!user) {
-                throw new Error('El usuario especificado no existe');
-            }
-            return true;
-        }),
 
         body('email')
         .trim()
@@ -57,8 +45,6 @@ export class ContactValidator {
     ];
 
     public validateUpdate: ValidationChain[] = [
-
-        param('id').isInt().toInt(),
         
         body('userId')
         .optional()
