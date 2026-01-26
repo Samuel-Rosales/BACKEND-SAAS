@@ -336,15 +336,23 @@ export class ProductService {
                 })),
 
                 // Componentes (Si es Receta)
-                // Componentes (Si es Receta)
                 components: product.components.map(c => ({
-                    childProductId: c.childProductId,
+                    // 1. IDs para lógica (Frontend necesita esto para Editar/Borrar)
+                    id: c.id,                      // ID de la relación (ProductComponent)
+                    childProductId: c.childProductId, // ID del Ingrediente (Para pre-seleccionar en el combo)
+
+                    // 2. Datos para Mostrar (Tabla visual)
+                    ingredientName: c.child.name,
+                    sku: c.child.sku,              // Útil para que el cocinero verifique
+                    
+                    // 3. Cantidades limpias (Numbers, no Strings ni Decimal objects)
                     quantity: new Decimal(c.quantity).toNumber(),
-                    child: {
-                        name: c.child.name,
-                        sku: c.child.sku,
-                        unit: { symbol: c.child.unit.symbol }
-                    }
+                    
+                    // 4. Unidad aplanada (Para no poner c.child.unit.symbol)
+                    unitSymbol: c.child.unit.symbol,
+
+                    // Opcional: Costo calculado al momento (si quieres mostrar cuánto cuesta esa línea)
+                    // cost: new Decimal(c.child.costPrice).mul(c.quantity).toNumber()
                 })),
 
                 // NOTA: No enviamos 'stockLots' completos para no revelar costos.
@@ -545,7 +553,6 @@ export class ProductService {
         }
     }
     
-    // 5. ELIMINAR INTELIGENTE (Híbrido)
     // 5. ELIMINAR INTELIGENTE (Híbrido)
     async remove(businessId: number, id: number) {
         try {
