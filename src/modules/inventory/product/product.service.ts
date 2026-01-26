@@ -26,13 +26,13 @@ export class ProductService {
             if (existingSku) return { message: `SKU "${data.sku}" ya existe`, status: 400, data: null };
 
             // Variable mutable para el costo final
-            let finalCostPrice = data.costPrice; 
+            let finalCostPrice = data.costPrice;
 
             // =================================================================
             // FASE 1.5: LÓGICA DE RECETAS (COMPOSITE)
             // =================================================================
             if (data.type === ProductType.COMPOSITE) {
-                
+
                 if (!data.components || data.components.length === 0) {
                     return { message: 'Un producto compuesto debe tener ingredientes.', status: 400, data: null };
                 }
@@ -60,19 +60,19 @@ export class ProductService {
                 // 3. CALCULO AUTOMÁTICO DE COSTO (La Magia)
                 // Costo Padre = Suma(Costo Hijo * Cantidad Receta)
                 let calculatedCost = 0;
-                
+
                 for (const comp of data.components) {
                     const ingredient = ingredients.find(i => i.id === comp.childProductId);
                     if (ingredient) {
                         // Convertimos a Number para calcular, asumiendo que Prisma devuelve Decimal o Number
-                        const cost = Number(ingredient.costPrice); 
+                        const cost = Number(ingredient.costPrice);
                         const qty = Number(comp.quantity);
                         calculatedCost += (cost * qty);
                     }
                 }
-                
+
                 // Sobreescribimos el costo que envió el usuario
-                finalCostPrice = calculatedCost; 
+                finalCostPrice = calculatedCost;
             }
 
             // =================================================================
@@ -93,14 +93,14 @@ export class ProductService {
                     isPerishable: data.isPerishable || false,
 
                     // USAMOS EL COSTO CALCULADO O EL MANUAL
-                    costPrice: finalCostPrice, 
-                    
+                    costPrice: finalCostPrice,
+
                     profitMargin: data.profitMargin,
                     salePrice: data.salePrice,
                     minStock: data.minStock || 0,
 
                     // Creación de relaciones
-                    components: data.type === ProductType.COMPOSITE && data.components 
+                    components: data.type === ProductType.COMPOSITE && data.components
                         ? {
                             create: data.components.map(comp => ({
                                 childProductId: comp.childProductId,
@@ -161,7 +161,7 @@ export class ProductService {
                         category: { select: { id: true, name: true } },
                         unit: { select: { id: true, symbol: true } },
                         presentations: true,
-                        
+
                         // --- CAMBIO 1: Traemos el stock físico (para productos Simples) ---
                         stockLots: { select: { quantity: true } },
 
@@ -190,33 +190,33 @@ export class ProductService {
                 // =========================================================
 
                 if (product.type === 'SERVICE') {
-                    calculatedStock = new Decimal(0); 
-                } 
-                
+                    calculatedStock = new Decimal(0);
+                }
+
                 else if (product.type === 'SIMPLE') {
                     // SUMA PRECIS: Usamos .add() en lugar de +
                     calculatedStock = product.stockLots.reduce(
-                        (acc, lot) => acc.add(new Decimal(lot.quantity)), 
+                        (acc, lot) => acc.add(new Decimal(lot.quantity)),
                         new Decimal(0)
                     );
-                } 
-                
+                }
+
                 else if (product.type === 'COMPOSITE') {
                     // LÓGICA DEL FACTOR LIMITANTE (Reactivo Limitante)
-                    
+
                     if (!product.components || product.components.length === 0) {
                         calculatedStock = new Decimal(0);
                     } else {
                         // Mapeamos a un array de Decimals con la cantidad posible por ingrediente
                         const possibleQuantities = product.components.map(component => {
                             const requiredQty = new Decimal(component.quantity);
-                            
+
                             // Evitar división por cero
                             if (requiredQty.isZero() || requiredQty.isNegative()) return new Decimal(0);
 
                             // 1. Sumamos el stock del ingrediente (child)
                             const ingredientTotalStock = component.child.stockLots.reduce(
-                                (acc, lot) => acc.add(new Decimal(lot.quantity)), 
+                                (acc, lot) => acc.add(new Decimal(lot.quantity)),
                                 new Decimal(0)
                             );
 
@@ -230,7 +230,7 @@ export class ProductService {
                         // Decimal.min(...array) funciona si usas la librería directa, 
                         // pero para mayor compatibilidad con Prisma iteramos:
                         if (possibleQuantities.length > 0) {
-                            calculatedStock = possibleQuantities.reduce((min, current) => 
+                            calculatedStock = possibleQuantities.reduce((min, current) =>
                                 current.lessThan(min) ? current : min
                             );
                         } else {
@@ -246,7 +246,7 @@ export class ProductService {
                     ...product,
                     stockLots: undefined,
                     components: undefined,
-                    
+
                     // FINALMENTE convertimos a Number para que el JSON sea ligero
                     // y el frontend (React) pueda hacer cálculos simples o mostrarlo.
                     // Usamos toNumber() de la librería Decimal.
@@ -275,20 +275,20 @@ export class ProductService {
                     category: { select: { id: true, name: true } },
                     unit: { select: { id: true, name: true, symbol: true } },
                     presentations: { where: { isActive: true } }, // Solo activas
-                    
+
                     // OJO: Solo traemos lotes con stock positivo para el frontend
                     // Así no envías 500 lotes vacíos viejos.
-                    stockLots: { 
-                        where: { quantity: { gt: 0 } }, 
-                        include: { 
-                            depot: { select: { id: true, name: true } } 
+                    stockLots: {
+                        where: { quantity: { gt: 0 } },
+                        include: {
+                            depot: { select: { id: true, name: true } }
                         },
                         orderBy: { expirationDate: 'asc' } // FEFO (Primero en vencer)
                     },
                     components: {
                         include: {
                             child: {
-                                select: { id: true, name: true, unit: { select: { symbol: true } } }
+                                select: { id: true, name: true, sku: true, unit: { select: { symbol: true } } }
                             }
                         }
                     },
@@ -316,18 +316,18 @@ export class ProductService {
                 imageUrl: product.imageUrl,
                 type: product.type,
                 isPerishable: product.isPerishable,
-                
+
                 // Conversión de Decimal a Number (JS nativo)
                 price: new Decimal(product.salePrice).toNumber(),
                 minStock: product.minStock,
-                
+
                 // Info Calculada
                 currentStock: totalStockDecimal.toNumber(),
-                
+
                 // Relaciones limpias
                 category: product.category,
                 unit: product.unit,
-                
+
                 // Presentaciones con precios convertidos
                 presentations: product.presentations.map(p => ({
                     ...p,
@@ -336,16 +336,20 @@ export class ProductService {
                 })),
 
                 // Componentes (Si es Receta)
+                // Componentes (Si es Receta)
                 components: product.components.map(c => ({
-                    id: c.id,
-                    ingredientName: c.child.name,
-                    quantityRequired: new Decimal(c.quantity).toNumber(),
-                    unitSymbol: c.child.unit.symbol
+                    childProductId: c.childProductId,
+                    quantity: new Decimal(c.quantity).toNumber(),
+                    child: {
+                        name: c.child.name,
+                        sku: c.child.sku,
+                        unit: { symbol: c.child.unit.symbol }
+                    }
                 })),
 
                 // NOTA: No enviamos 'stockLots' completos para no revelar costos.
                 // Si necesitas mostrar desglose por almacén, crea un objeto resumido:
-                stockByDepot: this.groupStockByDepot(product.stockLots) 
+                stockByDepot: this.groupStockByDepot(product.stockLots)
             };
 
             return { message: 'Producto encontrado', status: 200, data: sanitizedProduct };
@@ -403,8 +407,8 @@ export class ProductService {
 
             // Validación Extra: Si envían componentes, verificar que existan (Igual que en create)
             if (rest.type === ProductType.COMPOSITE && components && components.length > 0) {
-                 const ingredientIds = components.map(c => c.childProductId);
-                 validations.push(prisma.product.count({ where: { id: { in: ingredientIds }, businessId } })
+                const ingredientIds = components.map(c => c.childProductId);
+                validations.push(prisma.product.count({ where: { id: { in: ingredientIds }, businessId } })
                     .then(count => { if (count !== ingredientIds.length) throw new BusinessError('Ingredientes inválidos', 400); }));
             }
 
@@ -541,6 +545,7 @@ export class ProductService {
         }
     }
     
+    // 5. ELIMINAR INTELIGENTE (Híbrido)
     // 5. ELIMINAR INTELIGENTE (Híbrido)
     async remove(businessId: number, id: number) {
         try {
