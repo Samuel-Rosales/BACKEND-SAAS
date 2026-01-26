@@ -1,7 +1,7 @@
 import { prisma } from '@/configs';
 import { CreateProductInterface, UpdateProductInterface } from './interfaces';
 import { ProductType } from '@prisma/client';
-import { BusinessError } from '@/utils';
+import { BusinessError, calculatePriceWithMarkup, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
 
 export class ProductService {
@@ -386,6 +386,7 @@ export class ProductService {
             const validations = [];
 
             if (rest.categoryId && rest.categoryId !== existingProduct.categoryId) {
+
                 validations.push(prisma.category.findFirst({ where: { id: rest.categoryId, businessId } })
                     .then(cat => { if (!cat) throw new BusinessError('Categoría inválida', 400); }));
             }
@@ -418,40 +419,91 @@ export class ProductService {
             // =================================================================
             // FASE DE ACTUALIZACIÓN (La Lógica Senior)
             // =================================================================
-            
-            // Preparamos el objeto de manejo de componentes para Prisma
+
+            let newCostPrice = new Decimal(rest.costPrice || existingProduct.costPrice);
             let componentsUpdateLogic: any = undefined;
 
-            // CASO 1: Si me envían una nueva lista de componentes (están editando la receta)
-            if (components && rest.type === ProductType.COMPOSITE) {
+            // CASO A: Es (o se volvió) un Producto COMPUESTO y enviaron receta nueva
+            if ((rest.type === ProductType.COMPOSITE || existingProduct.type === ProductType.COMPOSITE) && components) {
+                
+                // 1. Buscamos los costos REALES de los ingredientes en la BD
+                const ingredientIds = components.map(c => c.childProductId);
+
+                const dbIngredients = await prisma.product.findMany({
+                    where: { id: { in: ingredientIds }, businessId },
+                    select: { id: true, costPrice: true } // Solo necesitamos esto
+                });
+
+                // 2. Calculamos el nuevo costo total usando Decimal
+                let calculatedRecipeCost = new Decimal(0);
+
+                for (const comp of components) {
+
+                    const dbItem = dbIngredients.find(i => i.id === comp.childProductId);
+                    
+                    if (dbItem) {
+
+                        const cost = new Decimal(dbItem.costPrice);
+                        const qty = new Decimal(comp.quantity);
+                        
+                        // Sumar: Costo * Cantidad
+                        calculatedRecipeCost = calculatedRecipeCost.add(cost.mul(qty));
+                    }
+                }
+
+                // 3. Asignamos el costo calculado para guardarlo
+                newCostPrice = calculatedRecipeCost;
+
+                // 4. Preparamos lógica de Prisma para reemplazar ingredientes
                 componentsUpdateLogic = {
-                    deleteMany: {}, // 1. Borramos los ingredientes viejos
-                    create: components.map(c => ({ // 2. Creamos los nuevos
+                    deleteMany: {}, // Borrar viejos
+                    create: components.map(c => ({ // Crear nuevos
                         childProductId: c.childProductId,
-                        quantity: c.quantity
+                        quantity: c.quantity // Prisma acepta Decimal o number aquí
                     }))
                 };
-            } 
-            // CASO 2: Si el producto ERA Composite y ahora lo cambian a SIMPLE
+            }
+            // CASO B: Cambió de COMPOSITE a SIMPLE
             else if (rest.type === ProductType.SIMPLE && existingProduct.type === ProductType.COMPOSITE) {
-                componentsUpdateLogic = {
-                    deleteMany: {} // Borramos la receta porque ya no es un plato
-                };
+                // El costo es el que digite el usuario manualmente (rest.costPrice)
+                // Borramos la receta
+                componentsUpdateLogic = { deleteMany: {} };
             }
 
+            // =================================================================
+            // FASE DE PRECIO DE VENTA (AUTOMATIZACIÓN) 📈
+            // =================================================================
+            // Si el costo cambió, ¿Debemos actualizar el precio de venta?
+            // Generalmente SÍ, para mantener el margen de ganancia.
+            
+            let newSalePrice = rest.salePrice; // Por defecto mantenemos el que envían o el que estaba
+
+            // Si no enviaron precio manual, recalculamos basado en el margen actual
+            if (!rest.salePrice) {
+                const margin = rest.profitMargin || existingProduct.profitMargin;
+                // Usamos tu utilidad blindada con Decimal
+                newSalePrice = calculatePriceWithMarkup(margin, newCostPrice);
+            }
+
+            // =================================================================
+            // FASE DE PERSISTENCIA
+            // =================================================================
             const updatedProduct = await prisma.product.update({
                 where: { id },
                 data: {
-                    ...rest, // Actualiza nombre, precio, sku, type, etc.
+                    ...rest,
                     updatedById: userId,
                     
-                    // Aquí inyectamos la lógica calculada arriba
+                    // Valores Financieros Calculados
+                    costPrice: newCostPrice,
+                    salePrice: newSalePrice,
+
+                    // Relaciones
                     components: componentsUpdateLogic
                 },
                 include: {
-                    category: { select: { id: true, name: true } },
-                    unit: { select: { id: true, symbol: true } },
-                    // Devolvemos la receta actualizada para que el frontend actualice la tabla
+                    category: true,
+                    unit: true,
                     components: {
                         include: {
                             child: { select: { id: true, name: true, unit: { select: { symbol: true } } } }
@@ -459,6 +511,19 @@ export class ProductService {
                     }
                 }
             });
+
+            // =================================================================
+            // FASE DE RECURSIVIDAD (EFECTO DOMINÓ) 🎲
+            // =================================================================
+            // Si este producto (ej: Salsa) cambió de precio, y es usado en otros (ej: Pizza),
+            // debemos actualizar a los padres.
+            const oldCost = new Decimal(existingProduct.costPrice);
+            
+            // Solo disparamos la recursividad si hubo un cambio real de dinero (> 0.001)
+            if (oldCost.sub(newCostPrice).abs().gt(new Decimal(0.001))) {
+                // Ejecutamos en segundo plano (sin await) para no bloquear la respuesta al usuario
+                updateRecursiveRecipeCosts(prisma, id).catch(e => console.error(e));
+            }
 
             return {
                 message: 'Producto actualizado exitosamente',
@@ -475,8 +540,7 @@ export class ProductService {
             return { message: 'Error interno al actualizar', status: 500, data: null };
         }
     }
-
-    // 5. ELIMINAR
+    
     // 5. ELIMINAR INTELIGENTE (Híbrido)
     async remove(businessId: number, id: number) {
         try {
