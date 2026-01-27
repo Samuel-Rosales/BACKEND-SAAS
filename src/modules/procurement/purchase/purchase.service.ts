@@ -78,7 +78,7 @@ export class PurchaseService {
                 return { message: 'Método de pago inválido', status: 404, data: null };
             }
 
-            if (data.payments.length === 0) {
+            if (data.payments.length === 0 && data.condition !== 'CREDIT') {
                 return { message: 'Debe registrar al menos un pago para la compra', status: 400, data: null };
             }   
 
