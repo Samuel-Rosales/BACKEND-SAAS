@@ -543,7 +543,7 @@ model Purchase {
   reference   String? // Nro Factura Física del Proveedor (Ej: "A-00045")
   observation String // Notas: "Caja llegó abierta", "Sin novedad"
 
-  date DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   conditions      Conditions @default(CASH) // CONTADO o CREDITO
   paymentStatus   PaymentStatus     @default(PAID) // PENDING, PARTIAL, PAID

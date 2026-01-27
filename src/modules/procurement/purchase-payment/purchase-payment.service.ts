@@ -175,7 +175,7 @@ export class PurchasePaymentService {
                             id: true,
                             totalCost: true,
                             reference: true,
-                            date: true
+                            createdAt: true
                         }
                     }
                 },
@@ -241,7 +241,7 @@ export class PurchasePaymentService {
                             id: true,
                             totalCost: true,
                             reference: true,
-                            date: true,
+                            createdAt: true,
                             supplier: {
                                 select: {
                                     id: true,

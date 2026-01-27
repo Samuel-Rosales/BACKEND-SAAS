@@ -473,7 +473,7 @@ export class PurchaseService {
                         exchangeRate: { select: { rate: true, /* currency: true*/ } }, 
                         _count: { select: { items: true } }
                     },
-                    orderBy: { date: 'desc' }
+                    orderBy: { createdAt: 'desc' }
                 }),
                 
                 prisma.purchase.count({ where: whereClause })
@@ -678,30 +678,49 @@ export class PurchaseService {
             const debts = await prisma.purchase.findMany({
                 where: {
                     businessId,
-                    conditions: Conditions.CREDIT, // Usamos el Enum
-                    // Filtro "Senior": Solo lo que realmente debemos
-                    remainingBalance: {
+                    conditions: 'CREDIT', // Solo compras a crédito
+                    // FILTRO CLAVE: Solo traer lo que debemos (Saldo > 0)
+                    /*remainingBalance: {
                         gt: 0 
-                    },
-                    // Opcional: Si quieres excluir las anuladas
-                    // status: { not: 'CANCELLED' } 
+                    },*/
+                    // Excluimos compras anuladas
+                    status: {
+                        not: 'CANCELLED'
+                    }
                 },
                 select: {
                     id: true,
-                    reference: true, // En compras usamos 'reference' (Nro Factura Proveedor)
-                    totalCost: true, // En compras es 'totalCost'
+                    reference: true,
+                    totalCost: true,
                     remainingBalance: true,
-                    paymentDueDate: true,
                     paymentStatus: true,
+                    createdAt: true, 
                     supplier: {
                         select: {
-                            nameCompany: true, // Ojo: en tu schema es 'nameCompany'
-                            contactName: true
+                            nameCompany: true,
+                            contactName: true,
+                            phone: true // Útil para llamar a cobrar/pagar
+                        }
+                    },
+                    // ✅ LO NUEVO: Traer las cuotas de la compra
+                    installments: {
+                        orderBy: {
+                            number: 'asc'
+                        },
+                        select: {
+                            id: true,
+                            number: true,
+                            amount: true,
+                            dueDate: true,
+                            status: true,
+                            paidAt: true
                         }
                     }
                 },
                 orderBy: {
-                    paymentDueDate: 'asc' // Prioridad a lo que vence primero
+                    // Ordenamos por fecha de creación (de más antigua a más nueva)
+                    // Usualmente quieres pagar primero lo más viejo.
+                    createdAt: 'asc' 
                 }
             });
 
@@ -716,21 +735,29 @@ export class PurchaseService {
             // Mapeo para frontend
             const mappedDebts = debts.map(p => ({
                 id: p.id,
-                invoiceNumber: p.reference || "S/N", // Factura física
+                invoiceNumber: p.reference || "S/N", 
+                
                 supplierName: p.supplier.nameCompany,
                 contact: p.supplier.contactName,
+                supplierPhone: p.supplier.phone,
                 
                 totalDebt: Number(p.totalCost),
                 pendingDebt: Number(p.remainingBalance),
+                // Calculamos lo pagado
                 paidAmount: Number(p.totalCost) - Number(p.remainingBalance),
                 
-                dueDate: p.paymentDueDate,
                 status: p.paymentStatus,
+                issueDate: p.createdAt, // Fecha emisión
                 
-                // Un extra visual: Días para vencer (o vencidos)
-                daysUntilDue: p.paymentDueDate 
-                    ? Math.ceil((new Date(p.paymentDueDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
-                    : 0
+                // ✅ Mapeamos las cuotas para el Frontend
+                installments: p.installments.map(ins => ({
+                    id: ins.id,
+                    number: ins.number,
+                    amount: Number(ins.amount),
+                    dueDate: ins.dueDate,
+                    status: ins.status,
+                    paidAt: ins.paidAt
+                }))
             }));
 
             return { 
@@ -747,17 +774,16 @@ export class PurchaseService {
     
     async getPurchasePaymentDetails(businessId: number, purchaseId: number) {
         try {
-            // 1. Validar Compra
+            // 1. Obtener Compra + Proveedor + Cuotas (Todo en una sola consulta)
             const purchase = await prisma.purchase.findUnique({
                 where: { id: purchaseId, businessId },
-                select: {
-                    id: true,
-                    reference: true,
-                    totalCost: true,
-                    remainingBalance: true,
-                    paymentStatus: true,
-                    conditions: true, // Para saber si buscamos cuotas
-                    supplier: { select: { nameCompany: true } }
+                include: {
+                    supplier: {
+                        select: { nameCompany: true, contactName: true }
+                    },
+                    installments: {
+                        orderBy: { number: 'asc' }
+                    }
                 }
             });
 
@@ -765,7 +791,7 @@ export class PurchaseService {
                 return { status: 404, message: 'Compra no encontrada', data: null };
             }
 
-            // 2. Buscar Pagos Realizados (Lo que ya salió de caja)
+            // 2. Buscar Pagos Realizados (Historial)
             const payments = await prisma.purchasePayment.findMany({
                 where: { purchaseId },
                 include: {
@@ -774,75 +800,75 @@ export class PurchaseService {
                     },
                     exchangeRate: { select: { rate: true } }
                 },
-                orderBy: { paymentDate: 'desc' }
+                orderBy: { paymentDate: 'desc' } // Cronología inversa
             });
 
-            // 3. Buscar Plan de Cuotas (Solo si es Crédito)
-            // Esto sirve para mostrar: "Cuota 1 (Pagada)", "Cuota 2 (Pendiente)"
-            const installments = purchase.conditions === Conditions.CREDIT 
-                ? await prisma.purchaseInstallment.findMany({
-                    where: { purchaseId },
-                    orderBy: { number: 'asc' }
-                })
-                : [];
-
-            // 4. Cálculos Financieros
+            // 3. Cálculos Financieros del Resumen
             const totalCost = Number(purchase.totalCost);
             const remainingBalance = Number(purchase.remainingBalance);
             const totalPaid = totalCost - remainingBalance;
 
-            // 5. Mapeo de Pagos (Historial)
+            // 4. Mapeo del Historial (ESTANDARIZADO con Ventas)
             const formattedHistory = payments.map(p => {
                 const rate = Number(p.exchangeRate.rate);
                 const originalAmount = Number(p.amount);
                 
-                // Normalizar a USD para reportes
-                const usdEquivalent = p.paymentMethod.currency === Currency.VES 
+                // Calculamos el equivalente en USD (Moneda Base)
+                const usdEquivalent = p.paymentMethod.currency === 'VES' 
                     ? originalAmount / rate 
                     : originalAmount;
 
                 return {
                     id: p.id,
-                    date: p.paymentDate, // Ojo: en tu schema es 'paymentDate', en Sale era 'date'
+                    // ✅ Estandarizamos a 'date' para que el componente genérico funcione
+                    date: p.paymentDate, 
                     methodName: p.paymentMethod.name,
+                    methodType: p.paymentMethod.type,
                     reference: p.reference,
                     currency: p.paymentMethod.currency,
-                    amountOriginal: originalAmount,
+                    
+                    // ✅ Mismos nombres que en Ventas
+                    originalAmount: originalAmount,
                     rateUsed: rate,
-                    amountUSD: Math.round(usdEquivalent * 100) / 100
+                    usdEquivalent: Number(usdEquivalent.toFixed(2))
                 };
             });
+
+            // 5. Mapeo del Plan de Cuotas (Plan)
+            const formattedPlan = purchase.installments.map(i => ({
+                id: i.id,
+                number: i.number,
+                amount: Number(i.amount),
+                dueDate: i.dueDate,
+                status: i.status,
+                paidAt: i.paidAt
+            }));
 
             return {
                 status: 200,
                 message: 'Detalle financiero obtenido',
                 data: {
-                    header: {
-                        supplier: purchase.supplier.nameCompany,
-                        invoice: purchase.reference,
+                    // Info básica de la cabecera
+                    purchaseInfo: {
+                        invoiceNumber: purchase.reference, // Nro Factura Proveedor
+                        supplierName: purchase.supplier.nameCompany,
                         status: purchase.paymentStatus,
-                        isCredit: purchase.conditions === Conditions.CREDIT
+                        isCredit: purchase.conditions === 'CREDIT'
                     },
+                    // Los 3 cuadros de resumen
                     summary: {
                         totalDebt: totalCost,
-                        pending: remainingBalance,
-                        paid: Math.round(totalPaid * 100) / 100
+                        currentDebt: remainingBalance,
+                        totalPaid: Number(totalPaid.toFixed(2))
                     },
-                    // El plan de pagos teórico (Cuotas)
-                    installments: installments.map(i => ({
-                        number: i.number,
-                        amount: Number(i.amount),
-                        dueDate: i.dueDate,
-                        status: i.status,
-                        paidAt: i.paidAt
-                    })),
-                    // Los pagos reales ejecutados
+                    // Las dos listas para las pestañas
+                    plan: formattedPlan,
                     history: formattedHistory
                 }
             };
 
         } catch (error) {
-            console.error('Error getPurchaseDetails:', error);
+            console.error('Error getPurchasePaymentDetails:', error);
             return { status: 500, message: 'Error interno', data: null };
         }
     }
