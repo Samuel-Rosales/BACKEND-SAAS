@@ -205,18 +205,17 @@ export class MemberService {
 
         try {
 
-            const updatedMember = await prisma.businessMember.updateMany({
+            const updatedMember = await prisma.businessMember.update({
                 where: { 
                     id: memberId,
                     businessId: businessId // Seguridad: solo actualiza si pertenece al negocio
                 },
                 data: data
             });
-    
-            if (updatedMember.count === 0) {
+            if (!updatedMember) {
                 return {
-                    message: `Empleado no encontrado o no pertenece a este negocio`,
-                    status: 404,
+                    message: `No se pudo actualizar el miembro`,
+                    status: 400,
                     data: null
                 };
             }
