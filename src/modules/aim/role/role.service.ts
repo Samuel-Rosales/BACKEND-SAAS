@@ -46,6 +46,7 @@ export class RoleService {
         try {
 
             const roles = await prisma.role.findMany({
+                where: { code: { not: 'OWNER' } },
                 orderBy: { id: 'asc' }
             });
 

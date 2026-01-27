@@ -2,13 +2,14 @@ import { Router } from 'express';
 import { RoleController } from './role.controller';
 import { RoleValidator } from './role.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
+import { authMiddleware } from '@/middlewares';
 // import { authMiddleware } from '@/middlewares/auth.middleware'; // Opcional: Proteger rutas
 
 const router = Router();
 const controller = new RoleController();
 const validator = new RoleValidator();
 
-// router.use(authMiddleware); // Descomentar para exigir login
+router.use(authMiddleware); // Descomentar para exigir login
 
 router.post(
   '/', 
