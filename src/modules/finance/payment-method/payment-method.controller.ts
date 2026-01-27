@@ -5,8 +5,7 @@ export class PaymentMethodController {
     private service = new PaymentMethodService();
 
     create = async (req: Request, res: Response) => {
-        const { name, type, currency, isActive } = req.body;
-        const { status, data, message } = await this.service.create({ name, type, currency, isActive });
+        const { status, data, message } = await this.service.create(req.body);
 
         res.status(status).json({
             message,
@@ -44,9 +43,7 @@ export class PaymentMethodController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const { type, isActive } = req.body; // Explicitly ignoring 'name'
-
-        const { status, data, message } = await this.service.update(+id, { type, isActive });
+        const { status, data, message } = await this.service.update(+id, req.body);
 
         res.status(status).json({
             message,
