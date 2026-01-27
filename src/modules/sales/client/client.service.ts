@@ -44,7 +44,7 @@ export class ClientService {
         ];
       }
 
-      /*
+      
       if (statusParam) {
         if (statusParam === 'true' || statusParam === 'active') {
           whereClause.isActive = true;
@@ -52,7 +52,7 @@ export class ClientService {
           whereClause.isActive = false;
         }
       }
-      */
+      
 
       const clients = await prisma.client.findMany({
         where: whereClause,
