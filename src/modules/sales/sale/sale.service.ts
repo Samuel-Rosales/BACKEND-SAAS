@@ -599,7 +599,6 @@ export class SaleService {
         return (lastSale?.receiptNumber || 0) + 1;
     }
 
-
     /**
      * Verifica recursivamente si hay suficiente stock para cubrir la venta.
      * No modifica nada, solo lee y suma.
@@ -782,7 +781,7 @@ export class SaleService {
                             paymentMethod: { select: { name: true, type: true } },
                             exchangeRate: { select: { rate: true, /* currency: true */ } }
                         }
-                    }
+                    },
                 }
             });
 
@@ -1018,173 +1017,186 @@ export class SaleService {
 
     async findCredits(businessId: number) {
         try {
-        const credits = await prisma.sale.findMany({
-            where: {
-                businessId,
-                conditions: 'CREDIT', // Solo ventas a crédito
-                // Truco Senior: No traigas las que ya están pagadas para no saturar la vista
-                /*paymentStatus: {
-                not: 'PAID' 
-                },*/
-                // Opcional: Asegurar que el saldo sea mayor a 0 por integridad
-                remainingBalance: {
-                gt: 0 
-                }
-            },
-            select: {
-                id: true,
-                receiptNumber: true,
-                totalAmount: true,
-                remainingBalance: true,
-                paymentDueDate: true,
-                paymentStatus: true,
-                client: {
-                    select: {
-                        name: true, // Necesitamos el nombre para la tabla
-                        phone: true
+            const credits = await prisma.sale.findMany({
+                where: {
+                    businessId,
+                    conditions: 'CREDIT', // Solo ventas a crédito
+                    // Filtro: Traer solo las que tienen deuda pendiente
+                    /*remainingBalance: {
+                        gt: 0
+                    },*/
+                    // Seguridad extra: que no estén anuladas
+                    status: {
+                        not: 'CANCELLED'
                     }
+                },
+                select: {
+                    id: true,
+                    receiptNumber: true,
+                    totalAmount: true,
+                    remainingBalance: true,
+                    paymentStatus: true,
+                    createdAt: true, // ✅ NECESARIO: Para mostrar la fecha de la venta en la tabla
+                    client: {
+                        select: {
+                            id: true,
+                            name: true,
+                            phone: true
+                        }
+                    },
+                    // ✅ LO NUEVO: Traer las cuotas ordenadas
+                    installments: {
+                        orderBy: {
+                            number: 'asc' // Cuota 1, 2, 3...
+                        },
+                        select: {
+                            id: true,
+                            number: true,
+                            amount: true,
+                            dueDate: true,
+                            status: true,
+                            paidAt: true
+                        }
+                    }
+                },
+                orderBy: {
+                    // Ordenar por las que tienen cuotas venciendo más pronto
+                    // (Nota: Si hay muchas ventas, esto ordena por la fecha "general" de pago si la tienes, 
+                    // o por creación si prefieres)
+                    createdAt: 'desc' 
                 }
-            },
-            orderBy: {
-                paymentDueDate: 'asc' // Mostrar primero las que vencen pronto
+            });
+
+            if (credits.length === 0) {
+                return {
+                    message: 'No hay créditos pendientes',
+                    status: 200,
+                    data: []
+                };
             }
-        });
 
-        if ( credits.length === 0 ) {
-            return {
-                message: 'No hay créditos pendientes',
+            // Mapeo de datos para el Frontend
+            const mappedCredits = credits.map(sale => ({
+                id: sale.id,
+                receiptNumber: sale.receiptNumber,
+                
+                clientId: sale.client.id,
+                clientName: sale.client.name,
+                clientPhone: sale.client.phone,
+
+                totalAmount: Number(sale.totalAmount),
+                remainingBalance: Number(sale.remainingBalance),
+                
+                status: sale.paymentStatus,
+                createdAt: sale.createdAt, // Fecha de creación para la tabla
+
+                // ✅ Mapeamos las cuotas convirtiendo Decimal a Number
+                installments: sale.installments.map(inst => ({
+                    id: inst.id,
+                    number: inst.number,
+                    amount: Number(inst.amount),
+                    dueDate: inst.dueDate,
+                    status: inst.status,
+                    paidAt: inst.paidAt
+                }))
+            }));
+
+            return { 
+                message: 'Créditos obtenidos exitosamente',
                 status: 200,
-                data: []
+                data: mappedCredits
             };
-        }
 
-        // Mapeamos para que el frontend reciba números limpios y structure plana
-        const mappedCredits = credits.map(sale => ({
-            id: sale.id,
-            saleId: sale.receiptNumber,
-            clientName: sale.client.name,
-            totalAmount: Number(sale.totalAmount),
-            // Calculamos lo pagado restando el total del saldo pendiente
-            paidAmount: Number(sale.totalAmount) - Number(sale.remainingBalance), 
-            dueDate: sale.paymentDueDate,
-            status: sale.paymentStatus
-        }));
-
-        return { 
-            message: 'Créditos obtenidos exitosamente',
-            status: 200,
-            data: mappedCredits
-        }} catch (error) {
+        } catch (error) {
             console.error('Error al obtener créditos:', error);
             return {
                 message: 'Error interno al obtener créditos',
                 status: 500,
                 data: null
             };
-            
         }
     }
 
     async getPaymentHistory(businessId: number, saleId: number) {
         try {
-            // 1. Validar que la venta exista y pertenezca al negocio
-            // Necesitamos 'totalAmount' y 'remainingBalance' para el resumen financiero
+            // 1. Get Sale + Installments
             const sale = await prisma.sale.findUnique({
                 where: { id: saleId, businessId },
-                select: {
-                    id: true,
-                    receiptNumber: true,
-                    totalAmount: true,
-                    remainingBalance: true,
-                    paymentStatus: true
+                include: {
+                    // ✅ Fetch Installments to show the plan
+                    installments: {
+                        orderBy: { number: 'asc' }
+                    }
                 }
             });
 
             if (!sale) {
-                return {
-                    status: 404,
-                    message: 'Venta no encontrada',
-                    data: null
-                };
+                return { status: 404, message: 'Venta no encontrada', data: null };
             }
 
-            // 2. Buscar los pagos relacionados
-            // Incluimos PaymentMethod y ExchangeRate para mostrar detalles ricos
+            // 2. Get Payments (Same as before)
             const payments = await prisma.salePayment.findMany({
                 where: { saleId },
                 include: {
-                    paymentMethod: {
-                        select: { name: true, type: true, currency: true } // Ej: "Zelle Banesco"
-                    },
-                    exchangeRate: {
-                        select: { rate: true } // Ej: 50.00
-                    }
+                    paymentMethod: { select: { name: true, type: true, currency: true } },
+                    exchangeRate: { select: { rate: true } }
                 },
-                orderBy: {
-                    date: 'desc' // Lo más reciente primero (Cronología inversa)
-                }
+                orderBy: { date: 'desc' }
             });
 
-            // 3. Preparar el Resumen Financiero
-            const totalAmount = Number(sale.totalAmount);
-            const remainingBalance = Number(sale.remainingBalance);
-            const totalPaid = totalAmount - remainingBalance;
-
-            // 4. Mapear los pagos para el Frontend (DTO de Salida)
+            // 3. Map Payments (Same logic as before)
             const formattedPayments = payments.map(p => {
-
                 const rate = Number(p.exchangeRate.rate);
                 const originalAmount = Number(p.amount);
-                
-                // Calculamos cuánto representó este pago en la moneda base (USD)
-                // Si fue VES, dividimos. Si fue USD, es igual.
                 const usdEquivalent = p.paymentMethod.currency === 'VES' 
                     ? originalAmount / rate 
                     : originalAmount;
-
+                
                 return {
                     id: p.id,
                     date: p.date,
-                    
-                    // Detalles del Método
                     methodName: p.paymentMethod.name,
-                    methodType: p.paymentMethod.type, // Útil para poner íconos en el front
-                    reference: p.reference,
-
-                    // Detalles Financieros
                     currency: p.paymentMethod.currency,
-                    originalAmount: originalAmount, // Ej: 1000 (Bs)
-                    rateUsed: rate,                 // Ej: 50.00
-                    
-                    // Dato clave para auditoría: ¿Cuánto restó de la deuda real?
-                    usdEquivalent: Math.round(usdEquivalent * 100) / 100 
+                    originalAmount,
+                    rateUsed: rate,
+                    usdEquivalent: Number(usdEquivalent.toFixed(2)),
+                    reference: p.reference
                 };
             });
 
+            // 4. ✅ Map Installments (New Section)
+            const formattedInstallments = sale.installments.map(ins => ({
+                id: ins.id,
+                number: ins.number,
+                amount: Number(ins.amount),
+                dueDate: ins.dueDate,
+                status: ins.status, // PENDING, PAID, PARTIAL
+                paidAt: ins.paidAt
+            }));
+
             return {
                 status: 200,
-                message: 'Historial obtenido correctamente',
+                message: 'Detalle de crédito obtenido',
                 data: {
                     saleInfo: {
                         receiptNumber: sale.receiptNumber,
-                        status: sale.paymentStatus
+                        status: sale.paymentStatus,
+                        clientName: "Cliente" // You might want to fetch this too if needed
                     },
                     summary: {
                         totalDebt: Number(sale.totalAmount),
                         currentDebt: Number(sale.remainingBalance),
-                        totalPaid: Math.round(totalPaid * 100) / 100
+                        totalPaid: Number(sale.totalAmount) - Number(sale.remainingBalance)
                     },
+                    // ✅ We send both lists now
+                    plan: formattedInstallments,
                     history: formattedPayments
                 }
             };
 
         } catch (error) {
-            console.error('Error al obtener historial de pagos:', error);
-            return {
-                status: 500,
-                message: 'Error interno al obtener el historial',
-                data: null
-            };
+            console.error(error);
+            return { status: 500, message: 'Error interno', data: null };
         }
     }
 }
