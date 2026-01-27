@@ -33,7 +33,6 @@ export class SupplierService {
   async findAll(businessId: number, query?: { search?: string, status?: string }) {
     try {
       const search = query?.search ? String(query.search).trim() : undefined;
-      const statusParam = query?.status ? String(query.status).toLowerCase() : undefined;
 
       const whereClause: any = { businessId };
 
@@ -47,16 +46,8 @@ export class SupplierService {
         ];
       }
 
-      if (statusParam) {
-        if (statusParam === 'true' || statusParam === 'active') {
-          whereClause.isActive = true;
-        } else if (statusParam === 'false' || statusParam === 'inactive') {
-          whereClause.isActive = false;
-        }
-      }
-
       const suppliers = await prisma.supplier.findMany({
-        where: whereClause,
+        where:{...whereClause, isActive: true },
         orderBy: { nameCompany: 'asc' }
       });
 
