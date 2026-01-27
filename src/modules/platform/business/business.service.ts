@@ -147,7 +147,7 @@ export class BusinessService {
   async findOne(businessId: number, userId: number) {
 
     try {
-
+      
       const business = await prisma.business.findFirst({
         where: {
           id: businessId,

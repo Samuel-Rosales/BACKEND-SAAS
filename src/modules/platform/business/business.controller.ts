@@ -33,13 +33,14 @@ export class BusinessController {
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
 
-        const { membershipId } = req.user;
+        const { id: userId } = req.user;
 
-        if (!membershipId) {
-            return res.status(400).json({ message: 'User membership ID is required' });
+        if (!userId) {
+            return res.status(400).json({ message: 'User ID is required' });
         }
 
-        const { status, data, message } = await this.service.findOne(+id, membershipId);
+        const { status, data, message } = await this.service.findOne(Number(id), userId);
+
         res.status(status).json({ message, data });
     };
 
