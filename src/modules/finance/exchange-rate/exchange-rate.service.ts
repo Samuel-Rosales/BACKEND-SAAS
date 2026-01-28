@@ -4,7 +4,7 @@ import axios from 'axios';
 
 
 export class ExchangeRateService {
-    private readonly BCV_API_URL = 'https://pydolarvenezuela-api.vercel.app/api/v1/dollar/page?page=bcv';
+    private readonly BCV_API_URL = 'https://api-bcv-pi.vercel.app/api/tasa';
 
     async create(businessId: number, data: CreateExchangeRateInterface) {
         try {
@@ -352,7 +352,7 @@ export class ExchangeRateService {
             const response = await axios.get(this.BCV_API_URL);
             
             // Adaptar esto según la estructura de la API que uses
-            const rateValue = response.data.monitors.usd.price; 
+            const rateValue = response.data.tasas.USD.valor_num; 
             
             if (!rateValue || isNaN(rateValue)) {
                 throw new Error('La API externa no devolvió un valor numérico válido.');
