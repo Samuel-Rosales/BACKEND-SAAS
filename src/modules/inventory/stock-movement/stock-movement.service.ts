@@ -1,14 +1,15 @@
 import { prisma } from '@/configs';
-import { CreateStockMovementInterface, StockOutputResult, UpdateStockMovementInterface } from './interfaces';
+import { CreateStockMovementInterface, FindMovementsQuery, StockOutputResult, UpdateStockMovementInterface } from './interfaces';
 import { BusinessError } from '@/utils/catch-errors.util';
 import { Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/client';
 
 export class StockMovementService {
 
     // 1. CREAR
     async create(businessId: number, membershipId: number, data: CreateStockMovementInterface) {
         try {
-            // 1. Validaciones Paralelas (Igual que antes...)
+            // 1. Validaciones Paralelas (Sin cambios aquí, esto está perfecto)
             const [product, depot, member, targetDepot] = await Promise.all([
                 prisma.product.findFirst({ where: { id: data.productId, businessId } }),
                 prisma.depot.findFirst({ where: { id: data.depotId, businessId, isActive: true } }),
@@ -18,22 +19,28 @@ export class StockMovementService {
                     : Promise.resolve(null)
             ]);
 
-            // ... (Tus Guard Clauses / Validaciones de Errores aquí) ...
-            if (!product || !depot || !member) throw new BusinessError('Datos inválidos', 404);
+            // Guard Clauses
+            if (!product) throw new BusinessError('Producto no encontrado o ajeno al negocio', 404);
+            if (!depot) throw new BusinessError('Depósito de origen no encontrado', 404);
+            if (!member) throw new BusinessError('Usuario no autorizado', 403);
+            if (data.type === 'TRANSFER' && !targetDepot) throw new BusinessError('Depósito destino inválido', 400);
 
             // 2. Transacción
             const result = await prisma.$transaction(async (tx) => {
-                const qtyAbs = Math.abs(data.quantity);
+                
+                // --- CONVERSIÓN A DECIMAL SEGURA ---
+                // Convertimos el input (que puede venir como string o number) a Decimal puro
+                const qtyInput = new Decimal(data.quantity);
+                const qtyAbs = qtyInput.abs(); // Usamos .abs() de Decimal, NO Math.abs()
 
                 // =========================================================
                 // CASO A: ENTRADAS (IN, RETURN)
                 // =========================================================
-                if (data.type === 'IN' || data.type === 'RETURN' || (data.type === 'ADJUSTMENT' && data.quantity > 0)) {
+                if (data.type === 'IN' || data.type === 'RETURN' || (data.type === 'ADJUSTMENT' && qtyInput.isPositive())) {
                     
-                    // Al entrar stock, SIEMPRE creamos o sumamos a un lote
                     return await this.addStockLog(tx, businessId, {
                         ...data,
-                        quantity: qtyAbs // Aseguramos positivo
+                        quantity: qtyAbs // Pasamos el Decimal positivo
                     }, membershipId);
                 } 
 
@@ -41,33 +48,31 @@ export class StockMovementService {
                 // CASO B: TRANSFERENCIAS
                 // =========================================================
                 else if (data.type === 'TRANSFER') {
-                    if (!targetDepot) throw new BusinessError("Falta depósito destino", 400);
-
-                    // 1. SACAR (Origen)
-                    // AHORA recibimos un objeto compuesto { movement, sourceMetadata }
+                    // 1. SACAR (Origen) -> Enviamos negativo
                     const { movement: outMove, sourceMetadata } = await this.deductStockStrategy(tx, businessId, {
                         ...data,
-                        quantity: -qtyAbs
+                        quantity: qtyAbs.negated() // .negated() es la forma correcta de hacer negativo un Decimal
                     }, membershipId);
 
-                    // Validación de seguridad por si falla la metadata
+                    // Recuperar metadata de forma segura
                     const finalExpiration = sourceMetadata?.expirationDate || new Date('2099-12-31');
-                    const finalCost = sourceMetadata?.cost || 0;
+                    
+                    // Aseguramos que el costo sea Decimal (puede venir null o number)
+                    const finalCost = sourceMetadata?.cost 
+                        ? new Decimal(sourceMetadata.cost) 
+                        : new Decimal(0);
 
-                    // 2. ENTRAR (Destino)
+                    // 2. ENTRAR (Destino) -> Enviamos positivo
                     const inMove = await this.addStockLog(tx, businessId, {
                         ...data,
-                        depotId: targetDepot.id, // Destino
-                        quantity: qtyAbs,
-                        
-                        // AQUI ESTABA EL ERROR: Ahora usamos la metadata extraída correctamente
+                        depotId: targetDepot!.id,
+                        quantity: qtyAbs, // Positivo
                         expirationDate: finalExpiration, 
                         unitCost: finalCost,
-                        
                         reason: `Transferencia desde ${depot.name}`
                     }, membershipId);
 
-                    return inMove; // O puedes retornar { out: outMove, in: inMove }
+                    return inMove; 
                 }
 
                 // =========================================================
@@ -76,17 +81,17 @@ export class StockMovementService {
                 else {
                     return await this.deductStockStrategy(tx, businessId, {
                         ...data,
-                        quantity: -qtyAbs
+                        quantity: qtyAbs.negated() // Negativo
                     }, membershipId);
                 }
             });
 
-            return { status: 201, message: 'Procesado', data: result };
+            return { status: 201, message: 'Procesado correctamente', data: result };
 
         } catch (error) {
-            console.error(error);
+            console.error('StockService.create Error:', error);
             if (error instanceof BusinessError) return { status: error.status, message: error.message, data: null };
-            return { status: 500, message: 'Error interno', data: null };
+            return { status: 500, message: 'Error interno de inventario', data: null };
         }
     }
 
@@ -115,14 +120,15 @@ export class StockMovementService {
         data: CreateStockMovementInterface,
         memberId: number
     ): Promise<StockOutputResult> {
-        const qtyNeeded = Math.abs(data.quantity);
+        const qtyNeeded = new Decimal(data.quantity);
 
         const lot = await tx.stockLot.findFirst({
             where: { id: data.lotId, depotId: data.depotId }
         });
 
         if (!lot) throw new BusinessError(`El lote #${data.lotId} no existe`, 404);
-        if (Number(lot.quantity) < qtyNeeded) throw new BusinessError(`Stock insuficiente en Lote #${data.lotId}`, 409);
+
+        if (new Decimal(lot.quantity).lt(qtyNeeded)) throw new BusinessError(`Stock insuficiente en Lote #${data.lotId}`, 409);
 
         // Actualizar Lote
         await tx.stockLot.update({
@@ -135,7 +141,8 @@ export class StockMovementService {
             data: {
                 businessId, productId: data.productId, depotId: data.depotId, memberId,
                 type: data.type, quantity: data.quantity, reason: data.reason,
-                date: data.date || new Date()
+                date: data.date || new Date(),
+                stockLotId: lot.id
             }
         });
 
@@ -144,7 +151,7 @@ export class StockMovementService {
             movement,
             sourceMetadata: {
                 expirationDate: lot.expirationDate,
-                cost: Number(lot.lotCost)
+                cost: new Decimal(lot.lotCost)
             }
         };
     }
@@ -158,46 +165,77 @@ export class StockMovementService {
         data: CreateStockMovementInterface,
         memberId: number
     ): Promise<StockOutputResult> {
-        let remaining = Math.abs(data.quantity);
+        // 1. Convertir input a Decimal y asegurar positivo
+        let remaining = new Decimal(data.quantity).abs();
         
+        // 2. Buscar lotes (Sin filtrar por businessId en stockLot, según acordamos)
         const lots = await tx.stockLot.findMany({
-            where: { productId: data.productId, depotId: data.depotId, quantity: { gt: 0 } },
+            where: { 
+                productId: data.productId, 
+                depotId: data.depotId, 
+                quantity: { gt: 0 } 
+            },
             orderBy: { expirationDate: 'asc' }
         });
 
-        const totalAvailable = lots.reduce((acc, l) => acc + Number(l.quantity), 0);
-        if (totalAvailable < remaining) throw new BusinessError(`Stock insuficiente. Disp: ${totalAvailable}`, 409);
+        // 3. Calcular Total Disponible (Suma segura con Decimal)
+        const totalAvailable = lots.reduce(
+            (acc, lot) => acc.plus(lot.quantity), 
+            new Decimal(0)
+        );
 
-        // Guardamos la metadata del PRIMER lote que vamos a tocar (el que vence más pronto).
-        // En transferencias múltiples, es la estrategia más segura para el destino (Worst Case Scenario).
+        // 4. Validación de Stock
+        if (totalAvailable.lessThan(remaining)) {
+            throw new BusinessError(`Stock insuficiente. Disp: ${totalAvailable.toFixed(2)}`, 409);
+        }
+
+        // 5. Preparar Metadata (Tomamos la del primer lote a vencer como referencia)
         const primaryLotMetadata = lots.length > 0 ? {
             expirationDate: lots[0].expirationDate,
-            cost: Number(lots[0].lotCost)
+            cost: lots[0].lotCost // Ya es Decimal desde Prisma, no convertir
         } : null;
 
+        // 6. Bucle de Consumo FEFO
         for (const lot of lots) {
-            if (remaining <= 0) break;
-            const available = Number(lot.quantity);
-            const toDeduct = Math.min(available, remaining);
+            // Condición de parada: Si ya no falta nada (0 o negativo por seguridad)
+            if (remaining.isZero() || remaining.isNegative()) break;
 
+            const available = lot.quantity; // Es Decimal
+            
+            // Lógica de reemplazo para Math.min(available, remaining)
+            let toDeduct: Decimal;
+            if (available.lessThan(remaining)) {
+                toDeduct = available; // Tomamos todo el lote
+            } else {
+                toDeduct = remaining; // Tomamos solo lo que falta
+            }
+
+            // Actualizar DB
             await tx.stockLot.update({
                 where: { id: lot.id },
                 data: { quantity: { decrement: toDeduct } }
             });
 
-            remaining -= toDeduct;
+            // Restar a lo pendiente
+            remaining = remaining.minus(toDeduct);
         }
 
+        // 7. Crear Movimiento (Historial)
         const movement = await tx.stockMovement.create({
             data: {
-                businessId, productId: data.productId, depotId: data.depotId, memberId,
-                type: data.type, quantity: data.quantity, 
+                businessId, 
+                productId: data.productId, 
+                depotId: data.depotId, 
+                memberId,
+                type: data.type, 
+                // data.quantity puede venir number, aseguramos guardarlo tal cual o como Decimal
+                quantity: new Decimal(data.quantity), 
                 reason: `${data.reason || ''} (Auto-FEFO)`,
-                date: data.date || new Date()
+                date: data.date || new Date(),
+                stockLotId: null // En FEFO masivo no vinculamos un lote único (por ahora)
             }
         });
 
-        // RETORNO COMPUESTO
         return {
             movement,
             sourceMetadata: primaryLotMetadata
@@ -217,7 +255,7 @@ export class StockMovementService {
         if (!data.unitCost && data.type !== 'TRANSFER') throw new BusinessError("El costo unitario es obligatorio para entradas", 400);
         
         // Crear Lote
-        await tx.stockLot.create({
+        const newLot = await tx.stockLot.create({
             data: {
                 productId: data.productId,
                 depotId: data.depotId,
@@ -230,74 +268,130 @@ export class StockMovementService {
         // Crear Movimiento
         return await tx.stockMovement.create({
             data: {
-                businessId, productId: data.productId, depotId: data.depotId, memberId,
-                type: data.type, quantity: data.quantity, reason: data.reason,
-                date: data.date || new Date()
+                businessId, 
+                productId: data.productId, 
+                depotId: data.depotId, 
+                memberId,
+                type: data.type, 
+                quantity: data.quantity, 
+                reason: data.reason,
+                date: data.date || new Date(),
+                stockLotId: newLot.id
             }
         });
     }
 
     // 2. LISTAR TODOS (de un negocio)
-    async findAll(businessId: number) {
+    async findAll(businessId: number, query: FindMovementsQuery) {
         try {
+            const { 
+                page = 1, 
+                limit = 10, 
+                search, 
+                type, 
+                depotId, 
+                productId,
+                startDate,
+                endDate
+            } = query;
 
-            const stockMovements = await prisma.stockMovement.findMany({
-                where: {
-                    businessId: businessId
-                },
-                include: {
-                    product: {
-                        select: {
-                            id: true,
-                            name: true,
-                            sku: true
-                        }
-                    },
-                    depot: {
-                        select: {
-                            id: true,
-                            name: true,
-                            location: true
-                        }
-                    },
-                    member: {
-                        select: {
-                            id: true,
-                            user: {
-                                select: {
-                                    id: true,
-                                    name: true
-                                }
+            const skip = (Number(page) - 1) * Number(limit);
+
+            // A. Construcción Dinámica del WHERE
+            // -------------------------------------------------------
+            const whereClause: Prisma.StockMovementWhereInput = {
+                businessId, // Siempre filtrar por el negocio del usuario
+                
+                // Filtros Opcionales
+                ...(type && { type: type as any }),
+                ...(depotId && { depotId: Number(depotId) }),
+                ...(productId && { productId: Number(productId) }),
+                
+                // Filtro de Fechas
+                ...((startDate || endDate) && {
+                    date: {
+                        ...(startDate && { gte: new Date(startDate) }),
+                        ...(endDate && { lte: new Date(endDate) })
+                    }
+                }),
+
+                // Búsqueda Inteligente (Search Universal)
+                ...(search && {
+                    OR: [
+                        { product: { name: { contains: search, mode: 'insensitive' } } },
+                        { product: { sku: { contains: search, mode: 'insensitive' } } },
+                        { reason: { contains: search, mode: 'insensitive' } },
+                        // Buscamos también por número de lote si existe relación
+                        { stockLot: { id: !isNaN(Number(search)) ? Number(search) : undefined } } 
+                    ]
+                })
+            };
+
+            // B. Ejecución Paralela (Datos + Total para paginación)
+            // -------------------------------------------------------
+            const [movements, total] = await Promise.all([
+                prisma.stockMovement.findMany({
+                    where: whereClause,
+                    skip,
+                    take: Number(limit),
+                    orderBy: { date: 'desc' },
+                    include: {
+                        product: {
+                            select: { id: true, name: true, sku: true, imageUrl: true }
+                        },
+                        depot: {
+                            select: { id: true, name: true, location: true }
+                        },
+                        member: {
+                            select: {
+                                id: true,
+                                user: { select: { name: true } }
+                            }
+                        },
+                        // CRUCIAL: Incluimos el lote para ver vencimientos y costos
+                        stockLot: {
+                            select: {
+                                id: true,
+                                // number: true, // Descomenta si agregaste columna 'number' a StockLot
+                                expirationDate: true,
+                                lotCost: true 
                             }
                         }
                     }
-                },
-                orderBy: {
-                    date: 'desc'
-                }
-            });
+                }),
+                prisma.stockMovement.count({ where: whereClause })
+            ]);
 
-            if (stockMovements.length === 0) {
-                return {
-                    message: 'No hay movimientos de stock disponibles',
-                    status: 404,
-                    data: []
-                };
-            }
+            // C. Mapeo de Datos (Opcional pero recomendado)
+            // -------------------------------------------------------
+            // A veces queremos aplanar la estructura o calcular totales antes de enviar
+            const formattedData = movements.map(m => ({
+                ...m,
+                // Si el movimiento no tiene costo directo, usamos el del lote
+                // O calculamos el totalValue para ayudar al frontend
+                unitCost: m.stockLot?.lotCost || 0,
+                totalValue: Number(m.quantity) * Number(m.stockLot?.lotCost || 0)
+            }));
 
+            // D. Respuesta con Metadatos
+            // -------------------------------------------------------
             return {
-                message: 'Movimientos de stock obtenidos exitosamente',
                 status: 200,
-                data: stockMovements
+                message: 'Listado obtenido correctamente',
+                data: formattedData,
+                meta: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / Number(limit))
+                }
             };
 
         } catch (error) {
-
-            console.error('Error al obtener los movimientos de stock:', error);
-
+            console.error('Error en findAll StockMovements:', error);
             return {
-                message: 'Error al obtener los movimientos de stock',
                 status: 500,
+                message: 'Error interno al obtener movimientos',
                 data: null
             };
         }
@@ -568,7 +662,7 @@ export class StockMovementService {
     }
 
     // 7. ACTUALIZAR
-    async update(businessId: number, id: number, data: UpdateStockMovementInterface) {
+    /*async update(businessId: number, id: number, data: UpdateStockMovementInterface) {
 
         try {
 
@@ -662,7 +756,7 @@ export class StockMovementService {
                 data: null
             };
         }
-    }
+    }*/
 
     // 8. ELIMINAR
     async remove(businessId: number, id: number) {

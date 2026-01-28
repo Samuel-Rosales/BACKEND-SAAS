@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { StockMovementService } from './stock-movement.service';
+import { FindMovementsQuery } from './interfaces';
 
 export class StockMovementController {
     private service = new StockMovementService();
@@ -28,22 +29,41 @@ export class StockMovementController {
             data 
         });
     };
+findAll = async (req: Request, res: Response) => {
+        
+        // 1. SEGURIDAD: En GET, confiamos exclusivamente en el Token (req.user)
+        const businessId = Number(req.user?.businessId);
 
-    findAll = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
-
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
+        if (!businessId || isNaN(businessId)) {
+            return res.status(401).json({
+                message: 'No autorizado: ID de negocio no identificado',
                 data: null
             });
         }
 
-        const {status, data, message} = await this.service.findAll(businessId);
+        // 2. MAPPING Y TIPADO
+        // Aunque el validator ya hizo .toInt(), TypeScript ve req.query como strings.
+        // Hacemos el cast explícito para cumplir con la interfaz 'FindMovementsQuery'.
+        const queryOptions: FindMovementsQuery = {
+            page: req.query.page ? Number(req.query.page) : 1,
+            limit: req.query.limit ? Number(req.query.limit) : 10,
+            search: req.query.search as string | undefined,
+            type: req.query.type as string | undefined,
+            // Convertimos a Number solo si existen, si no undefined
+            depotId: req.query.depotId ? Number(req.query.depotId) : undefined,
+            productId: req.query.productId ? Number(req.query.productId) : undefined,
+            startDate: req.query.startDate as string | undefined,
+            endDate: req.query.endDate as string | undefined,
+        };
+
+        // 3. LLAMADA AL SERVICIO
+        const { status, data, message, meta } = await this.service.findAll(businessId, queryOptions);
         
-        res.status(status).json({ 
+        // 4. RESPUESTA ESTÁNDAR
+        return res.status(status).json({ 
             message, 
-            data 
+            data, 
+            meta // Indispensable para que tu Frontend dibuje la paginación
         });
     };
 
@@ -123,7 +143,7 @@ export class StockMovementController {
         });
     };
 
-    update = async (req: Request, res: Response) => {
+    /*update = async (req: Request, res: Response) => {
         const { id } = req.params;
         const businessId = req.user?.businessId || req.body.businessId;
 
@@ -140,7 +160,7 @@ export class StockMovementController {
             message, 
             data 
         });
-    };
+    };*/
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;

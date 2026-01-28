@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { CreateStockLotInterface, UpdateStockLotInterface } from './interfaces';
+import { CreateStockLotInterface, FindStockLotsQuery, UpdateStockLotInterface } from './interfaces';
 
 export class StockLotService {
 
@@ -103,55 +103,50 @@ export class StockLotService {
     }
 
     // 2. LISTAR TODOS (de un negocio)
-    async findAll(businessId: number) {
+    async findAll(businessId: number, query?: FindStockLotsQuery) {
         try {
+            const { productId, depotId, hasStock = true } = query || {};
+
+            const whereClause: any = {
+                // 1. Seguridad: Siempre filtrar por el negocio (a través del producto)
+                product: { businessId: businessId }
+            };
+
+            // 2. Filtros Dinámicos
+            if (productId) whereClause.productId = productId;
+            if (depotId) whereClause.depotId = depotId;
+            
+            // 3. Importante: Por defecto solo queremos lotes con existencia para mover
+            if (hasStock) {
+                whereClause.quantity = { gt: 0 };
+            }
 
             const stockLots = await prisma.stockLot.findMany({
-                where: {
-                    product: {
-                        businessId: businessId
-                    }
-                },
+                where: whereClause,
                 include: {
                     product: {
-                        select: {
-                            id: true,
-                            name: true,
-                            sku: true
-                        }
+                        select: { id: true, name: true, sku: true }
                     },
                     depot: {
-                        select: {
-                            id: true,
-                            name: true,
-                            location: true
-                        }
+                        select: { id: true, name: true, location: true }
                     }
                 },
                 orderBy: [
-                    { expirationDate: 'asc' }, // Los que vencen primero
-                    { createdAt: 'asc' } // FIFO
+                    { expirationDate: 'asc' }, // FEFO: Primero los que vencen antes
+                    { createdAt: 'asc' }
                 ]
             });
 
-            if (stockLots.length === 0) {
-                return {
-                    message: 'No hay lotes disponibles',
-                    status: 404,
-                    data: []
-                };
-            }
-
+            // No devolvemos 404 si es un filtro, devolvemos array vacío (200 OK)
+            // Esto evita errores rojos en la consola del frontend cuando un almacén no tiene lotes.
             return {
-                message: 'Lotes obtenidos exitosamente',
-                status: 200,
+                message: stockLots.length > 0 ? 'Lotes obtenidos exitosamente' : 'No se encontraron lotes con estos criterios',
+                status: 200, 
                 data: stockLots
             };
 
         } catch (error) {
-
             console.error('Error al obtener los lotes:', error);
-
             return {
                 message: 'Error al obtener los lotes',
                 status: 500,

@@ -316,6 +316,7 @@ model StockLot {
   depot   Depot   @relation(fields: [depotId], references: [id])
 
   saleItemLots SaleItemLot[]
+  movements    StockMovement[]
 
   // --- ÍNDICES ESTRATÉGICOS (NO LOS OLVIDES) ---
   @@index([productId, expirationDate]) // FIFO/FEFO (Ventas)
@@ -336,6 +337,9 @@ model StockMovement {
 
   reason String?
   date   DateTime @default(now())
+  
+  stockLotId  Int?               // <--- El signo ? lo hace opcional
+  stockLot    StockLot? @relation(fields: [stockLotId], references: [id])
 
   business Business       @relation(fields: [businessId], references: [id])
   product  Product        @relation(fields: [productId], references: [id])

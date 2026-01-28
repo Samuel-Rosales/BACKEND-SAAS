@@ -5,3 +5,9 @@ export interface CreateStockLotInterface {
   expirationDate: Date;
   lotCost: number;
 }
+
+export interface FindStockLotsQuery {
+    productId?: number;
+    depotId?: number;
+    hasStock?: boolean; // Para filtrar solo los que tienen cantidad > 0
+}

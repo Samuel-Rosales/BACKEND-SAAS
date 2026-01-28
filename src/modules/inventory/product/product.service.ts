@@ -367,7 +367,7 @@ export class ProductService {
                 isPerishable: product.isPerishable,
 
                 // Conversión de Decimal a Number (JS nativo)
-                price: new Decimal(product.salePrice).toNumber(),
+                salePrice: new Decimal(product.salePrice).toNumber(),
                 costPrice: new Decimal(product.costPrice).toNumber(),
                 profitMargin: new Decimal(product.profitMargin).toNumber(),
 

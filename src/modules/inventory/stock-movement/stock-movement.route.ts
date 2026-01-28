@@ -8,18 +8,24 @@ const router = Router();
 const controller = new StockMovementController();
 const validator = new StockMovementValidator();
 
-// Todas las rutas requieren autenticación
+// Todas las rutas de inventario son protegidas
 router.use(authMiddleware);
 
-router.post(
-  '/', 
-  validator.validateCreate, 
-  handleValidationErrors, 
-  controller.create
+// ==========================================
+// 1. RUTAS DE LECTURA (Queries)
+// ==========================================
+
+// LISTAR CON FILTROS AVANZADOS
+// Ahora soporta: ?page=1 & search=aspirina & type=IN & productId=5 & depotId=2
+// Ya no necesitas rutas separadas por tipo o producto.
+router.get(
+    '/', 
+    validator.validateListQuery,
+    handleValidationErrors, 
+    controller.findAll
 );
 
-router.get('/', controller.findAll);
-
+// OBTENER UNO POR ID
 router.get(
     '/:id', 
     validator.validateId,
@@ -27,34 +33,30 @@ router.get(
     controller.findOne
 );
 
-router.get(
-    '/product/:productId',
-    validator.validateProductId,
-    handleValidationErrors,
-    controller.findByProduct
+// ==========================================
+// 2. RUTAS DE ESCRITURA (Commands)
+// ==========================================
+
+// CREAR MOVIMIENTO
+router.post(
+  '/', 
+  validator.validateCreate, 
+  handleValidationErrors, 
+  controller.create
 );
 
-router.get(
-    '/depot/:depotId',
-    validator.validateDepotId,
-    handleValidationErrors,
-    controller.findByDepot
-);
-
-router.get(
-    '/type/:type',
-    validator.validateType,
-    handleValidationErrors,
-    controller.findByType
-);
-
-router.patch(
+// ACTUALIZAR (Solo metadatos como 'reason', no cantidades)
+/*router.patch(
   '/:id', 
+  // Primero validamos que el ID de la URL sea número
+  validator.validateId,
+  // Luego validamos el cuerpo del request
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
-);
+);*/
 
+// ELIMINAR (Reversión lógica o física)
 router.delete(
   '/:id', 
   validator.validateId, 
@@ -63,5 +65,4 @@ router.delete(
 );
 
 export const StockMovementRoute = router;
-
 export default router;

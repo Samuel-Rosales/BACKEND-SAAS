@@ -23,22 +23,19 @@ export class StockLotController {
     };
 
     findAll = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = Number(req.user?.businessId);
 
-        if (!businessId) {
-            return res.status(400).json({
-                message: 'ID de negocio requerido',
-                data: null
-            });
-        }
+        // Mapeamos los Query Params del Frontend
+        const query = {
+            productId: req.query.productId ? Number(req.query.productId) : undefined,
+            depotId: req.query.depotId ? Number(req.query.depotId) : undefined,
+            // Opcional: forzar que solo traiga con stock positivo
+            hasStock: true 
+        };
 
-        const {status, data, message} = await this.service.findAll(businessId);
-        
-        res.status(status).json({ 
-            message, 
-            data 
-        });
-    };
+        const result = await this.service.findAll(businessId, query);
+        res.status(result.status).json(result);
+    }
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
