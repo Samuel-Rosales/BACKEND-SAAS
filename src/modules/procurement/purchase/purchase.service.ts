@@ -272,6 +272,7 @@ export class PurchaseService {
 
                 // --- [NUEVO] CREACIÓN DE CUOTAS (Si aplica) ---
                 if (data.condition === Conditions.CREDIT && data.installments) {
+
                     await tx.purchaseInstallment.createMany({
                         data: data.installments.map(inst => ({
                             purchaseId: purchase.id,
@@ -326,7 +327,7 @@ export class PurchaseService {
                     // 3. GESTIÓN DE LOTES (StockLot)
                     // Buscamos si ya existe un lote con el MISMO costo unitario real y fecha de vencimiento
                     // Esto es vital para el método de valuación Promedio Ponderado o identificación específica.
-                    const existingLot = await tx.stockLot.findFirst({
+                    let existingLot = await tx.stockLot.findFirst({
                         where: {
                             productId: item.productId,
                             depotId: item.depotId,
@@ -347,7 +348,7 @@ export class PurchaseService {
                         });
                     } else {
                         // Si es un precio nuevo o fecha nueva, creamos lote nuevo
-                        await tx.stockLot.create({
+                        const newLot = await tx.stockLot.create({
                             data: {
                                 productId: item.productId,
                                 depotId: item.depotId,
@@ -357,6 +358,8 @@ export class PurchaseService {
                                 createdAt: new Date() // FIFO: La fecha de creación manda
                             }
                         });
+
+                        existingLot = newLot; // Para usar en el Kardex más abajo
                     }
 
                     // 4. Actualización del Producto Maestro (Costo de Reposición / Último Costo)
@@ -401,7 +404,8 @@ export class PurchaseService {
                             quantity: finalQuantity,           // Entran 24
                             historicalCost: unitCostByPresentation, // A $2 c/u
                             reason: `Compra #${purchase.id}`, // Opcional: purchase.reference
-                            date: new Date()
+                            date: new Date(),
+                            stockLotId: existingLot ? existingLot.id : undefined
                         }
                     });
                 }
