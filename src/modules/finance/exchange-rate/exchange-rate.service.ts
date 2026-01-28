@@ -1,7 +1,10 @@
 import { prisma } from '@/configs';
 import { CreateExchangeRateInterface, UpdateExchangeRateInterface } from './interfaces';
+import axios from 'axios';
+
 
 export class ExchangeRateService {
+    private readonly BCV_API_URL = 'https://pydolarvenezuela-api.vercel.app/api/v1/dollar/page?page=bcv';
 
     async create(businessId: number, data: CreateExchangeRateInterface) {
         try {
@@ -338,6 +341,54 @@ export class ExchangeRateService {
                 status: 500,
                 data: null
             };
+        }
+    }
+
+    async syncBCVRate(businessId?: number) {
+        try {
+            console.log('🔄 Iniciando sincronización de tasa BCV...');
+
+            // 1. Fetch a la API Externa
+            const response = await axios.get(this.BCV_API_URL);
+            
+            // Adaptar esto según la estructura de la API que uses
+            const rateValue = response.data.monitors.usd.price; 
+            
+            if (!rateValue || isNaN(rateValue)) {
+                throw new Error('La API externa no devolvió un valor numérico válido.');
+            }
+
+            // 2. Verificar la última tasa registrada para no duplicar innecesariamente
+            const lastRate = await prisma.exchangeRate.findFirst({
+                orderBy: { createdAt: 'desc' }
+            });
+
+            // Si la tasa es la misma y es del mismo día, quizás no quieras guardarla de nuevo
+            // O quizás sí para tener un log horario. Asumamos que guardamos historial.
+
+            if (lastRate && lastRate.rate === rateValue) {
+                console.log('ℹ️ La tasa BCV no ha cambiado. No se crea un nuevo registro.');
+                return lastRate;
+            }
+
+            // 3. Guardar en Base de Datos
+            const newRate = await prisma.exchangeRate.create({
+                data: {
+                    rate: rateValue,
+                    source: 'API_BCV',
+                    createdAt: new Date(),
+                    isActive: true,
+                    businessId: null,
+                }
+            });
+
+            console.log(`✅ Tasa BCV actualizada: ${rateValue}`);
+            return newRate;
+
+        } catch (error) {
+            console.error('❌ Error sincronizando BCV:', error);
+            // Aquí podrías enviar una alerta a Slack/Email si falla
+            throw error;
         }
     }
 }
