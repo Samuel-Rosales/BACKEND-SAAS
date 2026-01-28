@@ -9,6 +9,7 @@ import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRo
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute } from '../modules/finance';
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
 import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
+import { initCronJobs } from '@/cron';
 
 export class Server {
 
@@ -103,10 +104,17 @@ export class Server {
     }
     
     async listen() {
+
+        initCronJobs();
+
         this.app.listen(this.apiPort, () => {
+
         console.log(`🚀 Server running at ${this.apiUrl}`);
+
         // Log opcional para ver las rutas activas al iniciar
+
         console.log(`Endpoints disponibles en ${this.prefix}/...`);
+        
         })
     }
 }
