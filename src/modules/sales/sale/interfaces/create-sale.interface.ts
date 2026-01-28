@@ -1,8 +1,10 @@
 import { Conditions, SaleType } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/client';
 
 export interface CreateSaleInstallmentDto {
     number: number;
-    amount: number;
+    amount: Decimal;
+    amountPaid?: Decimal; 
     dueDate: Date | string;
 }
 
@@ -10,14 +12,14 @@ export interface CreateSaleItemDto {
     productId: number;
     productPresentationId?: number; // Opcional (Si es null, es la unidad base)
     quantity: number; // Cantidad visual (ej: 2 Cajas)
-    price?: number;   // Opcional: Sobreescribir precio del sistema
+    price?: Decimal;   // Opcional: Sobreescribir precio del sistema
     // discount?: number; // Opcional: Descuento por línea (Lo dejaremos para v3 si quieres simplificar ahora)
 }
 
 export interface CreateSalePaymentDto {
     paymentMethodId: number;
     exchangeRateId: number;
-    amount: number; // Monto nominal (ej: 100 Bs)
+    amount: Decimal; // Monto nominal (ej: 100 Bs)
     reference?: string;
 }
 
@@ -28,7 +30,7 @@ export interface CreateSaleInterface {
     depotId: number;
     
     // --- FINANZAS ---
-    discount: number; // Descuento Global en dinero (ej: $5.00)
+    discount: Decimal; // Descuento Global en dinero (ej: $5.00)
     
     // --- CONDICIONES ---
     condition: Conditions; // CASH / CREDIT

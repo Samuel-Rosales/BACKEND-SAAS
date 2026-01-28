@@ -254,6 +254,7 @@ export class SaleService {
                 const projectedDebt = currentDebt.add(remainingBalance);
 
                 if (projectedDebt.gt(effectiveLimit)) {
+
                     const available = effectiveLimit.sub(currentDebt);
                     // Protegemos si el disponible es negativo
                     const safeAvailable = available.lt(0) ? new Decimal(0) : available;
@@ -297,7 +298,7 @@ export class SaleService {
                 const diff = totalInstallments.sub(remainingBalance);
                 
                 // 2. Valor Absoluto (.abs) y Comparación (.gt)
-                if (diff.abs().gt(0.05)) {
+                if (diff.abs().gt(0.01)) {
                     throw new BusinessError(
                         `La suma de cuotas ($${totalInstallments.toString()}) no coincide con la deuda ($${remainingBalance.toString()})`, 
                         400
@@ -310,8 +311,8 @@ export class SaleService {
             // Extraemos esta lógica compleja para que el 'create' quede limpio.
             let derivedPaymentStatus: PaymentStatus = PaymentStatus.PAID;
 
-            // Si la deuda es mayor a 5 centavos (tolerancia)
-            if (remainingBalance.gt(0.05)) {
+            // Si la deuda es mayor a 1 centavo (tolerancia)
+            if (remainingBalance.gt(0.01)) {
                 // Si ya pagó algo (mayor a 0), es PARCIAL, si no, es PENDIENTE
                 derivedPaymentStatus = totalPaidFinal.gt(0) 
                     ? PaymentStatus.PARTIAL 
@@ -358,18 +359,63 @@ export class SaleService {
                         paymentDueDate: data.paymentDueDate ? new Date(data.paymentDueDate) : new Date()
                     }
                 });
-
-                // C. Crear Cuotas (Solo Crédito)
+                
                 if (data.condition === Conditions.CREDIT && data.installments) {
-                    await tx.saleInstallment.createMany({
-                        data: data.installments.map(inst => ({
-                            saleId: sale.id,
-                            number: inst.number,
-                            amount: inst.amount,
-                            dueDate: new Date(inst.dueDate),
-                            status: 'PENDING'
-                        }))
-                    });
+
+                    let moneyDistributor = new Decimal(totalPaidFinal); // Dinero disponible para abonar
+
+                    for (const inst of data.installments) {
+                        
+                        const quotaAmount = new Decimal(inst.amount);
+                        let amountToPayNow = new Decimal(0);
+
+                        // 1. Lógica de Distribución (Waterfall)
+                        if (moneyDistributor.gt(0)) {
+
+                            if (moneyDistributor.gte(quotaAmount)) {
+                                
+                                // El abono cubre toda esta cuota
+                                amountToPayNow = quotaAmount;
+                                moneyDistributor = moneyDistributor.sub(quotaAmount);
+                            } else {
+                                
+                                // El abono solo cubre una parte
+                                amountToPayNow = moneyDistributor;
+                                moneyDistributor = new Decimal(0); // Se acabó el abono
+                            }
+                        }
+
+                        // 2. Determinar Estado
+                        let status: InstallmentStatus = InstallmentStatus.PENDING;
+                        
+                        // Usamos una pequeña tolerancia (epsilon) para evitar errores de flotantes extremos, 
+                        // aunque con Decimal.js es raro.
+                        if (amountToPayNow.gte(quotaAmount.sub(0.001))) {
+                            status = InstallmentStatus.PAID;
+                        } else if (amountToPayNow.gt(0)) {
+                            status = InstallmentStatus.PARTIAL;
+                        }
+
+                        // 3. Crear la Cuota SIEMPRE (tenga pago o no)
+                        await tx.saleInstallment.create({
+                            data: { 
+                                saleId: sale.id,
+                                number: inst.number,
+                                amount: quotaAmount,
+                                dueDate: new Date(inst.dueDate),
+                                
+                                status: status,
+                                amountPaid: amountToPayNow,
+                                
+                                // Si se pagó algo ahora, marcamos la fecha, si no, null
+                                paidAt: amountToPayNow.gt(0) ? new Date() : null 
+                            }
+                        });
+                    }
+                    
+                    // Safety check opcional: Si sobró dinero en moneyDistributor, 
+                    // significa que pagaron más que el total de la deuda. 
+                    // Deberías manejar ese "saldo a favor" o lanzar un error antes.
                 }
 
                 // D. PROCESAR ITEMS E INVENTARIO
