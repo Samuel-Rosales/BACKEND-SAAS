@@ -93,7 +93,7 @@ export class PurchaseService {
             // Constantes convertidas a Decimal para operaciones
             const taxRate = new Decimal(tax.rate); // Asumo que IVA es 0.16 o similar
             const zero = new Decimal(0);
-            const tolerance = new Decimal(0.001); // Reemplazo de EPSILON para tolerar redondeos mínimos
+            const tolerance = new Decimal(0.01); // Reemplazo de EPSILON para tolerar redondeos mínimos
 
             // ==========================================
             // 1. CÁLCULO DEL SUBTOTAL (Matemática Pura)
@@ -536,9 +536,9 @@ export class PurchaseService {
                 // 1. Consultas Iniciales
                 const [exchangeRate, purchase, paymentMethod] = await Promise.all([
                     tx.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
-                    tx.purchase.findUnique({ 
-                        where: { id: purchaseId, businessId }
-                    }),
+
+                    tx.purchase.findUnique({ where: { id: purchaseId, businessId } }),
+
                     tx.paymentMethod.findUnique({ where: { id: data.paymentMethodId } })
                 ]);
 
@@ -550,14 +550,17 @@ export class PurchaseService {
                 }
                 
                 if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
+
                 if (!paymentMethod) throw new BusinessError("Método de pago inválido", 400);
 
                 // 3. Normalización (USD Base)
                 let paymentInBaseCurrency = new Decimal(data.amount); // Monto enviado por frontend
+
                 const rate = new Decimal(exchangeRate.rate);
 
                 // Conversión de Moneda
                 if (paymentMethod.currency !== Currency.USD) {
+
                     if (rate.lte(0)) throw new BusinessError("Tasa de cambio inválida (<= 0)", 400);
                     
                     // Si pagó en Bs, dividimos entre tasa para obtener USD
@@ -569,6 +572,7 @@ export class PurchaseService {
 
                 // 4. Validación de Sobrepago
                 const currentDebt = new Decimal(purchase.remainingBalance);
+
                 const tolerance = new Decimal(0.05); // Margen de error pequeño
 
                 // Si el pago > Deuda + Tolerancia
@@ -609,21 +613,31 @@ export class PurchaseService {
 
                         // ¿Podemos pagar esta cuota completa?
                         // Si Dinero >= Cuota - 0.01
-                        if (moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01)))) {
-                            
+                        if (moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01))) || inst.amountPaid.add(moneyDistributor).gte(amountOfQuota)) {
+  
                             await tx.purchaseInstallment.update({
                                 where: { id: inst.id },
                                 data: { 
                                     status: InstallmentStatus.PAID,
+                                    amountPaid: moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01))) ? amountOfQuota : inst.amountPaid.add(moneyDistributor),
                                     paidAt: new Date()
                                 }
                             });
                             
                             // Restamos lo que costó la cuota de nuestra bolsa
                             moneyDistributor = moneyDistributor.sub(amountOfQuota);
+                        } else {
+
+                            await tx.purchaseInstallment.update({
+                                where: { id: inst.id },
+                                data: {
+                                    status: InstallmentStatus.PARTIAL,
+                                    amountPaid: inst.amountPaid.add(moneyDistributor),
+                                }
+                            });
+
+                            moneyDistributor = moneyDistributor.sub(moneyDistributor);
                         } 
-                        // Opcional: Podrías manejar pagos parciales de cuotas aquí si tu lógica lo permite
-                        // (Ej: InstallmentStatus.PARTIAL), pero eso complica mucho. Mejor pagar completas.
                     }
                 }
 
@@ -839,6 +853,7 @@ export class PurchaseService {
                 id: i.id,
                 number: i.number,
                 amount: Number(i.amount),
+                amountPaid: Number(i.amountPaid),
                 dueDate: i.dueDate,
                 status: i.status,
                 paidAt: i.paidAt

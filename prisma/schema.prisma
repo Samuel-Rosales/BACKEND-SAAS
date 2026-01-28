@@ -419,11 +419,12 @@ model Sale {
 model SaleInstallment {
   id          Int      @id @default(autoincrement())
   saleId      Int
-  
   number      Int      // Cuota #1, #2...
+
   amount      Decimal  @db.Decimal(15, 2)
+  amountPaid  Decimal  @default(0) @db.Decimal(15, 2)
+
   dueDate     DateTime @db.Date
-  
   status      InstallmentStatus @default(PENDING)
   paidAt      DateTime?
 
@@ -570,12 +571,12 @@ model Purchase {
 model PurchaseInstallment {
   id          Int      @id @default(autoincrement())
   purchaseId  Int
-  
   number      Int      // Cuota #1, #2, #3...
+
   amount      Decimal  @db.Decimal(15, 2) // Monto de ESTA cuota
+  amountPaid  Decimal  @default(0) @db.Decimal(15, 2) // Monto ya pagado de ESTA cuota
+
   dueDate     DateTime @db.Date           // Fecha de vencimiento de ESTA cuota
-  
-  // Estado individual de la cuota
   status      InstallmentStatus @default(PENDING) 
   
   // Opcional: Si quieres registrar qué día exacto se terminó de pagar esta cuota
@@ -754,6 +755,7 @@ enum SaleStatus {
 }
 
 enum InstallmentStatus {
+  PARTIAL
   PENDING // Aún no se cubre el monto
   PAID    // Monto cubierto
   OVERDUE // Vencida (se calcula por fecha, pero el estado ayuda en filtros)
