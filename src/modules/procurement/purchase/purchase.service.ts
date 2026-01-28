@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { CreatePaymentDto, CreatePurchaseInterface } from './interfaces';
+import { CreatePaymentDto, CreatePurchaseInterface, FindPurchasesQuery } from './interfaces';
 import { Conditions, Currency, InstallmentStatus, MovementType, PaymentStatus, ProductType } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, resolveBusinessExchangeRate, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -444,55 +444,88 @@ export class PurchaseService {
         }
     }
 
-    async findAll(businessId: number, query: { page?: number; limit?: number; fromDate?: string; toDate?: string }) {
+    async findAll(businessId: number, query: FindPurchasesQuery) {
         try {
             const page = Number(query.page) || 1;
-            const limit = Number(query.limit) || 20; // 20 por página por defecto
+            const limit = Number(query.limit) || 20;
             const skip = (page - 1) * limit;
+            const search = query.search ? String(query.search).trim() : undefined;
 
-            // Filtro de fechas (Opcional pero recomendado)
-            const whereClause: any = { businessId };
-            
+            // 1. Construcción Dinámica del WHERE
+            const whereClause: any = { 
+                businessId,
+                // Opcional: Si quieres ocultar las compras borradas/canceladas
+                // status: { not: 'CANCELLED' } 
+            };
+
+            // Filtro por Estado de Pago (Vital para reportes de deuda)
+            if (query.paymentStatus) {
+                whereClause.paymentStatus = query.paymentStatus;
+            }
+
+            // Filtro por Fechas
             if (query.fromDate && query.toDate) {
-                whereClause.date = {
-                    gte: new Date(query.fromDate), // Desde las 00:00
-                    lte: new Date(new Date(query.toDate).setHours(23, 59, 59)) // Hasta el final del día
+                whereClause.createdAt = { // Ojo: Usamos createdAt según tu schema
+                    gte: new Date(query.fromDate),
+                    lte: new Date(new Date(query.toDate).setHours(23, 59, 59))
                 };
             }
 
-            // Hacemos 2 consultas en paralelo: Datos y Conteo Total
+            // Búsqueda Inteligente (Referencia O Proveedor)
+            if (search) {
+                whereClause.OR = [
+                    { reference: { contains: search, mode: 'insensitive' } },
+                    { supplier: { nameCompany: { contains: search, mode: 'insensitive' } } }
+                ];
+            }
+
+            // 2. Consulta a BD
             const [purchases, total] = await Promise.all([
                 prisma.purchase.findMany({
                     where: whereClause,
-                    skip: skip,
+                    skip,
                     take: limit,
+                    orderBy: { createdAt: 'desc' }, // Por defecto: Lo más reciente primero
                     include: {
-                        supplier: { select: { nameCompany: true } },
-                        member: { include: { user: { select: { name: true } } } },
-                        // Traemos el totalCost y status para mostrar en la tabla
-                        exchangeRate: { select: { rate: true, /* currency: true*/ } }, 
+                        supplier: { 
+                            select: { nameCompany: true, contactName: true } 
+                        },
+                        member: { 
+                            include: { user: { select: { name: true } } } 
+                        },
                         _count: { select: { items: true } }
-                    },
-                    orderBy: { createdAt: 'desc' }
+                    }
                 }),
-                
                 prisma.purchase.count({ where: whereClause })
             ]);
 
+            // 3. Formateo de Datos (Aplanamos para facilitar el frontend)
+            // Convertimos Decimal a number para JSON
+            const formattedPurchases = purchases.map(p => ({
+                ...p,
+                subTotal: Number(p.subTotal),
+                taxAmount: Number(p.taxAmount),
+                totalCost: Number(p.totalCost),
+                remainingBalance: Number(p.remainingBalance),
+                // Calculamos días de vencimiento si es crédito y está pendiente
+                isOverdue: p.paymentStatus !== 'PAID' && p.paymentDueDate && new Date(p.paymentDueDate) < new Date()
+            }));
+
             return {
                 status: 200,
-                message: 'Compras obtenidas',
-                data: purchases,
-                meta: { // Metadata para que el frontend dibuje los botones de paginación
+                message: 'Historial de compras obtenido',
+                data: formattedPurchases,
+                meta: {
                     total,
                     page,
-                    lastPage: Math.ceil(total / limit)
+                    limit,
+                    totalPages: Math.ceil(total / limit)
                 }
             };
 
         } catch (error) {
             console.error(error);
-            return { status: 500, message: 'Error interno al listar compras', data: null };
+            return { status: 500, message: 'Error interno', data: null };
         }
     }
 

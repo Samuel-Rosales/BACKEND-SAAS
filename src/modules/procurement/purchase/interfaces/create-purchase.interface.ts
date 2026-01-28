@@ -59,3 +59,12 @@ export interface CreatePaymentDto {
     amount: number | Decimal;          
     reference?: string;      
 }
+
+export interface FindPurchasesQuery {
+    page?: number;
+    limit?: number;
+    search?: string;        // Buscador
+    paymentStatus?: string; // Filtro: PENDING, PAID, PARTIAL
+    fromDate?: string;
+    toDate?: string;
+}
