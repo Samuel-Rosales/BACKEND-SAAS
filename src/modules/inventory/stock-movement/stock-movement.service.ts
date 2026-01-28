@@ -120,7 +120,9 @@ export class StockMovementService {
         data: CreateStockMovementInterface,
         memberId: number
     ): Promise<StockOutputResult> {
-        const qtyNeeded = new Decimal(data.quantity);
+        // 1. OBTENER VALOR ABSOLUTO PARA CÁLCULOS
+        // data.quantity viene como -50. Necesitamos 50 para comparar y restar.
+        const qtyToDeduct = new Decimal(data.quantity).abs(); 
 
         const lot = await tx.stockLot.findFirst({
             where: { id: data.lotId, depotId: data.depotId }
@@ -128,25 +130,31 @@ export class StockMovementService {
 
         if (!lot) throw new BusinessError(`El lote #${data.lotId} no existe`, 404);
 
-        if (new Decimal(lot.quantity).lt(qtyNeeded)) throw new BusinessError(`Stock insuficiente en Lote #${data.lotId}`, 409);
+        // 2. VALIDAR STOCK (Usando el positivo)
+        if (new Decimal(lot.quantity).lt(qtyToDeduct)) {
+            throw new BusinessError(`Stock insuficiente en Lote #${data.lotId}`, 409);
+        }
 
-        // Actualizar Lote
+        // 3. ACTUALIZAR LOTE (Usando el positivo)
+        // decrement: 50 -> Resta 50. (Antes tenías decrement: -50 -> Sumaba 50)
         await tx.stockLot.update({
             where: { id: lot.id },
-            data: { quantity: { decrement: qtyNeeded } }
+            data: { quantity: { decrement: qtyToDeduct } } 
         });
 
-        // Crear Movimiento
+        // 4. CREAR MOVIMIENTO (Usando el original negativo)
+        // Aquí sí queremos guardar -50 en el historial
         const movement = await tx.stockMovement.create({
             data: {
                 businessId, productId: data.productId, depotId: data.depotId, memberId,
-                type: data.type, quantity: data.quantity, reason: data.reason,
+                type: data.type, 
+                quantity: data.quantity, // -50
+                reason: data.reason,
                 date: data.date || new Date(),
                 stockLotId: lot.id
             }
         });
 
-        // RETORNO COMPUESTO
         return {
             movement,
             sourceMetadata: {
