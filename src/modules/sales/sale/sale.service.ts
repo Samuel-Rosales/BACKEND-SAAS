@@ -823,11 +823,11 @@ export class SaleService {
                 
                 // 1. Consultas Iniciales
                 const [exchangeRate, sale, paymentMethod] = await Promise.all([
+
                     tx.exchangeRate.findUnique({ where: { id: currentRateRecord.id } }),
-                    tx.sale.findUnique({ 
-                        where: { id: saleId, businessId },
-                        // No traemos installments aquí para optimizar, los buscamos solo si es necesario
-                    }),
+
+                    tx.sale.findUnique({ where: { id: saleId, businessId } }),
+
                     tx.paymentMethod.findUnique({ where: { id: data.paymentMethodId } })
                 ]);
         
@@ -840,23 +840,32 @@ export class SaleService {
                 }
                 
                 if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
+
                 if (!paymentMethod) throw new BusinessError("Método de pago inválido", 400);
         
                 // 3. Normalizar el Pago a Moneda Base (USD)
-                let paymentInBaseCurrency = data.amount;
+                let paymentInBaseCurrency =  new Decimal(data.amount);
+
+                const rate = new Decimal(exchangeRate.rate);
                 
                 // USO CORRECTO DEL ENUM (Currency)
                 if (paymentMethod.currency !== Currency.USD) {
-                    const rate = Number(exchangeRate.rate);
-                    if (!rate || rate <= 0) throw new BusinessError("Tasa de cambio inválida para conversión", 400);
-                    paymentInBaseCurrency = data.amount / rate;
+
+                    if (!rate || rate.lte(0)) throw new BusinessError("Tasa de cambio inválida para conversión", 400);
+
+                    paymentInBaseCurrency = paymentInBaseCurrency.div(rate);
                 }
         
                 // Redondeo a 2 decimales
-                paymentInBaseCurrency = Math.round(paymentInBaseCurrency * 100) / 100;
+                paymentInBaseCurrency = paymentInBaseCurrency.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+                // Validación de Sobrepago
+                const currentDebt = new Decimal(sale.remainingBalance);
+
+                const tolerance = new Decimal(0.05); // Margen de error pequeño
         
                 // 4. Validar sobrepago
-                if (paymentInBaseCurrency > (Number(sale.remainingBalance) + 0.05)) {
+                if (paymentInBaseCurrency.gt(currentDebt.add(tolerance))) {
                     throw new BusinessError(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`, 400);
                 }
         
@@ -866,7 +875,7 @@ export class SaleService {
                         saleId,
                         paymentMethodId: data.paymentMethodId,
                         exchangeRateId: exchangeRate.id,
-                        amount: data.amount, // Guardamos el monto original
+                        amount: new Decimal(data.amount), // Guardamos el monto original
                         reference: data.reference || "N/A"
                     }
                 });
@@ -875,14 +884,12 @@ export class SaleService {
                 // 6. LÓGICA DE CASCADA DE CUOTAS (Waterfall)
                 // =================================================================
                 
-                // USO CORRECTO DEL ENUM (Conditions)
                 if (sale.conditions === Conditions.CREDIT) {
                     
                     // A. Buscamos cuotas pendientes (FIFO)
                     const pendingInstallments = await tx.saleInstallment.findMany({
                         where: { 
                             saleId: saleId,
-                            // USO CORRECTO DEL ENUM (InstallmentStatus)
                             status: { not: InstallmentStatus.PAID } 
                         },
                         orderBy: { dueDate: 'asc' } // Primero vence, primero se paga
@@ -892,28 +899,38 @@ export class SaleService {
                     let moneyDistributor = paymentInBaseCurrency;
 
                     for (const inst of pendingInstallments) {
-                        
                         // Si se acabó el dinero, paramos
-                        if (moneyDistributor <= 0.01) break; 
+                        if (moneyDistributor.lte(new Decimal(0.01))) break;
 
-                        const amountPending = Number(inst.amount);
-                        
-                        // Si el dinero alcanza para cubrir esta cuota...
-                        if (moneyDistributor >= (amountPending - 0.01)) {
-                            
-                            // 1. Marcar cuota como PAGADA
-                            await tx.saleInstallment.update({
+                        const amountOfQuota = new Decimal(inst.amount);
+
+                        // ¿Podemos pagar esta cuota completa?
+                        // Si Dinero >= Cuota - 0.01
+                        if (moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01))) || inst.amountPaid.add(moneyDistributor).gte(amountOfQuota)) {
+  
+                            await tx.purchaseInstallment.update({
                                 where: { id: inst.id },
                                 data: { 
                                     status: InstallmentStatus.PAID,
+                                    amountPaid: moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01))) ? amountOfQuota : inst.amountPaid.add(moneyDistributor),
                                     paidAt: new Date()
                                 }
                             });
+                            
+                            // Restamos lo que costó la cuota de nuestra bolsa
+                            moneyDistributor = moneyDistributor.sub(amountOfQuota);
+                        } else {
 
-                            // 2. Restar del distribuidor
-                            moneyDistributor -= amountPending;
+                            await tx.purchaseInstallment.update({
+                                where: { id: inst.id },
+                                data: {
+                                    status: InstallmentStatus.PARTIAL,
+                                    amountPaid: inst.amountPaid.add(moneyDistributor),
+                                }
+                            });
+
+                            moneyDistributor = moneyDistributor.sub(moneyDistributor);
                         } 
-                        // Si no alcanza, el loop sigue y la cuota queda PENDING (o podrías implementar parciales a futuro)
                     }
                 }
 
@@ -921,15 +938,17 @@ export class SaleService {
                 // 7. Actualización Global (Saldo y Estado de Venta)
                 // =================================================================
 
-                const newBalance = Number(sale.remainingBalance) - paymentInBaseCurrency;
-                const finalBalance = newBalance < 0 ? 0 : newBalance;
+                let newBalance = sale.remainingBalance.sub(paymentInBaseCurrency);
+
+                newBalance = newBalance.lt(0) ? new Decimal(0) : newBalance;
         
                 // DECLARACIÓN EXPLÍCITA DEL TIPO (Para evitar error de TS)
                 let newStatus: PaymentStatus = sale.paymentStatus;
                 
                 // Si debe menos de 5 centavos, lo consideramos PAGADO
-                if (finalBalance <= 0.05) {
+                if (newBalance.lte(tolerance)) {
                     newStatus = PaymentStatus.PAID;
+                    newBalance = new Decimal(0); // Limpieza final
                 } else {
                     newStatus = PaymentStatus.PARTIAL;
                 }
@@ -937,14 +956,14 @@ export class SaleService {
                 await tx.sale.update({
                     where: { id: saleId },
                     data: {
-                        remainingBalance: finalBalance,
+                        remainingBalance: newBalance,
                         paymentStatus: newStatus
                     }
                 });
         
                 return {
                     payment: newPayment,
-                    newBalance: finalBalance,
+                    newBalance: newBalance,
                     status: newStatus,
                     message: newStatus === PaymentStatus.PAID ? '¡Venta liquidada correctamente!' : 'Abono registrado correctamente'
                 };
@@ -1169,6 +1188,7 @@ export class SaleService {
                 id: ins.id,
                 number: ins.number,
                 amount: Number(ins.amount),
+                amountPaid: Number(ins.amountPaid),
                 dueDate: ins.dueDate,
                 status: ins.status, // PENDING, PAID, PARTIAL
                 paidAt: ins.paidAt
