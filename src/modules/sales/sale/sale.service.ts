@@ -1253,12 +1253,10 @@ export class SaleService {
                         }
                     }
                 },
-                orderBy: {
-                    // Ordenar por las que tienen cuotas venciendo más pronto
-                    // (Nota: Si hay muchas ventas, esto ordena por la fecha "general" de pago si la tienes, 
-                    // o por creación si prefieres)
-                    createdAt: 'desc' 
-                }
+                orderBy: [
+                    { paymentStatus: 'asc' },
+                    { createdAt: 'desc' }
+                ]
             });
 
             if (credits.length === 0) {

@@ -774,11 +774,13 @@ export class PurchaseService {
                         }
                     }
                 },
-                orderBy: {
-                    // Ordenamos por fecha de creación (de más antigua a más nueva)
-                    // Usualmente quieres pagar primero lo más viejo.
-                    createdAt: 'asc' 
-                }
+                orderBy: [
+                    // 1) Primero las NO pagadas (PENDING, PARTIAL), luego PAID
+                    // (Funciona porque el enum PaymentStatus está ordenado: PENDING < PARTIAL < PAID)
+                    { paymentStatus: 'asc' },
+                    // 2) Dentro de cada grupo, las más antiguas primero
+                    { createdAt: 'asc' }
+                ]
             });
 
             if (debts.length === 0) {
