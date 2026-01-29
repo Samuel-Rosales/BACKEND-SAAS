@@ -835,16 +835,26 @@ export class SaleService {
     // 3. OBTENER DETALLE COMPLETO
     async findOne(businessId: number, id: number) {
         try {
+            // 1. QUERY: Traemos toda la data relacional necesaria
             const sale = await prisma.sale.findFirst({
                 where: { id, businessId },
                 include: {
-                    client: true,
-                    member: { include: { user: { select: { name: true, ci: true } } } },
-                    exchangeRate: true,
+                    client: true, // Datos del cliente
+                    member: { 
+                        include: { 
+                            user: { select: { name: true, ci: true } } 
+                        } 
+                    },
+                    exchangeRate: true, // Tasa del día de la venta
                     items: {
                         include: {
-                            product: { select: { name: true, sku: true, imageUrl: true } },
-                            productPresentation: { select: { name: true, factor: true } },
+                            product: { 
+                                select: { name: true, sku: true, imageUrl: true, category: true } 
+                            },
+                            productPresentation: { 
+                                select: { name: true, factor: true } 
+                            },
+                            // TRAZABILIDAD: ¿De qué lotes salió este ítem?
                             lotAllocations: {
                                 include: {
                                     stockLot: {
@@ -861,7 +871,7 @@ export class SaleService {
                     payments: {
                         include: {
                             paymentMethod: { select: { name: true, type: true } },
-                            exchangeRate: { select: { rate: true, /* currency: true */ } }
+                            exchangeRate: { select: { rate: true } }
                         }
                     },
                 }
@@ -871,11 +881,94 @@ export class SaleService {
                 return { status: 404, message: 'Venta no encontrada', data: null };
             }
 
-            return { status: 200, message: 'Venta obtenida exitosamente', data: sale };
+            // 2. SERIALIZACIÓN (La Magia): Convertimos la data cruda de DB a algo útil para la UI
+            const formattedSale = {
+                // --- Cabecera ---
+                id: sale.id,
+                receiptNumber: sale.receiptNumber, // Ojo: Asegura que sea string o number según tu UI
+                createdAt: sale.createdAt,
+                status: sale.status, // PAID, PENDING, CANCELLED
+                
+                // --- Financiero (CONVERSIÓN DE DECIMAL A NUMBER) ---
+                subTotal: Number(sale.subTotal),
+                taxAmount: Number(sale.taxAmount),
+                discountAmount: Number(sale.discount || 0),
+                totalAmount: Number(sale.totalAmount),
+                remainingBalance: Number(sale.remainingBalance),
+                
+                // --- Cliente y Vendedor ---
+                client: {
+                    id: sale.client.id,
+                    name: sale.client.name,
+                    ci: sale.client.ci,
+                    address: sale.client.address,
+                    phone: sale.client.phone
+                },
+                seller: {
+                    name: sale.member?.user?.name || 'Sistema',
+                    ci: sale.member?.user?.ci
+                },
+
+                // --- Tasa de Cambio de la Venta ---
+                exchangeRate: sale.exchangeRate ? Number(sale.exchangeRate.rate) : null,
+
+                // --- ITEMS (Lo más crítico) ---
+                items: sale.items.map(item => {
+                    // Lógica de Snapshot: ¿Tenemos nombre guardado en el item? Si no, usa el del producto actual.
+                    const displayName = item.product.name || 'Producto Desconocido';
+                    
+                    return {
+                        id: item.id,
+                        productId: item.productId,
+                        name: displayName,
+                        sku: item.product?.sku,
+                        quantity: Number(item.quantity),
+                        price: Number(item.unitPrice), // Precio unitario al momento de la venta
+                        total: Number(item.subTotal), // Total línea (qty * price)
+                        
+                        // Info de Presentación (ej. "Caja x 12")
+                        presentation: item.productPresentation ? {
+                            name: item.productPresentation.name,
+                            factor: Number(item.productPresentation.factor)
+                        } : null,
+
+                        // Info de Lotes (Simplificada para mostrar en UI)
+                        lots: item.lotAllocations.map(alloc => ({
+                            // StockLot no tiene `lotNumber` en el schema; usamos el ID como identificador.
+                            lotNumber: alloc.stockLot ? String(alloc.stockLot.id) : 'N/A',
+                            expirationDate: alloc.stockLot?.expirationDate,
+                            quantityTaken: Number(alloc.quantity) // Cuánto se sacó de este lote específico
+                        }))
+                    };
+                }),
+
+                // --- PAGOS ASOCIADOS ---
+                payments: sale.payments.map(payment => ({
+                    id: payment.id,
+                    method: payment.paymentMethod.name,
+                    date: payment.date,
+                    amount: Number(payment.amount), // Monto en moneda (ej. USD o VES)
+                    rateUsed: payment.exchangeRate ? Number(payment.exchangeRate.rate) : null,
+                    reference: payment.reference // Referencia bancaria
+                }))
+            };
+
+            return { 
+                status: 200, 
+                message: 'Venta obtenida exitosamente', 
+                data: formattedSale 
+            };
 
         } catch (error) {
-            console.error('Error al obtener venta:', error);
-            return { status: 500, message: 'Error interno al obtener venta', data: null };
+            // Log detallado para ti (Backend)
+            console.error(`[SaleService.findOne] Error ID ${id}:`, error);
+            
+            // Respuesta genérica para el cliente (Seguridad)
+            return { 
+                status: 500, 
+                message: 'Error interno al procesar la solicitud', 
+                data: null 
+            };
         }
     }
 
