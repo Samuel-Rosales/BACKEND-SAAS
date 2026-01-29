@@ -348,10 +348,8 @@ export class ExchangeRateService {
         try {
             console.log('🔄 Iniciando sincronización de tasa BCV...');
 
-            // 1. Fetch a la API Externa
             const response = await axios.get(this.BCV_API_URL);
             
-            // Adaptar esto según la estructura de la API que uses
             const rateValue = response.data.valor.valor_num; 
 
             const date = response.data.fecha_iso;
@@ -360,13 +358,9 @@ export class ExchangeRateService {
                 throw new Error('La API externa no devolvió un valor numérico válido.');
             }
 
-            // 2. Verificar la última tasa registrada para no duplicar innecesariamente
             const lastRate = await prisma.exchangeRate.findFirst({
                 orderBy: { createdAt: 'desc' }
             });
-
-            // Si la tasa es la misma y es del mismo día, quizás no quieras guardarla de nuevo
-            // O quizás sí para tener un log horario. Asumamos que guardamos historial.
 
             if (date && lastRate && lastRate.createdAt.toISOString().startsWith(date) && lastRate.rate === rateValue) {
                 console.log('ℹ️ La tasa BCV no ha cambiado hoy. No se crea un nuevo registro.');
@@ -388,8 +382,9 @@ export class ExchangeRateService {
             return newRate;
 
         } catch (error) {
+            
             console.error('❌ Error sincronizando BCV:', error);
-            // Aquí podrías enviar una alerta a Slack/Email si falla
+
             throw error;
         }
     }
