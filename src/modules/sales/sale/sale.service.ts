@@ -874,6 +874,13 @@ export class SaleService {
                             exchangeRate: { select: { rate: true } }
                         }
                     },
+                    creditNotes: {
+                        include: {
+                            items: {
+                                include: { product: true } // Para obtener el nombre del producto
+                            }
+                        }
+                    }
                 }
             });
 
@@ -950,6 +957,22 @@ export class SaleService {
                     amount: Number(payment.amount), // Monto en moneda (ej. USD o VES)
                     rateUsed: payment.exchangeRate ? Number(payment.exchangeRate.rate) : null,
                     reference: payment.reference // Referencia bancaria
+                })),
+
+                creditNotes: sale.creditNotes.map(note => ({
+                    id: note.id,
+                    number: note.number,
+                    reason: note.reason,
+                    totalAmount: Number(note.totalAmount), // Importante: Decimal -> Number
+                    createdAt: note.createdAt.toISOString(), // O como prefieras formatear la fecha string
+                    items: note.items.map(noteItem => ({
+                        id: noteItem.id,
+                        productName: noteItem.product.name, // El include te permite acceder a esto
+                        quantity: Number(noteItem.quantity),
+                        unitPrice: Number(noteItem.unitPrice),
+                        subTotal: Number(noteItem.subTotal),
+                        returnToStock: noteItem.returnToStock
+                    }))
                 }))
             };
 
