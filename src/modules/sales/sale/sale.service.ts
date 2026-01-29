@@ -7,6 +7,15 @@ import { Decimal } from '@prisma/client/runtime/client';
 
 const EPSILON = 0.02;
 
+interface FindSalesQuery {
+    page?: number;
+    limit?: number;
+    search?: string;        // <--- NUEVO: Buscador de texto
+    paymentStatus?: string; // <--- NUEVO: PENDING, PAID, PARTIAL
+    fromDate?: string;
+    toDate?: string;
+}
+
 export class SaleService {
 
     // =================================================================
@@ -739,14 +748,20 @@ export class SaleService {
     }
 
     // 2. LISTAR VENTAS (CON PAGINACIÓN Y FILTROS)
-    async findAll(businessId: number, query: { page?: number; limit?: number; fromDate?: string; toDate?: string; clientId?: number; status?: string }) {
+    async findAll(businessId: number, query: FindSalesQuery) {
         try {
             const page = Number(query.page) || 1;
             const limit = Number(query.limit) || 20;
             const skip = (page - 1) * limit;
+            const search = query.search ? String(query.search).trim() : undefined;
 
-            const whereClause: any = { businessId };
+            // 1. Where Base
+            const whereClause: any = { 
+                businessId,
+                status: { not: 'CANCELLED' } // Opcional: Si quieres ocultar las anuladas por defecto
+            };
             
+            // 2. Filtros de Fecha
             if (query.fromDate && query.toDate) {
                 whereClause.createdAt = {
                     gte: new Date(query.fromDate),
@@ -754,34 +769,55 @@ export class SaleService {
                 };
             }
 
-            if (query.clientId) {
-                whereClause.clientId = Number(query.clientId);
+            // 3. Filtro de Estado de Pago (Cuentas por Cobrar)
+            if (query.paymentStatus) {
+                whereClause.paymentStatus = query.paymentStatus;
             }
 
-            if (query.status) {
-                whereClause.status = query.status;
+            // 4. BÚSQUEDA AVANZADA (La mejora clave)
+            if (search) {
+                whereClause.OR = [
+                    { receiptNumber: { contains: search, mode: 'insensitive' } }, // Por Nro Factura
+                    { client: { name: { contains: search, mode: 'insensitive' } } }, // Por Nombre Cliente
+                    { client: { ci: { contains: search, mode: 'insensitive' } } }    // Por Cédula
+                ];
             }
 
+            // 5. Query
             const [sales, total] = await Promise.all([
                 prisma.sale.findMany({
                     where: whereClause,
                     skip,
                     take: limit,
+                    orderBy: { createdAt: 'desc' },
                     include: {
                         client: { select: { name: true, ci: true } },
                         member: { include: { user: { select: { name: true } } } },
-                        exchangeRate: { select: { rate: true, /* currency: true */ } },
-                        _count: { select: { items: true, payments: true } }
-                    },
-                    orderBy: { createdAt: 'desc' }
+                        exchangeRate: { select: { rate: true } },
+                        _count: { select: { items: true } }
+                    }
                 }),
                 prisma.sale.count({ where: whereClause })
             ]);
 
+            // 6. Serialización (Decimal -> Number)
+            const formattedSales = sales.map(sale => ({
+                ...sale,
+                subTotal: Number(sale.subTotal),
+                taxAmount: Number(sale.taxAmount),
+                totalAmount: Number(sale.totalAmount),
+                remainingBalance: Number(sale.remainingBalance),
+                // Calculamos si está vencida (solo visual)
+                isOverdue: sale.conditions === 'CREDIT' && 
+                        sale.paymentStatus !== 'PAID' && 
+                        sale.paymentDueDate && 
+                        new Date(sale.paymentDueDate) < new Date()
+            }));
+
             return {
                 status: 200,
-                message: 'Ventas obtenidas exitosamente',
-                data: sales,
+                message: 'Ventas obtenidas',
+                data: formattedSales,
                 pagination: {
                     page,
                     limit,
@@ -791,8 +827,8 @@ export class SaleService {
             };
 
         } catch (error) {
-            console.error('Error al listar ventas:', error);
-            return { status: 500, message: 'Error interno al listar ventas', data: null };
+            console.error('Error findAll Sales:', error);
+            return { status: 500, message: 'Error interno', data: null };
         }
     }
 

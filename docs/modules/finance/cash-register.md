@@ -1,6 +1,6 @@
 # Módulo Finance - Caja Registradora
 
-## ✅ Endpoints actuales (v2026-01-23)
+## ✅ Endpoints actuales (v2026-01-29)
 
 Base URL: `/api/v1/finance/cash-register`
 
@@ -8,12 +8,11 @@ Base URL: `/api/v1/finance/cash-register`
 
 **Endpoints:**
 - `POST /open` — Abrir caja
-- `GET /` — Listar cajas
-- `GET /open` — Obtener caja abierta
-- `GET /:id` — Obtener caja
+- `GET /status` — Estado de mi caja (dashboard del POS)
+- `GET /` — Histórico de cajas (admin)
 - `PATCH /:id/close` — Cerrar caja
 
-**Nota:** Enviar `x-business-id` para contexto de negocio.
+**Nota:** Enviar `x-business-id` para contexto de negocio (el `authMiddleware` lo usa para inyectar `businessId` y `membershipId` en `req.user`).
 
 ## 📍 Endpoints
 
@@ -27,7 +26,9 @@ Base URL: `/api/v1/finance/cash-register`
 
 ### 1. Abrir Caja
 
-Abre una nueva caja registradora. Solo puede haber una caja abierta por negocio a la vez.
+Abre una nueva caja registradora para el miembro autenticado.
+
+Regla actual de negocio (según implementación): un miembro no puede tener dos cajas abiertas al mismo tiempo.
 
 **Endpoint:** `POST /api/v1/finance/cash-register/open`
 
@@ -42,34 +43,44 @@ x-business-id: 1
 ```json
 {
   "memberId": 5,
-  "initialAmount": 100.00
+  "initialAmount": 100.00,
+  "denominations": [
+    {
+      "denomination": 20.0,
+      "quantity": 5,
+      "currency": "USD",
+      "exchangeRateId": 1
+    }
+  ]
 }
 ```
 
 #### Validaciones
 
-- `memberId`: Obligatorio, number, debe existir el miembro activo en el negocio
-- `initialAmount`: Opcional, number, debe ser >= 0 (default: 0)
+- `memberId`: Obligatorio, number (actualmente se valida, pero el backend usa el `membershipId` inyectado en `req.user`)
+- `initialAmount`: Obligatorio, number, debe ser >= 0
+- `denominations`: Opcional, array de denominaciones iniciales
+  - `denominations.*.denomination`: number
+  - `denominations.*.quantity`: int >= 1
+  - `denominations.*.currency`: `USD` | `VES`
+  - `denominations.*.exchangeRateId`: int
 
 #### Response (201 Created)
 
 ```json
 {
   "message": "Caja abierta exitosamente",
-  "status": 201,
   "data": {
     "id": 1,
     "businessId": 1,
     "memberId": 5,
     "status": "OPEN",
     "openTime": "2024-01-15T10:30:00.000Z",
-    "closeTime": null,
     "initialAmount": 100.00,
     "finalAmount": null,
     "member": {
       "id": 5,
       "user": {
-        "id": 3,
         "name": "Juan Pérez"
       }
     }
@@ -79,15 +90,63 @@ x-business-id: 1
 
 #### Errores
 
-- `404`: Negocio no encontrado
-- `404`: Miembro no encontrado, no pertenece a este negocio o está inactivo
-- `400`: Ya existe una caja abierta para este negocio. Debe cerrarla antes de abrir una nueva.
+- `400`: Header `x-business-id` faltante o inválido
+- `404`: Miembro no válido (no pertenece al negocio o está inactivo)
+- `409`: Ya tienes una caja abierta. Debes cerrarla primero.
 
 ---
 
-### 2. Listar Cajas
+### 2. Estado de mi Caja (Dashboard POS)
 
-Obtiene todas las cajas del negocio, ordenadas por fecha de apertura descendente.
+Obtiene la caja abierta del miembro autenticado y un resumen calculado por el sistema (`systemSummary`) basado en los pagos registrados en la caja.
+
+**Endpoint:** `GET /api/v1/finance/cash-register/status`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+x-business-id: 1
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "message": "Estado de caja obtenido",
+  "data": {
+    "id": 1,
+    "businessId": 1,
+    "memberId": 5,
+    "status": "OPEN",
+    "openTime": "2024-01-15T10:30:00.000Z",
+    "initialAmount": 100.0,
+    "finalAmount": null,
+    "member": {
+      "user": {
+        "name": "Juan Pérez"
+      }
+    },
+    "systemSummary": [
+      {
+        "method": "Efectivo",
+        "type": "CASH",
+        "currency": "USD",
+        "total": 250.0
+      }
+    ]
+  }
+}
+```
+
+#### Errores
+
+- `404`: No tienes caja abierta
+
+---
+
+### 3. Listar Cajas (Histórico)
+
+Obtiene el histórico de cajas del negocio (máximo 50), ordenadas por fecha de apertura descendente.
 
 **Endpoint:** `GET /api/v1/finance/cash-register`
 
@@ -101,8 +160,7 @@ x-business-id: 1
 
 ```json
 {
-  "message": "Cajas obtenidas exitosamente",
-  "status": 200,
+  "message": "Histórico obtenido",
   "data": [
     {
       "id": 1,
@@ -110,18 +168,16 @@ x-business-id: 1
       "memberId": 5,
       "status": "OPEN",
       "openTime": "2024-01-15T10:30:00.000Z",
-      "closeTime": null,
       "initialAmount": 100.00,
       "finalAmount": null,
       "member": {
         "id": 5,
         "user": {
-          "id": 3,
           "name": "Juan Pérez"
         }
       },
       "_count": {
-        "counts": 2
+        "payments": 2
       }
     }
   ]
@@ -130,143 +186,11 @@ x-business-id: 1
 
 #### Errores
 
-- `404`: No hay cajas registradas (retorna array vacío)
+- `200`: Si no hay registros, retorna array vacío
 
 ---
 
-### 3. Obtener Caja Abierta
-
-Obtiene la caja abierta actual del negocio, incluyendo los conteos iniciales.
-
-**Endpoint:** `GET /api/v1/finance/cash-register/open`
-
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
-
-#### Response (200 OK)
-
-```json
-{
-  "message": "Caja abierta obtenida exitosamente",
-  "status": 200,
-  "data": {
-    "id": 1,
-    "businessId": 1,
-    "memberId": 5,
-    "status": "OPEN",
-    "openTime": "2024-01-15T10:30:00.000Z",
-    "closeTime": null,
-    "initialAmount": 100.00,
-    "finalAmount": null,
-    "member": {
-      "id": 5,
-      "user": {
-        "id": 3,
-        "name": "Juan Pérez"
-      }
-    },
-    "counts": [
-      {
-        "id": 1,
-        "denomination": 20.00,
-        "quantity": 5,
-        "currency": "USD",
-        "type": "INITIAL",
-        "exchangeRate": {
-          "id": 1,
-          "currency": "USD",
-          "rate": 1.0000
-        }
-      }
-    ]
-  }
-}
-```
-
-#### Errores
-
-- `404`: No hay caja abierta
-
----
-
-### 4. Obtener Caja por ID
-
-Obtiene una caja específica con todos sus conteos.
-
-**Endpoint:** `GET /api/v1/finance/cash-register/:id`
-
-**Headers:**
-```
-Authorization: Bearer <token>
-x-business-id: 1
-```
-
-#### Parámetros
-
-- `id`: ID de la caja (número)
-
-#### Response (200 OK)
-
-```json
-{
-  "message": "Caja obtenida exitosamente",
-  "status": 200,
-  "data": {
-    "id": 1,
-    "businessId": 1,
-    "memberId": 5,
-    "status": "CLOSED",
-    "openTime": "2024-01-15T10:30:00.000Z",
-    "closeTime": "2024-01-15T18:00:00.000Z",
-    "initialAmount": 100.00,
-    "finalAmount": 500.00,
-    "member": {
-      "id": 5,
-      "user": {
-        "id": 3,
-        "name": "Juan Pérez"
-      }
-    },
-    "counts": [
-      {
-        "id": 1,
-        "denomination": 20.00,
-        "quantity": 5,
-        "currency": "USD",
-        "type": "INITIAL",
-        "exchangeRate": {
-          "id": 1,
-          "currency": "USD",
-          "rate": 1.0000
-        }
-      },
-      {
-        "id": 2,
-        "denomination": 20.00,
-        "quantity": 25,
-        "currency": "USD",
-        "type": "FINAL",
-        "exchangeRate": {
-          "id": 1,
-          "currency": "USD",
-          "rate": 1.0000
-        }
-      }
-    ]
-  }
-}
-```
-
-#### Errores
-
-- `404`: Caja no encontrada o no pertenece a este negocio
-
----
-
-### 5. Cerrar Caja
+### 4. Cerrar Caja
 
 Cierra una caja abierta. La caja debe estar en estado OPEN.
 
@@ -287,23 +211,33 @@ x-business-id: 1
 ```json
 {
   "finalAmount": 500.00,
-  "closeTime": "2024-01-15T18:00:00.000Z"
+  "closeTime": "2024-01-15T18:00:00.000Z",
+  "counts": [
+    {
+      "denomination": 20.0,
+      "quantity": 25,
+      "currency": "USD",
+      "exchangeRateId": 1
+    }
+  ]
 }
 ```
 
-**Todos los campos son opcionales**, pero se recomienda enviar `finalAmount`.
-
 #### Validaciones
 
-- `finalAmount`: Opcional, number, debe ser >= 0
+- `finalAmount`: Obligatorio, number, debe ser >= 0
+- `counts`: Obligatorio, array con al menos 1 ítem
+  - `counts.*.denomination`: number
+  - `counts.*.quantity`: int >= 1
+  - `counts.*.currency`: `USD` | `VES`
+  - `counts.*.exchangeRateId`: int
 - `closeTime`: Opcional, string (ISO 8601), por defecto usa la fecha actual
 
 #### Response (200 OK)
 
 ```json
 {
-  "message": "Caja cerrada exitosamente",
-  "status": 200,
+  "message": "Caja cerrada correctamente",
   "data": {
     "id": 1,
     "businessId": 1,
@@ -312,40 +246,7 @@ x-business-id: 1
     "openTime": "2024-01-15T10:30:00.000Z",
     "closeTime": "2024-01-15T18:00:00.000Z",
     "initialAmount": 100.00,
-    "finalAmount": 500.00,
-    "member": {
-      "id": 5,
-      "user": {
-        "id": 3,
-        "name": "Juan Pérez"
-      }
-    },
-    "counts": [
-      {
-        "id": 1,
-        "denomination": 20.00,
-        "quantity": 5,
-        "currency": "USD",
-        "type": "INITIAL",
-        "exchangeRate": {
-          "id": 1,
-          "currency": "USD",
-          "rate": 1.0000
-        }
-      },
-      {
-        "id": 2,
-        "denomination": 20.00,
-        "quantity": 25,
-        "currency": "USD",
-        "type": "FINAL",
-        "exchangeRate": {
-          "id": 1,
-          "currency": "USD",
-          "rate": 1.0000
-        }
-      }
-    ]
+    "finalAmount": 500.00
   }
 }
 ```
@@ -356,11 +257,18 @@ x-business-id: 1
 
 ---
 
+## 🧩 Notas de implementación (Importante)
+
+- Actualmente no existen endpoints `GET /open` ni `GET /:id` en las rutas del módulo; el frontend debe usar `GET /status` para consultar la caja abierta.
+- El cierre guarda el conteo físico en `cashCount` (tipo `FINAL`), pero el endpoint no retorna esos conteos.
+
+---
+
 ## 🔒 Seguridad
 
 - Todos los endpoints requieren autenticación
 - Filtrado multi-tenant por `businessId` (header `x-business-id`)
 - Un negocio solo puede gestionar sus propias cajas
-- Solo puede haber una caja abierta por negocio a la vez
+- Un miembro no puede tener dos cajas abiertas a la vez
 - Solo se puede cerrar una caja que esté en estado OPEN
 - Registro de quién abrió/cerró la caja (miembro)
