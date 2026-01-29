@@ -2,6 +2,7 @@ import { prisma } from '@/configs';
 import { CreateExchangeRateInterface, UpdateExchangeRateInterface } from './interfaces';
 import axios from 'axios';
 import { ExchangeRateStrategy } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/client';
 
 
 export class ExchangeRateService {
@@ -351,49 +352,65 @@ export class ExchangeRateService {
 
             const response = await axios.get(this.BCV_API_URL);
             
-            const rateValue = response.data.valor.valor_num; 
-
-            const date = response.data.fecha_iso;
+            // Asegúrate de que los campos coincidan con tu API real
+            const rateValue = Number(response.data.valor.valor_num); 
+            const apiDateRaw = response.data.fecha_iso; // Ej: "2026-01-29T00:00:00.000Z"
             
             if (!rateValue || isNaN(rateValue)) {
                 throw new Error('La API externa no devolvió un valor numérico válido.');
             }
 
+            // 1. Obtener la última tasa (Cualquiera que sea)
             const lastRate = await prisma.exchangeRate.findFirst({
                 orderBy: { createdAt: 'desc' }
             });
             
-            console.log('Última tasa registrada con origen:', lastRate ? `${lastRate.source} en ${lastRate.createdAt.toISOString()}` : 'Ninguna');
+            console.log('Última tasa en DB:', lastRate ? `${lastRate.source} (${lastRate.rate})` : 'Ninguna');
 
-            if (date && lastRate && lastRate.createdAt.toISOString().startsWith(date) && lastRate.rate === rateValue) {
-                console.log('ℹ️ La tasa BCV no ha cambiado hoy. No se crea un nuevo registro.');
-                return lastRate;
+            // =================================================================
+            // LÓGICA DE COMPARACIÓN DE FECHAS (YYYY-MM-DD)
+            // =================================================================
+            if (lastRate) {
+                // A. Convertimos fecha API a string corto "YYYY-MM-DD"
+                const apiDate = new Date(apiDateRaw).toISOString().split('T')[0];
+
+                // B. Convertimos fecha DB a string corto "YYYY-MM-DD"
+                const dbDate = new Date(lastRate.createdAt).toISOString().split('T')[0];
+
+                console.log(`🔎 Comparando fechas: API[${apiDate}] vs DB[${dbDate}]`);
+
+                // C. La Condición Maestra:
+                // Si es el MISMO día Y el MISMO precio... no hacemos nada.
+                if (apiDate === dbDate && new Decimal(lastRate.rate).equals(rateValue)) {
+                    console.log('ℹ️ La tasa BCV es idéntica a la última registrada hoy. Omitiendo.');
+                    return lastRate;
+                }
             }
 
             // 3. Guardar en Base de Datos
+            console.log('✨ Detectado cambio o nueva fecha. Guardando...');
+            
             const newRate = await prisma.exchangeRate.create({
                 data: {
                     rate: rateValue,
-                    source: ExchangeRateStrategy.API_BCV,
-                    createdAt: new Date(date),
+                    // Asegúrate de importar tu Enum o usar el string directo
+                    source: 'API_BCV', // O ExchangeRateStrategy.API_BCV
+                    createdAt: new Date(apiDateRaw),
                     isActive: true,
-                    businessId: null,
+                    businessId: null, // Si es global
                 }
             });
 
-            if ( !newRate ) {
-                throw new Error('No se pudo guardar la nueva tasa BCV en la base de datos.');
+            if (!newRate) {
+                throw new Error('Error al guardar en Prisma.');
             }
 
-            console.log('✅ Tasa BCV sincronizada y guardada:', newRate.rate, 'en', newRate.createdAt.toISOString());
-
+            console.log('✅ Nueva Tasa Guardada:', newRate.rate);
             return newRate;
 
         } catch (error) {
-
             console.error('❌ Error sincronizando BCV:', error);
-
-            throw error;
+            throw error; // Lanzar para que el Cron sepa que falló
         }
     }
 }

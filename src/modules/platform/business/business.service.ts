@@ -1,7 +1,7 @@
 import { prisma } from '@/configs';
 import { CreateBusinessInterface, UpdateBusinessInterface, UpdateExchangeConfigInterface } from './interfaces';
 import { PlanType, SubStatus, ExchangeRateStrategy } from '@prisma/client'; // Importamos Enums de Prisma
-import { BusinessError } from '@/utils';
+import { BusinessError, resolveBusinessExchangeRate } from '@/utils';
 
 export class BusinessService {
 
@@ -143,60 +143,76 @@ export class BusinessService {
     }
   }
 
-  // 3. OBTENER UN NEGOCIO (Validando pertenencia)
   async findOne(businessId: number, userId: number) {
+      try {
+          // 1. Buscamos el negocio y el rol del usuario
+          // QUITAMOS el include de exchangeRates porque esa lógica estaba mal
+          const business = await prisma.business.findFirst({
+              where: {
+                  id: businessId,
+                  members: {
+                      some: { userId: userId, isActive: true }
+                  }
+              },
+              include: {
+                  members: { 
+                      where: { userId: userId }, 
+                      select: { role: { select: { name: true } } } 
+                  }
+                  // ❌ Eliminamos exchangeRates de aquí.
+                  // No podemos confiar en una simple relación de base de datos 
+                  // para una lógica de negocio condicional.
+              }
+          });
 
-    try {
-      
-      const business = await prisma.business.findFirst({
-        where: {
-          id: businessId,
-          members: {
-            some: { userId: userId, isActive: true } // Seguridad: Solo si pertenezco a ella
+          if (!business) {
+              return {
+                  message: 'Empresa no encontrada o no tienes acceso.',
+                  status: 404,
+                  data: null
+              };
           }
-        },
-        include: {
-          members: { where: { userId: userId }, select: { role: { select: { name: true } } } },
-          exchangeRates: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-            select: {
-              id: true,
-              rate: true,
-            }
-          }
-        }
-      });
 
-      if (!business) {
-        return {
-          message: 'Empresa no encontrada o no tienes acceso.',
-          status: 404,
-          data: null
-        };
+          // 2. Resolvemos la tasa REAL usando tu función inteligente
+          // Esto buscará BCV (Global) o Manual según la configuración del negocio
+          let activeRate = null;
+          try {
+              activeRate = await resolveBusinessExchangeRate(business.id);
+          } catch (e) {
+              console.warn(`Advertencia: Negocio ${businessId} sin tasa activa.`);
+              // No lanzamos error 500 para no bloquear el acceso al dashboard,
+              // pero enviamos null o una tasa por defecto.
+          }
+
+          // 3. Formateamos la respuesta
+          const formattedBusiness = {
+              ...business,
+              memberRole: business.members[0]?.role?.name || 'Miembro',
+              
+              // Inyectamos la tasa correcta calculada
+              // Lo enviamos como un objeto único o array según lo espere tu frontend
+              currentExchangeRate: activeRate ? {
+                  id: activeRate.id,
+                  rate: Number(activeRate.rate),
+                  source: activeRate.source,
+                  lastUpdate: activeRate.createdAt
+              } : null
+          };
+
+          return {
+              message: 'Empresa obtenida exitosamente',
+              status: 200,
+              data: formattedBusiness
+          };
+
+      } catch (error) {
+          console.error('Error al obtener la empresa:', error);
+          return {
+              message: 'Por favor contacte al administrador',
+              status: 500,
+              data: null
+          };
       }
-
-      const formattedBusinesses = {
-        ...business,
-        memberRole: business.members[0]?.role?.name || 'Miembro'
-      };
-
-      return {
-        message: 'Empresa obtenida exitosamente',
-        status: 200,
-        data: formattedBusinesses
-      };
-
-    } catch (error) {
-
-      console.error('Error al obtener la empresa:', error);
-
-      return {
-        message: 'Por favor contacte al administrador',
-        status: 500,
-        data: null
-      };
-    }
   }
 
   // 4. ACTUALIZAR DATOS
@@ -319,8 +335,6 @@ export class BusinessService {
 
           newCurrentRate = Number(globalRate.rate);
 
-          // NOTA: Aquí NO creamos un registro en ExchangeRate. 
-          // El negocio simplemente se "suscribe" a la tasa global existente.
         }
 
         // --- ACTUALIZACIÓN DEL NEGOCIO (CACHE) ---

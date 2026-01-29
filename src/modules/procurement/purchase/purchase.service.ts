@@ -630,51 +630,57 @@ export class PurchaseService {
 
                 // 6. Cascada de Cuotas (Abono Inteligente)
                 if (purchase.conditions === Conditions.CREDIT) {
-                    
+    
                     const pendingInstallments = await tx.purchaseInstallment.findMany({
                         where: { 
                             purchaseId: purchaseId,
                             status: { not: InstallmentStatus.PAID } 
                         },
-                        orderBy: { dueDate: 'asc' } // Pagamos las más viejas primero
+                        orderBy: { dueDate: 'asc' }
                     });
 
-                    // Bolsa de dinero disponible para repartir entre cuotas
-                    let moneyDistributor = paymentInBaseCurrency;
+                    let moneyDistributor = paymentInBaseCurrency; // Dinero disponible
 
                     for (const inst of pendingInstallments) {
-                        // Si se acabó el dinero, paramos
-                        if (moneyDistributor.lte(new Decimal(0.01))) break;
+                        // Si ya no hay dinero (tolerancia mínima), terminamos
+                        if (moneyDistributor.lte(new Decimal(0.001))) break;
 
-                        const amountOfQuota = new Decimal(inst.amount);
+                        const totalAmount = new Decimal(inst.amount);
+                        const alreadyPaid = new Decimal(inst.amountPaid);
+                        
+                        // A. Calculamos cuánto falta para liquidar ESTA cuota
+                        const missingAmount = totalAmount.sub(alreadyPaid);
 
-                        // ¿Podemos pagar esta cuota completa?
-                        // Si Dinero >= Cuota - 0.01
-                        if (moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01))) || inst.amountPaid.add(moneyDistributor).gte(amountOfQuota)) {
-  
-                            await tx.purchaseInstallment.update({
-                                where: { id: inst.id },
-                                data: { 
-                                    status: InstallmentStatus.PAID,
-                                    amountPaid: moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01))) ? amountOfQuota : inst.amountPaid.add(moneyDistributor),
-                                    paidAt: new Date()
-                                }
-                            });
-                            
-                            // Restamos lo que costó la cuota de nuestra bolsa
-                            moneyDistributor = moneyDistributor.sub(amountOfQuota);
+                        // B. Decidimos cuánto vamos a abonar AHORA
+                        // Es el mínimo entre: Lo que tengo disponible VS Lo que falta
+                        let amountToPayNow: Decimal;
+
+                        if (moneyDistributor.gte(missingAmount)) {
+                            amountToPayNow = missingAmount; // Pago lo que falta completo
                         } else {
+                            amountToPayNow = moneyDistributor; // Pago todo lo que me queda
+                        }
 
-                            await tx.purchaseInstallment.update({
-                                where: { id: inst.id },
-                                data: {
-                                    status: InstallmentStatus.PARTIAL,
-                                    amountPaid: inst.amountPaid.add(moneyDistributor),
-                                }
-                            });
+                        // C. Calculamos el nuevo total pagado
+                        const newAmountPaid = alreadyPaid.add(amountToPayNow);
+                        
+                        // D. Determinamos si se liquidó (con tolerancia de centavos)
+                        // Usamos 0.005 para evitar problemas de redondeo en el último decimal
+                        const isFullyPaid = newAmountPaid.gte(totalAmount.sub(new Decimal(0.002)));
 
-                            moneyDistributor = moneyDistributor.sub(moneyDistributor);
-                        } 
+                        // E. Actualizamos la Base de Datos
+                        await tx.purchaseInstallment.update({
+                            where: { id: inst.id },
+                            data: {
+                                status: isFullyPaid ? InstallmentStatus.PAID : InstallmentStatus.PARTIAL,
+                                amountPaid: newAmountPaid,
+                                // Solo ponemos fecha si se completó, o actualizamos la fecha del último abono
+                                paidAt: isFullyPaid ? new Date() : undefined 
+                            }
+                        });
+
+                        // F. CRÍTICO: Restamos a la bolsa SOLO LO QUE PAGAMOS AHORA
+                        moneyDistributor = moneyDistributor.sub(amountToPayNow);
                     }
                 }
 
