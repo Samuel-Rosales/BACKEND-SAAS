@@ -1,6 +1,7 @@
 import { prisma } from '@/configs';
 import { CreateExchangeRateInterface, UpdateExchangeRateInterface } from './interfaces';
 import axios from 'axios';
+import { ExchangeRateStrategy } from '@prisma/client';
 
 
 export class ExchangeRateService {
@@ -361,6 +362,8 @@ export class ExchangeRateService {
             const lastRate = await prisma.exchangeRate.findFirst({
                 orderBy: { createdAt: 'desc' }
             });
+            
+            console.log('Última tasa registrada con origen:', lastRate ? `${lastRate.source} en ${lastRate.createdAt.toISOString()}` : 'Ninguna');
 
             if (date && lastRate && lastRate.createdAt.toISOString().startsWith(date) && lastRate.rate === rateValue) {
                 console.log('ℹ️ La tasa BCV no ha cambiado hoy. No se crea un nuevo registro.');
@@ -371,18 +374,23 @@ export class ExchangeRateService {
             const newRate = await prisma.exchangeRate.create({
                 data: {
                     rate: rateValue,
-                    source: 'API_BCV',
+                    source: ExchangeRateStrategy.API_BCV,
                     createdAt: new Date(date),
                     isActive: true,
                     businessId: null,
                 }
             });
 
-            console.log(`✅ Tasa BCV actualizada: ${rateValue}`);
+            if ( !newRate ) {
+                throw new Error('No se pudo guardar la nueva tasa BCV en la base de datos.');
+            }
+
+            console.log('✅ Tasa BCV sincronizada y guardada:', newRate.rate, 'en', newRate.createdAt.toISOString());
+
             return newRate;
 
         } catch (error) {
-            
+
             console.error('❌ Error sincronizando BCV:', error);
 
             throw error;
