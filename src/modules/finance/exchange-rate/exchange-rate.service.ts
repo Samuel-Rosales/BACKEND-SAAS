@@ -4,7 +4,7 @@ import axios from 'axios';
 
 
 export class ExchangeRateService {
-    private readonly BCV_API_URL = 'https://api-bcv-pi.vercel.app/api/tasa';
+    private readonly BCV_API_URL = 'https://api-bcv-pi.vercel.app/api/tasa/usd';
 
     async create(businessId: number, data: CreateExchangeRateInterface) {
         try {
@@ -344,7 +344,7 @@ export class ExchangeRateService {
         }
     }
 
-    async syncBCVRate(businessId?: number) {
+    async syncBCVRate() {
         try {
             console.log('🔄 Iniciando sincronización de tasa BCV...');
 
@@ -352,7 +352,9 @@ export class ExchangeRateService {
             const response = await axios.get(this.BCV_API_URL);
             
             // Adaptar esto según la estructura de la API que uses
-            const rateValue = response.data.tasas.USD.valor_num; 
+            const rateValue = response.data.valor.valor_num; 
+
+            const date = response.data.fecha_iso;
             
             if (!rateValue || isNaN(rateValue)) {
                 throw new Error('La API externa no devolvió un valor numérico válido.');
@@ -366,8 +368,8 @@ export class ExchangeRateService {
             // Si la tasa es la misma y es del mismo día, quizás no quieras guardarla de nuevo
             // O quizás sí para tener un log horario. Asumamos que guardamos historial.
 
-            if (lastRate && lastRate.rate === rateValue) {
-                console.log('ℹ️ La tasa BCV no ha cambiado. No se crea un nuevo registro.');
+            if (date && lastRate && lastRate.createdAt.toISOString().startsWith(date) && lastRate.rate === rateValue) {
+                console.log('ℹ️ La tasa BCV no ha cambiado hoy. No se crea un nuevo registro.');
                 return lastRate;
             }
 
@@ -376,7 +378,7 @@ export class ExchangeRateService {
                 data: {
                     rate: rateValue,
                     source: 'API_BCV',
-                    createdAt: new Date(),
+                    createdAt: new Date(date),
                     isActive: true,
                     businessId: null,
                 }
