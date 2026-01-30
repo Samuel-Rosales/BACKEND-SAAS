@@ -3,7 +3,7 @@ import { body, param, ValidationChain } from 'express-validator';
 export class CashRegisterValidator {
   
     public validateOpen: ValidationChain[] = [
-        body('memberId').isInt().withMessage('ID de miembro requerido'),
+        // body('memberId').isInt().withMessage('ID de miembro requerido'),
         
         body('initialAmount')
             .isFloat({ min: 0 }).withMessage('Monto inicial debe ser >= 0')
