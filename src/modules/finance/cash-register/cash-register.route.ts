@@ -12,30 +12,36 @@ router.use(authMiddleware);
 
 // 1. Abrir Caja
 router.post(
-  '/open', 
-  validator.validateOpen, 
-  handleValidationErrors, 
+  '/open',
+  validator.validateOpen,
+  handleValidationErrors,
   controller.open
 );
 
 // 2. Dashboard del Cajero (Saber cuánto tengo que tener)
 // IMPORTANTE: Pon esta ruta ANTES de /:id para que no confunda "status" con un ID
 router.get(
-  '/status', 
+  '/status',
   controller.findMyStatus
 );
 
 // 3. Histórico General (Admin)
 router.get(
-  '/', 
+  '/',
   controller.findAll
 );
 
-// 4. Cerrar Caja
+// 4. Detalle por ID
+router.get(
+  '/:id',
+  controller.findOne
+);
+
+// 5. Cerrar Caja
 router.patch(
-  '/:id/close', 
-  validator.validateClose, 
-  handleValidationErrors, 
+  '/:id/close',
+  validator.validateClose,
+  handleValidationErrors,
   controller.close
 );
 

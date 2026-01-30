@@ -23,11 +23,11 @@ export class CashRegisterController {
                 data: null
             });
         }
-        const {status, data, message} = await this.service.open(businessId, membershipId, req.body);
+        const { status, data, message } = await this.service.open(businessId, membershipId, req.body);
 
-        res.status(status).json({ 
-            message, 
-            data 
+        res.status(status).json({
+            message,
+            data
         });
     };
 
@@ -41,11 +41,11 @@ export class CashRegisterController {
             });
         }
 
-        const {status, data, message} = await this.service.findAll(businessId);
-        
-        res.status(status).json({ 
-            message, 
-            data 
+        const { status, data, message } = await this.service.findAll(businessId);
+
+        res.status(status).json({
+            message,
+            data
         });
     };
 
@@ -53,13 +53,32 @@ export class CashRegisterController {
     findMyStatus = async (req: Request, res: Response) => {
 
         const businessId = req.user.businessId;
-        const memberId = req.user.membershipId; 
+        const memberId = req.user.membershipId;
 
         const { status, data, message } = await this.service.findMyOpenRegister(businessId, memberId);
 
-        res.status(status).json({ 
-            message, 
-            data 
+        res.status(status).json({
+            message,
+            data
+        });
+    };
+
+    findOne = async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const businessId = req.user.businessId;
+
+        if (!businessId) {
+            return res.status(400).json({
+                message: 'ID de negocio requerido',
+                data: null
+            });
+        }
+
+        const { status, data, message } = await this.service.findOne(businessId, +id);
+
+        res.status(status).json({
+            message,
+            data
         });
     };
 
@@ -74,11 +93,11 @@ export class CashRegisterController {
             });
         }
 
-        const {status, data, message} = await this.service.close(businessId, +id, req.body);
-        
-        res.status(status).json({ 
-            message, 
-            data 
+        const { status, data, message } = await this.service.close(businessId, +id, req.body);
+
+        res.status(status).json({
+            message,
+            data
         });
     };
 }

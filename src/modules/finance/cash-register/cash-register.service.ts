@@ -35,7 +35,7 @@ export class CashRegisterService {
                         status: CashStatus.OPEN,
                         initialAmount: data.initialAmount || 0,
                         openTime: new Date(),
-                        
+
                         // Si mandan detalle de billetes (Apertura detallada)
                         counts: data.denominations && data.denominations.length > 0 ? {
                             create: data.denominations.map(c => ({
@@ -113,17 +113,66 @@ export class CashRegisterService {
                 };
             });
 
-            return { 
-                status: 200, 
-                message: 'Estado de caja obtenido', 
+            return {
+                status: 200,
+                message: 'Estado de caja obtenido',
                 data: {
                     ...register,
                     systemSummary: systemTotals // El frontend usa esto para comparar contra lo físico
-                } 
+                }
             };
 
         } catch (error) {
             return { status: 500, message: 'Error interno', data: null };
+        }
+    }
+
+    // 3.5. OBTENER CAJA POR ID (Detalle)
+    async findOne(businessId: number, id: number) {
+        try {
+            const register = await prisma.cashRegister.findFirst({
+                where: { id, businessId },
+                include: {
+                    member: { include: { user: { select: { name: true } } } },
+                    counts: true // Incluimos los conteos de billetes
+                }
+            });
+
+            if (!register) return { status: 404, message: 'Caja no encontrada', data: null };
+
+            // === CALCULO DE TOTALES REGISTRADOS POR EL SISTEMA ===
+            const paymentsGrouped = await prisma.salePayment.groupBy({
+                by: ['paymentMethodId'],
+                where: { cashRegisterId: register.id },
+                _sum: { amount: true }
+            });
+
+            const methods = await prisma.paymentMethod.findMany({
+                where: { id: { in: paymentsGrouped.map(p => p.paymentMethodId) } }
+            });
+
+            const systemTotals = paymentsGrouped.map(pg => {
+                const method = methods.find(m => m.id === pg.paymentMethodId);
+                return {
+                    method: method?.name,
+                    type: method?.type,
+                    currency: method?.currency,
+                    total: pg._sum.amount
+                };
+            });
+
+            return {
+                status: 200,
+                message: 'Detalle de caja obtenido',
+                data: {
+                    ...register,
+                    systemSummary: systemTotals
+                }
+            };
+
+        } catch (error) {
+            console.error('Error finding cash register:', error);
+            return { status: 500, message: 'Error interno al buscar caja', data: null };
         }
     }
 
@@ -137,7 +186,7 @@ export class CashRegisterService {
             if (!register) return { status: 404, message: 'Caja no encontrada o ya cerrada', data: null };
 
             const result = await prisma.$transaction(async (tx) => {
-                
+
                 // A. Guardar la evidencia física (Conteo de billetes)
                 if (data.counts && data.counts.length > 0) {
                     await tx.cashCount.createMany({
