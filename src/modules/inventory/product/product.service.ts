@@ -175,6 +175,13 @@ export class ProductService {
                                     }
                                 }
                             }
+                        },
+                        tax: {
+                            select: {
+                                id: true,
+                                name: true,
+                                rate: true,
+                            }
                         }
                     }
                 }),
@@ -288,12 +295,19 @@ export class ProductService {
                     components: {
                         include: {
                             child: {
-                                select: { id: true, name: true, sku: true, unit: { select: { symbol: true } }, stockLots: { select: { quantity: true } }}
+                                select: { id: true, name: true, sku: true, unit: { select: { symbol: true } }, stockLots: { select: { quantity: true } } }
                             }
                         }
                     },
                     componentOf: true, // Saber si es ingrediente de algo
-                    _count: true
+                    _count: true,
+                    tax: {
+                        select: {
+                            id: true,
+                            name: true,
+                            rate: true,
+                        }
+                    }
                 }
             });
 
@@ -396,10 +410,10 @@ export class ProductService {
                     // 2. Datos para Mostrar (Tabla visual)
                     ingredientName: c.child.name,
                     sku: c.child.sku,              // Útil para que el cocinero verifique
-                    
+
                     // 3. Cantidades limpias (Numbers, no Strings ni Decimal objects)
                     quantity: new Decimal(c.quantity).toNumber(),
-                    
+
                     // 4. Unidad aplanada (Para no poner c.child.unit.symbol)
                     unitSymbol: c.child.unit.symbol,
 
@@ -510,7 +524,7 @@ export class ProductService {
 
             // CASO A: Es (o se volvió) un Producto COMPUESTO y enviaron receta nueva
             if ((rest.type === ProductType.COMPOSITE || existingProduct.type === ProductType.COMPOSITE) && components) {
-                
+
                 // 1. Buscamos los costos REALES de los ingredientes en la BD
                 const ingredientIds = components.map(c => c.childProductId);
 
@@ -525,12 +539,12 @@ export class ProductService {
                 for (const comp of components) {
 
                     const dbItem = dbIngredients.find(i => i.id === comp.childProductId);
-                    
+
                     if (dbItem) {
 
                         const cost = new Decimal(dbItem.costPrice);
                         const qty = new Decimal(comp.quantity);
-                        
+
                         // Sumar: Costo * Cantidad
                         calculatedRecipeCost = calculatedRecipeCost.add(cost.mul(qty));
                     }
@@ -560,7 +574,7 @@ export class ProductService {
             // =================================================================
             // Si el costo cambió, ¿Debemos actualizar el precio de venta?
             // Generalmente SÍ, para mantener el margen de ganancia.
-            
+
             let newSalePrice = rest.salePrice; // Por defecto mantenemos el que envían o el que estaba
 
             // Si no enviaron precio manual, recalculamos basado en el margen actual
@@ -578,7 +592,7 @@ export class ProductService {
                 data: {
                     ...rest,
                     updatedById: userId,
-                    
+
                     // Valores Financieros Calculados
                     costPrice: newCostPrice,
                     salePrice: newSalePrice,
@@ -603,7 +617,7 @@ export class ProductService {
             // Si este producto (ej: Salsa) cambió de precio, y es usado en otros (ej: Pizza),
             // debemos actualizar a los padres.
             const oldCost = new Decimal(existingProduct.costPrice);
-            
+
             // Solo disparamos la recursividad si hubo un cambio real de dinero (> 0.001)
             if (oldCost.sub(newCostPrice).abs().gt(new Decimal(0.001))) {
                 // Ejecutamos en segundo plano (sin await) para no bloquear la respuesta al usuario
@@ -625,7 +639,7 @@ export class ProductService {
             return { message: 'Error interno al actualizar', status: 500, data: null };
         }
     }
-    
+
     // 5. ELIMINAR INTELIGENTE (Híbrido)
     async remove(businessId: number, id: number) {
         try {
