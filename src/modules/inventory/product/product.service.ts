@@ -163,7 +163,19 @@ export class ProductService {
                         presentations: true,
 
                         // --- CAMBIO 1: Traemos el stock físico (para productos Simples) ---
-                        stockLots: { select: { quantity: true } },
+                        stockLots: { 
+                            where: { quantity: { gt: 0 } },
+                            select: { 
+                                quantity: true,
+                                expirationDate: true,
+                                depot: {
+                                    select: {
+                                        id: true,
+                                        name: true
+                                    }
+                                }
+                            } 
+                        },
 
                         // --- CAMBIO 2: Traemos la receta y el stock de los ingredientes (para Compuestos) ---
                         components: {
@@ -257,7 +269,8 @@ export class ProductService {
                     // FINALMENTE convertimos a Number para que el JSON sea ligero
                     // y el frontend (React) pueda hacer cálculos simples o mostrarlo.
                     // Usamos toNumber() de la librería Decimal.
-                    currentStock: calculatedStock.toNumber()
+                    currentStock: calculatedStock.toNumber(),
+                    stockByDepot: this.groupStockByDepot(product.stockLots)
                 };
             });
 
