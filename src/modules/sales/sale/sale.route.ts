@@ -42,7 +42,7 @@ router.get(
 );
 
 router.get(
-    '/:id/sale-payment',
+    '/:id/payment-history',
     validator.validateId,
     handleValidationErrors,
     controller.getPaymentHistory

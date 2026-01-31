@@ -3,6 +3,7 @@ import { CreateExchangeRateInterface, UpdateExchangeRateInterface } from './inte
 import axios from 'axios';
 import { ExchangeRateStrategy } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
+import { resolveBusinessExchangeRate } from '@/utils/resolve-exchange-rate';
 
 
 export class ExchangeRateService {
@@ -111,28 +112,22 @@ export class ExchangeRateService {
     // 3. OBTENER LA ÚLTIMA TASA POR MONEDA
     async findLatest(businessId: number) {
         try {
-            const exchangeRate =
-                (await prisma.exchangeRate.findFirst({
-                    where: {
-                        businessId,
-                        isActive: true,
-                    },
-                    orderBy: {
-                        createdAt: 'desc',
-                    },
-                })) ??
-                (await prisma.exchangeRate.findFirst({
-                    where: {
-                        businessId,
-                    },
-                    orderBy: {
-                        createdAt: 'desc',
-                    },
-                }));
+
+            let activeRate = null;
+            
+            try {
+                activeRate = await resolveBusinessExchangeRate(businessId);
+            } catch (e) {
+                console.warn(`Advertencia: Negocio ${businessId} sin tasa activa.`);
+                // No lanzamos error 500 para no bloquear el acceso al dashboard,
+                // pero enviamos null o una tasa por defecto.
+            }
+
+            const exchangeRate = activeRate ? activeRate : null;
 
             if (!exchangeRate) {
                 return {
-                    message: `No se encontró tasa de cambio`,
+                    message: 'No hay tasa de cambio activa',
                     status: 404,
                     data: null
                 };
