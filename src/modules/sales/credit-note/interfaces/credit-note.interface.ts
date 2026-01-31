@@ -11,6 +11,16 @@ export interface CreateCreditNoteInterface {
     saleId: number;
     reason: string;
     items: CreditNoteItemInput[];
+
+    refundPayments?: CreditNotePaymentInterface[];
+}
+
+export interface CreditNotePaymentInterface {
+    paymentMethodId: number;
+    amount: number;
+    reference?: string;
+    
+    cashRegisterId?: number;
 }
 
 export interface ItemProcessingData {

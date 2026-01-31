@@ -154,6 +154,7 @@ model ExchangeRate {
   purchases        Purchase[]
   purchasePayments PurchasePayment[]
   cashCounts       CashCount[]
+  creditNotePayments CreditNotePayment[]
 
   @@index([createdAt])
 }
@@ -448,6 +449,7 @@ model CreditNote {
 
   sale  Sale             @relation(fields: [saleId], references: [id])
   items CreditNoteItem[]
+  creditNotePayments CreditNotePayment[]
 }
 
 // Detalle de qué items específicos se devolvieron
@@ -465,6 +467,27 @@ model CreditNoteItem {
   product    Product    @relation(fields: [productId], references: [id])
 }
 
+model CreditNotePayment {
+  id              Int      @id @default(autoincrement())
+  creditNoteId    Int
+  paymentMethodId Int
+  
+  amount          Decimal  @db.Decimal(15, 2)
+  reference       String?  // Referencia bancaria si es Zelle
+  createdAt       DateTime @default(now())
+
+  exchangeRateId  Int      // La tasa usada para la conversión
+  exchangeRate    ExchangeRate @relation(fields: [exchangeRateId], references: [id])
+
+  // --- EL TRUCO DE MAGIA ---
+  // Relacionamos el pago con la caja.
+  // Si es EFECTIVO, llenamos este campo. Si es ZELLE, lo dejamos null.
+  cashRegisterId  Int?     
+  cashRegister    CashRegister? @relation(fields: [cashRegisterId], references: [id])
+
+  creditNote      CreditNote    @relation(fields: [creditNoteId], references: [id])
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+}
 
 model SaleItem {
   id                    Int     @id @default(autoincrement())
@@ -501,8 +524,9 @@ model SalePayment {
   paymentMethodId Int
   paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
   amount          Decimal       @db.Decimal(15, 2)
-  //currency        String // Moneda del pago (ej: USD)
+
   exchangeRateId  Int // Si pagaron en Bs, qué tasa se usó
+
   reference       String // Nro de referencia bancaria
   date            DateTime      @default(now())
 
@@ -638,6 +662,7 @@ model CashRegister {
   member   BusinessMember @relation(fields: [memberId], references: [id])
   counts   CashCount[]
   payments SalePayment[] // Relación inversa
+  refunds CreditNotePayment[] // Relación inversa
 }
 
 model CashCount {
@@ -663,6 +688,7 @@ model PaymentMethod {
   // Relaciones con los pagos realizados
   salePayments     SalePayment[]
   purchasePayments PurchasePayment[]
+  creditNotePayments CreditNotePayment[]
 
   @@unique([name]) // Evita que creen dos veces "Zelle Banesco"
 }
