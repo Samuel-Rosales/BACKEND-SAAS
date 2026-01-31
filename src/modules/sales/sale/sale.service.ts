@@ -1024,7 +1024,7 @@ export class SaleService {
 
                     tx.exchangeRate.findUnique({ where: { id: currentRateRecord.id } }),
 
-                    tx.sale.findUnique({ where: { id: saleId, businessId } }),
+                    tx.sale.findUnique({ where: { id: saleId, businessId }, include: { client: true } }),
 
                     tx.paymentMethod.findUnique({ where: { id: data.paymentMethodId } })
                 ]);
@@ -1100,35 +1100,40 @@ export class SaleService {
                         // Si se acabó el dinero, paramos
                         if (moneyDistributor.lte(new Decimal(0.01))) break;
 
-                        const amountOfQuota = new Decimal(inst.amount);
+                        const totalAmount = new Decimal(inst.amount);
+                        const alreadyPaid = new Decimal(inst.amountPaid);
 
-                        // ¿Podemos pagar esta cuota completa?
-                        // Si Dinero >= Cuota - 0.01
-                        if (moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01))) || inst.amountPaid.add(moneyDistributor).gte(amountOfQuota)) {
-  
-                            await tx.purchaseInstallment.update({
-                                where: { id: inst.id },
-                                data: { 
-                                    status: InstallmentStatus.PAID,
-                                    amountPaid: moneyDistributor.gte(amountOfQuota.sub(new Decimal(0.01))) ? amountOfQuota : inst.amountPaid.add(moneyDistributor),
-                                    paidAt: new Date()
-                                }
-                            });
-                            
-                            // Restamos lo que costó la cuota de nuestra bolsa
-                            moneyDistributor = moneyDistributor.sub(amountOfQuota);
+                        // A. Calculamos cuánto falta para liquidar ESTA cuota
+                        const missingAmount = totalAmount.sub(alreadyPaid);
+
+                        // B. Decidimos cuánto vamos a abonar AHORA
+                        // Es el mínimo entre: Lo que tengo disponible VS Lo que falta
+                        let amountToPayNow: Decimal;
+
+                        if (moneyDistributor.gte(missingAmount)) {
+                            amountToPayNow = missingAmount; // Pago lo que falta completo
                         } else {
+                            amountToPayNow = moneyDistributor; // Pago todo lo que me queda
+                        }
 
-                            await tx.purchaseInstallment.update({
-                                where: { id: inst.id },
-                                data: {
-                                    status: InstallmentStatus.PARTIAL,
-                                    amountPaid: inst.amountPaid.add(moneyDistributor),
-                                }
-                            });
+                        // C. Calculamos el nuevo total pagado
+                        const newAmountPaid = alreadyPaid.add(amountToPayNow);
+                        
+                        // D. Determinamos si se liquidó (con tolerancia de centavos)
+                        // Usamos 0.005 para evitar problemas de redondeo en el último decimal
+                        const isFullyPaid = newAmountPaid.gte(totalAmount.sub(new Decimal(0.002)));
 
-                            moneyDistributor = moneyDistributor.sub(moneyDistributor);
-                        } 
+                        await tx.saleInstallment.update({
+                            where: { id: inst.id },
+                            data: {
+                                status: isFullyPaid ? InstallmentStatus.PAID : InstallmentStatus.PARTIAL,
+                                amountPaid: newAmountPaid,
+                                paidAt: isFullyPaid ? new Date() : undefined
+                            }
+                        });
+
+                        // E. Reducimos el dinero disponible
+                        moneyDistributor = moneyDistributor.sub(amountToPayNow);
                     }
                 }
 
@@ -1136,7 +1141,7 @@ export class SaleService {
                 // 7. Actualización Global (Saldo y Estado de Venta)
                 // =================================================================
 
-                let newBalance = sale.remainingBalance.sub(paymentInBaseCurrency);
+                let newBalance = currentDebt.sub(paymentInBaseCurrency);
 
                 newBalance = newBalance.lt(0) ? new Decimal(0) : newBalance;
         
@@ -1156,6 +1161,13 @@ export class SaleService {
                     data: {
                         remainingBalance: newBalance,
                         paymentStatus: newStatus
+                    }
+                });
+
+                await tx.client.update({
+                    where: { id: sale.client.id }, // Usamos el objeto 'client' que cargamos al principio
+                    data: { 
+                        currentDebt: { decrement: paymentInBaseCurrency } 
                     }
                 });
         
@@ -1341,7 +1353,8 @@ export class SaleService {
                     // ✅ Fetch Installments to show the plan
                     installments: {
                         orderBy: { number: 'asc' }
-                    }
+                    },
+                    client: { select: { name: true } }
                 }
             });
 
@@ -1397,7 +1410,7 @@ export class SaleService {
                     saleInfo: {
                         receiptNumber: sale.receiptNumber,
                         status: sale.paymentStatus,
-                        clientName: "Cliente" // You might want to fetch this too if needed
+                        clientName: sale.client.name
                     },
                     summary: {
                         totalDebt: Number(sale.totalAmount),

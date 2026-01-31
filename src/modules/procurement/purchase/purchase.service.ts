@@ -568,11 +568,30 @@ export class PurchaseService {
 
     async addPayment(businessId: number, purchaseId: number, data: CreatePaymentDto) {
         try {
+            // =================================================================
+            // FASE 0: AUTORIDAD DE TASA (ANTI-SORPRESAS)
+            // =================================================================
+            // Buscamos la tasa activa "REAL" en la base de datos para este negocio
+            // Asumimos que tienes un campo 'isActive' o te basas en la fecha más reciente
+            const currentRateRecord = await resolveBusinessExchangeRate(businessId, prisma);
+
+            if (!currentRateRecord) {
+                return { status: 400, message: 'No hay una tasa de cambio configurada en el sistema.', data: null };
+            }
+
+            // Validación estricta: El ID que manda el front DEBE ser el ID de la tasa actual
+            if (data.exchangeRateId && data.exchangeRateId !== currentRateRecord.id) {
+                return { 
+                    status: 409, // Conflict
+                    message: 'La tasa de cambio ha variado durante la operación. Por favor recargue.', 
+                    data: { newRate: currentRateRecord.rate } 
+                };
+            }
+
             const result = await prisma.$transaction(async (tx) => {
 
                 // 1. Consultas Iniciales
-                const [exchangeRate, purchase, paymentMethod] = await Promise.all([
-                    tx.exchangeRate.findUnique({ where: { id: data.exchangeRateId } }),
+                const [purchase, paymentMethod] = await Promise.all([
 
                     tx.purchase.findUnique({ where: { id: purchaseId, businessId } }),
 
@@ -585,15 +604,13 @@ export class PurchaseService {
                 if (purchase.paymentStatus === PaymentStatus.PAID) { 
                     throw new BusinessError("Esta compra ya está pagada por completo", 400);
                 }
-                
-                if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
 
                 if (!paymentMethod) throw new BusinessError("Método de pago inválido", 400);
 
                 // 3. Normalización (USD Base)
                 let paymentInBaseCurrency = new Decimal(data.amount); // Monto enviado por frontend
 
-                const rate = new Decimal(exchangeRate.rate);
+                const rate = new Decimal(currentRateRecord.rate);
 
                 // Conversión de Moneda
                 if (paymentMethod.currency !== Currency.USD) {
@@ -622,7 +639,7 @@ export class PurchaseService {
                     data: {
                         purchaseId,
                         paymentMethodId: data.paymentMethodId,
-                        exchangeRateId: exchangeRate.id,
+                        exchangeRateId: currentRateRecord.id,
                         amount: new Decimal(data.amount), // Guardamos el monto original (ej: 1000 Bs)
                         reference: data.reference || "N/A"
                     }
