@@ -940,6 +940,7 @@ export class SaleService {
 
                 // --- Tasa de Cambio de la Venta ---
                 exchangeRate: sale.exchangeRate ? Number(sale.exchangeRate.rate) : null,
+                exchangeRateId: sale.exchangeRateId,
 
                 // --- ITEMS (Lo más crítico) ---
                 items: sale.items.map(item => {
