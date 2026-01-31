@@ -450,7 +450,7 @@ export class SaleService {
                         saleItem.id, 
                         item.product, 
                         item.quantityToDeductFromStock,
-                        data.depotId
+                        item.depotId || data.depotId || 0 // Use item specific depot, or sale default, or 0 (global search logic)
                     );
                 }
 
