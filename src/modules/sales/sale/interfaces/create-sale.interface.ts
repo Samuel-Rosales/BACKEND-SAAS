@@ -41,4 +41,7 @@ export interface CreateSaleInterface {
     payments: CreateSalePaymentDto[]; // Puede estar vacío si es Crédito total
     
     paymentDueDate?: Date | string; // Fecha límite general (para reportes rápidos)
+    totalAmount?: Decimal; // Monto total final (para validación)
+    subTotal?: Decimal; // Monto subtotal (para validación)
+    taxAmount?: Decimal; // Monto total de impuestos (para validación)
 }

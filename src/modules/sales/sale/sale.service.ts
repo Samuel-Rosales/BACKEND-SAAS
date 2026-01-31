@@ -96,10 +96,13 @@ export class SaleService {
                 let presentationUsed = null;
 
                 if (item.productPresentationId) {
+
                     presentationUsed = product.presentations.find(p => p.id === item.productPresentationId);
+
                     if (!presentationUsed) throw new BusinessError(`Presentación inválida`, 400);
                     
                     factor = new Decimal(presentationUsed.factor);
+
                     unitPrice = new Decimal(presentationUsed.price).greaterThan(0) 
                         ? new Decimal(presentationUsed.price) 
                         : new Decimal(product.salePrice).mul(factor);
@@ -159,13 +162,13 @@ export class SaleService {
                 
                 // Validamos si existe tax y si el rate es válido. 
                 // Convertimos tax.rate a Decimal por seguridad.
-                const taxRate = item.product.tax?.rate ? new Decimal(item.product.tax.rate) : new Decimal(0);
+                const taxRate = item.product.tax.rate ? new Decimal(item.product.tax.rate) : new Decimal(0);
 
                 // rate > 0 ---> .gt(0)
                 if (taxRate.gt(0)) {
                     // Fórmula: Base * (Tasa / 100)
-                    // Ejemplo: 100 * (16 / 100) = 16
-                    lineTax = lineNetAmount.mul(taxRate.div(100));
+                    // Ejemplo: 100 * 0.16 = 16
+                    lineTax = lineNetAmount.mul(taxRate);
                 }
 
                 // ---------------------------------------------------------
@@ -205,6 +208,7 @@ export class SaleService {
 
             for (const pay of data.payments) {
                 const method = validMethods.find(pm => pm.id === pay.paymentMethodId);
+
                 if (!method) throw new BusinessError(`Método de pago ID ${pay.paymentMethodId} inválido`, 400);
 
                 // Convertimos el input del usuario a Decimal de inmediato
@@ -328,6 +332,24 @@ export class SaleService {
                     : PaymentStatus.PENDING;
             }
 
+            // 1. Aseguramos que los datos entrantes sean instancias de Decimal
+            // Si data.totalAmount es un número o string, 'new Decimal()' lo convierte en objeto con métodos.
+            const incomingTotal = new Decimal(data.totalAmount || 0);
+            const incomingSubTotal = new Decimal(data.subTotal || 0);
+            const incomingTax = new Decimal(data.taxAmount || 0);
+
+            // 2. Ahora sí podemos usar .sub() con seguridad
+            const differenceTotalAmount = incomingTotal.sub(totalAmount).abs();
+            const differenceSubTotal = incomingSubTotal.sub(finalSubTotal).abs();
+            const differenceTaxAmount = incomingTax.sub(finalTaxAmount).abs();
+
+            // 3. Validación
+            if (differenceTotalAmount.gt(EPSILON) || differenceSubTotal.gt(EPSILON) || differenceTaxAmount.gt(EPSILON)) {
+                throw new BusinessError(
+                    `Discrepancia en totales: Recibido ${incomingTotal.toString()} vs Calculado ${totalAmount.toString()}`, 
+                    400
+                );
+            }
             // =================================================================
             // FASE 4: TRANSACCIÓN ATÓMICA (ESCRITURA EN DB)
             // =================================================================
