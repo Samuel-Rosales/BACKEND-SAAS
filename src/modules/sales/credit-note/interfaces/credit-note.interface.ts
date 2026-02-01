@@ -1,12 +1,6 @@
 import { Product, SaleItem, SaleItemLot } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/client";
 
-export interface CreditNoteItemInput {
-    productId: number;
-    quantity: number;
-    returnToStock: boolean; 
-}
-
 export interface CreateCreditNoteInterface {
     saleId: number;
     reason: string;
@@ -15,9 +9,15 @@ export interface CreateCreditNoteInterface {
     refundPayments?: CreditNotePaymentInterface[];
 }
 
+export interface CreditNoteItemInput {
+    productId: number;
+    quantity: Decimal;
+    returnToStock: boolean; 
+}
+
 export interface CreditNotePaymentInterface {
     paymentMethodId: number;
-    amount: number;
+    amount: Decimal;
     reference?: string;
     
     cashRegisterId?: number;

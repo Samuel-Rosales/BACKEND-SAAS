@@ -22,10 +22,99 @@ Base URL: `/api/v1/inventory/product`
 ### 1. Crear Producto
 
 Registra un nuevo producto en el catálogo. Soporta la creación transaccional de **Productos Compuestos (Recetas)** en un solo paso.
+# Módulo Inventory - Productos (v3)
+
+Base URL: `/api/v1/inventory/product`
+
+**Autenticación:** Requerida (Bearer Token)
+
+**Header multi-tenant (requerido):** `x-business-id: <number>`
+
+---
+
+## Contrato común (frontend)
+
+### Envelope de respuesta
+
+Todos los endpoints responden con el mismo envelope:
+
+```json
+{
+  "status": 200,
+  "message": "...",
+  "data": {}
+}
+```
+
+En errores se mantiene el envelope, con `data: null`:
+
+```json
+{
+  "status": 400,
+  "message": "...",
+  "data": null
+}
+```
+
+### Importante: Decimals de Prisma en JSON
+
+En este módulo hay endpoints que devuelven **objetos Prisma “crudos”** (con `Decimal`). En JSON, esos valores normalmente llegan como **string**.
+
+Regla práctica para el frontend:
+
+- `GET /` (listar): precios/márgenes/factores suelen venir como **string**.
+- `GET /:id` (detalle): varios campos financieros vienen como **number** (sanitizado con `Decimal(...).toNumber()`).
+- `POST /` (create) y `PATCH /:id` (update): devuelven Prisma crudo → decimales típicamente como **string**.
+
+---
+
+## ✅ Resumen de endpoints
+
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `POST` | `/` | Crear producto (SIMPLE/COMPOSITE/SERVICE) |
+| `GET` | `/` | Listar productos (con `currentStock` calculado + filtros) |
+| `GET` | `/:id` | Obtener un producto (detalle sanitizado + receta + stockByDepot) |
+| `PATCH` | `/:id` | Actualizar producto (datos y/o receta, recalcula costo y puede recalcular precio) |
+| `DELETE` | `/:id` | Eliminar inteligente (bloqueo por stock / soft delete / hard delete) |
+
+---
+
+## Tipos (shape esperado)
+
+### ProductType
+
+- `SIMPLE`: producto físico (maneja lotes y stock real)
+- `COMPOSITE`: receta/combo/kit (stock calculado por “factor limitante”)
+- `SERVICE`: intangible (stock siempre 0)
+
+### Stock por depósito (`stockByDepot`)
+
+Este módulo devuelve el stock agrupado por depósito en un array:
+
+```ts
+type StockLotSummary = {
+  quantity: number;
+  expirationDate: string; // ISO (DateTime)
+  lotCost: number;        // actualmente no se expone el costo real (ver nota)
+}
+
+type DepotStockSummary = {
+  depotId: number;
+  name: string;
+  stockLots: StockLotSummary[];
+}
+```
+
+Nota importante: aunque el objeto incluye `lotCost`, la implementación actual **no está exponiendo el costo real** en este módulo, por lo que el frontend debe tratarlo como informativo/0.
+
+---
+
+## 1) Crear producto
 
 **Endpoint:** `POST /api/v1/inventory/product`
 
-#### Request Body (Producto Simple)
+### Body (SIMPLE / SERVICE)
 
 ```json
 {
@@ -34,57 +123,55 @@ Registra un nuevo producto en el catálogo. Soporta la creación transaccional d
   "description": "Harina de maíz precocida",
   "imageUrl": "https://...",
   "categoryId": 5,
-  "unitId": 1, // Unidad base (ej: Kg o Unidad)
+  "unitId": 1,
   "taxId": 1,
-  
-  // Clasificación
-  "type": "SIMPLE", // "SIMPLE" | "COMPOSITE" | "SERVICE"
+  "type": "SIMPLE",
   "isPerishable": true,
-
-  // Finanzas
-  "costPrice": 1.00,
-  "profitMargin": 0.30,
-  "salePrice": 1.30,
+  "costPrice": 1.0,
+  "profitMargin": 0.3,
+  "salePrice": 1.3,
   "minStock": 10
 }
-
 ```
 
-#### Request Body (Producto Compuesto / Receta)
-
-*Ejemplo: Una Hamburguesa que descuenta Pan y Carne.*
+### Body (COMPOSITE / receta)
 
 ```json
 {
   "name": "Hamburguesa Clásica",
   "sku": "FOOD-HAM-001",
+  "description": "",
+  "imageUrl": null,
   "categoryId": 10,
-  "unitId": 1, 
+  "unitId": 1,
   "taxId": 2,
-  
-  "type": "COMPOSITE", // <--- IMPORTANTE
-  "isPerishable": false, // El plato servido no vence en stock (se cocina al momento)
-  
-  "costPrice": 2.50, // Costo calculado (puede ser manual o auto-sumado)
-  "profitMargin": 0.50,
-  "salePrice": 5.00,
-
-  // La Receta: Qué se descuenta del inventario al vender esto
+  "type": "COMPOSITE",
+  "isPerishable": false,
+  "costPrice": 2.5,
+  "profitMargin": 0.5,
+  "salePrice": 5.0,
   "components": [
-    { "childProductId": 50, "quantity": 1 },   // 1 Pan
-    { "childProductId": 51, "quantity": 0.200 } // 0.200 Kg de Carne (200g)
+    { "childProductId": 50, "quantity": 1 },
+    { "childProductId": 51, "quantity": 0.2 }
   ]
 }
-
 ```
 
-#### Validaciones
+### Validaciones y errores
 
-* **SKU:** Debe ser único dentro del negocio.
-* **Relaciones:** `categoryId`, `unitId`, `taxId` deben existir.
-* **Recetas:** Si `type === COMPOSITE`, el array `components` es obligatorio y sus ingredientes (`childProductId`) deben existir y pertenecer al negocio.
+- `404`: negocio / categoría / unidad / impuesto no encontrados
+- `400`: SKU duplicado dentro del negocio
+- `400`: si `type = COMPOSITE` y `components` viene vacío o con IDs repetidos o ingredientes inválidos
 
-#### Response (201 Created)
+### Response (201)
+
+Devuelve el producto **tal como lo crea Prisma**, incluyendo:
+
+- Todos los campos escalares del modelo `Product` (ej: `id`, `businessId`, `categoryId`, `unitId`, `taxId`, `name`, `sku`, `type`, `costPrice`, `salePrice`, `profitMargin`, `minStock`, `updatedAt`, `isActive`, `updatedById`, etc.)
+- `unit`: `{ symbol }`
+- `components`: si es composite, array de `ProductComponent` con `child: { id, name }`
+
+Ejemplo reducido:
 
 ```json
 {
@@ -94,100 +181,157 @@ Registra un nuevo producto en el catálogo. Soporta la creación transaccional d
     "id": 100,
     "name": "Hamburguesa Clásica",
     "type": "COMPOSITE",
-    "currentStock": 0, // Inicia en 0 hasta que haya producción o compra
+    "costPrice": "2.500000",
+    "salePrice": "5.00",
+    "profitMargin": "0.5000",
+    "unit": { "symbol": "und" },
     "components": [
-       { "childProductId": 50, "quantity": 1, "child": { "name": "Pan" } }
+      {
+        "id": 1,
+        "parentProductId": 100,
+        "childProductId": 50,
+        "quantity": "1.000000",
+        "child": { "id": 50, "name": "Pan" }
+      }
     ]
   }
 }
-
 ```
 
 ---
 
-### 2. Listar Productos
-
-Obtiene el catálogo con paginación y **Stock Actual Calculado** (suma de lotes).
+## 2) Listar productos
 
 **Endpoint:** `GET /api/v1/inventory/product`
 
-#### Query Params
+### Query params
 
-* `page`: number (def: 1)
-* `limit`: number (def: 20)
-* `search`: string (Busca por nombre o SKU)
-* `categoryId`: number (Filtrar por categoría)
+- `page` (number, default 1)
+- `limit` (number, default 20)
+- `search` (string): busca por `name` o `sku` (case-insensitive)
+- `categoryId` (number): filtra por categoría
 
-#### Response (200 OK)
+### Qué calcula el backend
+
+- `currentStock`:
+  - `SERVICE`: `0`
+  - `SIMPLE`: suma de lotes con `quantity > 0`
+  - `COMPOSITE`: “factor limitante” (mínimo de `stockIngrediente / qtyReceta`, con `floor`)
+
+### Response (200)
+
+Cada item en `data[]` incluye:
+
+- Todos los campos escalares del modelo `Product`.
+- `category`: `{ id, name }`
+- `unit`: `{ id, symbol }`
+- `presentations`: array completo de `ProductPresentation` (incluye `price` y `factor` como string/Decimal)
+- `tax`: `{ id, name, rate }` (rate normalmente string/Decimal)
+- `currentStock`: number
+- `stockByDepot`: `DepotStockSummary[]` (solo lotes con `quantity > 0`)
+
+Campos **no incluidos** en el response de lista:
+
+- `stockLots` (se usa internamente para calcular/agrupación)
+- `components` (se usa internamente para calcular stock de compuestos)
+
+Ejemplo reducido:
 
 ```json
 {
-  "message": "Productos obtenidos exitosamente",
   "status": 200,
+  "message": "Productos obtenidos exitosamente",
   "data": [
-    // CASO A: PRODUCTO SIMPLE (Físico)
-    // El stock es la SUMA de sus lotes reales.
     {
       "id": 101,
+      "businessId": 1,
+      "categoryId": 5,
+      "unitId": 1,
+      "taxId": 1,
       "name": "Coca Cola 1.5L",
       "sku": "BEB-001",
       "type": "SIMPLE",
       "isPerishable": true,
+      "costPrice": "1.200000",
+      "profitMargin": "0.3000",
       "salePrice": "2.50",
-      "unit": { "id": 1, "symbol": "und" },
+      "minStock": 10,
+      "isActive": true,
+      "updatedAt": "2026-02-01T12:00:00.000Z",
+      "updatedById": 7,
       "category": { "id": 5, "name": "Bebidas" },
-      
-      // La magia: El backend sumó los lotes y te devolvió solo el total
-      "currentStock": 150 
-    },
-
-    // CASO B: PRODUCTO COMPUESTO (Receta/Combo)
-    // El stock es CÁLCULADO (Factor Limitante).
-    // Ej: Tienes 100 panes y 12 carnes -> Stock = 12.
-    {
-      "id": 205,
-      "name": "Hamburguesa Royal",
-      "sku": "PLATO-055",
-      "type": "COMPOSITE",
-      "isPerishable": false, 
-      "salePrice": "8.00",
       "unit": { "id": 1, "symbol": "und" },
-      "category": { "id": 8, "name": "Comida Rápida" },
-
-      // La magia: El backend revisó la receta, dividió el stock de ingredientes
-      // y te dijo "Solo puedes fabricar 12 ahora mismo".
-      "currentStock": 12 
-    },
-
-    // CASO C: SERVICIO
-    {
-      "id": 300,
-      "name": "Delivery Zona Centro",
-      "sku": "SRV-001",
-      "type": "SERVICE",
-      "currentStock": 0 // NO TIENEN
+      "tax": { "id": 1, "name": "IVA", "rate": "0.1600" },
+      "presentations": [],
+      "currentStock": 150,
+      "stockByDepot": [
+        {
+          "depotId": 1,
+          "name": "Almacén Central",
+          "stockLots": [
+            { "quantity": 10, "expirationDate": "2026-05-01T00:00:00.000Z", "lotCost": 0 }
+          ]
+        }
+      ]
     }
   ],
-  "meta": {
-    "total": 3,
-    "page": 1,
-    "limit": 20
-  }
+  "meta": { "total": 1, "page": 1, "lastPage": 1, "limit": 20 }
 }
-
 ```
 
 ---
 
-### 3. Obtener Producto (Detalle)
-
-Devuelve la radiografía completa del producto.
+## 3) Obtener producto (detalle)
 
 **Endpoint:** `GET /api/v1/inventory/product/:id`
 
-#### Response (200 OK)
+### Response (200)
 
-**Nota:** Este endpoint retorna un objeto **sanitizado** para el frontend (no devuelve lotes completos).
+Este endpoint retorna un objeto **sanitizado** (más estable para frontend):
+
+```ts
+type ProductDetailResponse = {
+  id: number;
+  name: string;
+  sku: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  type: "SIMPLE" | "COMPOSITE" | "SERVICE";
+  isPerishable: boolean;
+
+  salePrice: number;
+  costPrice: number;
+  profitMargin: number;
+  minStock: number;
+  currentStock: number;
+
+  category: { id: number; name: string };
+  unit: { id: number; name: string; symbol: string };
+
+  presentations: Array<{
+    id: number;
+    productId: number;
+    name: string;
+    factor: number;
+    barCode: string | null;
+    price: number;
+    isActive: boolean;
+  }>;
+
+  components: Array<{
+    id: number;              // id de ProductComponent
+    childProductId: number;  // id del ingrediente
+    ingredientName: string;
+    sku: string | null;
+    quantity: number;
+    unitSymbol: string;
+  }>;
+
+  stockByDepot: DepotStockSummary[];
+}
+```
+
+Ejemplo reducido:
 
 ```json
 {
@@ -201,92 +345,108 @@ Devuelve la radiografía completa del producto.
     "imageUrl": null,
     "type": "COMPOSITE",
     "isPerishable": false,
-
-    "price": 5,
+    "salePrice": 5,
+    "costPrice": 2.5,
+    "profitMargin": 0.5,
     "minStock": 0,
-    "currentStock": 0,
-
+    "currentStock": 12,
     "category": { "id": 10, "name": "Comida" },
     "unit": { "id": 1, "name": "Unidad", "symbol": "und" },
-
-    "presentations": [
-      { "id": 5, "name": "Pack x6", "factor": 6, "price": 30 }
-    ],
-
+    "presentations": [],
     "components": [
       {
         "id": 1,
-        "ingredientName": "Pan Burger",
-        "quantityRequired": 1,
+        "childProductId": 50,
+        "ingredientName": "Pan",
+        "sku": "PAN-001",
+        "quantity": 1,
         "unitSymbol": "und"
       }
     ],
-
-    "stockByDepot": {
-      "Almacén Central": 10
-    }
+    "stockByDepot": []
   }
 }
 ```
 
+Errores:
+
+- `404`: producto no encontrado
+
 ---
 
-### 4. Actualizar Producto
-
-Permite editar datos básicos y **reconfigurar la receta** (si aplica).
+## 4) Actualizar producto
 
 **Endpoint:** `PATCH /api/v1/inventory/product/:id`
 
-#### Lógica de Actualización de Recetas
+### Body
 
-Si el producto es `COMPOSITE` y envías el array `components`, el sistema:
+Es un `Partial<CreateProductInterface>`; puedes enviar cualquier subset de campos. Ejemplos:
 
-1. **Borra** los ingredientes anteriores de este producto.
-2. **Crea** las nuevas relaciones con las nuevas cantidades.
-*Esto permite editar recetas completas simplemente enviando la nueva versión.*
+Actualizar precio manual:
 
-#### Request Body
+```json
+{ "salePrice": 6.0 }
+```
+
+Actualizar receta (reemplazo completo):
 
 ```json
 {
-  "salePrice": 6.00,
-  "components": [ // Receta actualizada (más carne)
+  "type": "COMPOSITE",
+  "components": [
     { "childProductId": 50, "quantity": 1 },
-    { "childProductId": 51, "quantity": 0.250 } 
+    { "childProductId": 51, "quantity": 0.25 }
   ]
 }
-
 ```
+
+### Comportamiento importante
+
+- Si se envía `components` y el producto es (o pasa a ser) `COMPOSITE`, el backend:
+  - recalcula `costPrice` basado en costos actuales de ingredientes
+  - reemplaza ingredientes: borra los anteriores y crea los nuevos
+- Si no envías `salePrice`, el backend recalcula `salePrice` usando el margen (`profitMargin`) y el costo final.
+- Si cambias de `COMPOSITE` a `SIMPLE`, borra la receta (`components`).
+
+### Response (200)
+
+Devuelve Prisma crudo del `product.update(...)` con:
+
+- campos escalares del producto (decimales usualmente string)
+- `category` (objeto completo)
+- `unit` (objeto completo)
+- `components` (si aplica) con `child: { id, name, unit: { symbol } }`
+
+Errores:
+
+- `404`: producto no encontrado
+- `400`: categoría/unidad inválida, SKU ya en uso, ingredientes inválidos
 
 ---
 
-### 5. Eliminar Producto (Smart Delete)
-
-Aplica una lógica híbrida de seguridad para proteger la integridad contable.
+## 5) Eliminar producto (smart delete)
 
 **Endpoint:** `DELETE /api/v1/inventory/product/:id`
 
-#### Escenario A: Bloqueo por Stock (409 Conflict)
+### Reglas y respuestas
 
-Si el producto tiene existencias físicas (`stockLots > 0`), **no se puede eliminar ni archivar**.
+1) `404` si no existe.
 
-> *Solución:* El usuario debe hacer un "Ajuste de Salida" para llevar el stock a 0 primero.
+2) `409` si tiene stock físico (lotes con `quantity > 0`):
 
-#### Escenario B: Archivar (Soft Delete)
+```json
+{
+  "status": 409,
+  "message": "No puedes eliminar ni archivar un producto con existencia física. Ajusta el inventario a 0 primero.",
+  "data": null
+}
+```
 
-Si el producto tiene historial (se ha vendido, comprado o movido) pero ya no tiene stock:
+3) Si no tiene stock físico pero tiene historial (ventas/compras/movimientos): **archiva** (`isActive=false`) y retorna el producto actualizado.
 
-* **Acción:** `isActive = false`
-* **Mensaje:** "Producto archivado correctamente (Se mantiene el historial contable)"
+4) Si no tiene stock físico ni historial: **borra físicamente** y retorna `data: null`.
 
-#### Escenario C: Borrado Físico (Hard Delete)
-
-Si el producto se creó por error, nunca se movió y no tiene stock:
-
-* **Acción:** `DELETE FROM DB`
-* **Mensaje:** "Producto eliminado permanentemente"
-
-#### Response (Ejemplo Archivar)
+Response (archivar):
 
 ```json
 {
@@ -297,15 +457,14 @@ Si el producto se creó por error, nunca se movió y no tiene stock:
     "isActive": false
   }
 }
-
 ```
 
----
+Response (hard delete):
 
-## ⚠️ Enums Importantes (Frontend)
-
-**ProductType:**
-
-* `SIMPLE`: Producto físico estándar (se compra, almacena y vende).
-* `COMPOSITE`: Producto lógico (Receta, Combo, Kit). Su stock depende de sus ingredientes.
-* `SERVICE`: Intangible (Envío, Mano de obra). No maneja stock.
+```json
+{
+  "status": 200,
+  "message": "Producto eliminado permanentemente (Sin historial previo)",
+  "data": null
+}
+```
