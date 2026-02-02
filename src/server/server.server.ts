@@ -61,8 +61,9 @@ export class Server {
 
     private middlewares() {
         this.app.use(cors({
-            origin: "*",
-            methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+            origin: process.env.FRONTEND_URL,
+            methods: ['GET', 'POST', 'PUT', 'DELETE'],
+            credentials: true
         }));
         this.app.use(express.json());
         this.app.use(express.static("src/public"));
