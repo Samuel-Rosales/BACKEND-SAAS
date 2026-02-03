@@ -61,7 +61,8 @@ export class Server {
 
     private middlewares() {
         this.app.use(cors({
-            methods: ['GET', 'POST', 'PUT', 'DELETE'],
+            origin: "*",
+            methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
             credentials: true
         }));
         this.app.use(express.json());
