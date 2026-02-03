@@ -70,6 +70,17 @@ export class Server {
     }
 
     private routes() {
+        this.app.get('/', (req, res) => {
+            res.status(200).json({ 
+                status: 'online', 
+                message: 'Backend SaaS is running correctly' 
+            });
+        });
+
+        this.app.get('/health', (req, res) => {
+            res.status(200).send('OK');
+        });
+
         this.app.use(this.paths.users, UserRoute);
         this.app.use(this.paths.roles, RoleRoute);
         this.app.use(this.paths.auth, AuthRoute);
@@ -97,6 +108,15 @@ export class Server {
         this.app.use(this.paths.clients, ClientRoute);
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
+
+        this.app.use('*', (req, res) => {
+            console.log(`[404 ERROR] Se intentó acceder a: ${req.originalUrl}`);
+            res.status(404).json({ 
+                error: 'Not Found', 
+                requestedPath: req.originalUrl,
+                validPrefix: this.prefix 
+            });
+        });
     }
 
     async dbConnection() {
