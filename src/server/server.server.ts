@@ -109,7 +109,7 @@ export class Server {
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
 
-        this.app.use('*', (req, res) => {
+        this.app.use((req, res) => {
             console.log(`[404 ERROR] Se intentó acceder a: ${req.originalUrl}`);
             res.status(404).json({ 
                 error: 'Not Found', 
