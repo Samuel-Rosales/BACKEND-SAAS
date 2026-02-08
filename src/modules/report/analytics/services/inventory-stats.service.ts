@@ -35,7 +35,6 @@ export class InventoryStatsService {
                     where: {
                         businessId,
                         isActive: true,
-                        type: ProductType.SIMPLE // Solo productos, no servicios
                     }
                 }),
 
