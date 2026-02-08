@@ -607,7 +607,7 @@ export class SaleService {
                         memberId: memberId,
                         depotId: lot.depotId,
                         type: 'OUT',
-                        quantity: deduction,
+                        quantity: -deduction,
                         historicalCost: lot.lotCost,
                         reason: `Venta #${saleId}`
                     }
