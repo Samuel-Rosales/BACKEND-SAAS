@@ -1,4 +1,5 @@
 import { prisma } from '@/configs';
+import { Decimal } from '@prisma/client/runtime/client';
 import { startOfMonth, endOfMonth, subMonths, getDaysInMonth, getDate } from 'date-fns';
 
 export class SalesStatsService {
@@ -54,12 +55,12 @@ export class SalesStatsService {
 
             // 3. Procesar los datos (Logica de Negocio)
             
-            const currentTotal = Number(currentMonthStats._sum.totalAmount || 0);
-            const previousTotal = Number(previousMonthStats._sum.totalAmount || 0);
+            const currentTotal = new Decimal(currentMonthStats._sum.totalAmount || 0); // Si no hay ventas, aseguramos que sea 0
+            const previousTotal = new Decimal(previousMonthStats._sum.totalAmount || 0);
 
             // Calcular Status: Si vendimos más o igual que el mes pasado a estas alturas (o en total) es 'Good'
             // Puedes ajustar esta lógica. Ej: Si currentTotal > previousTotal
-            const status = currentTotal >= previousTotal ? 'Good' : 'Warning';
+            const status = currentTotal?.gte(previousTotal) ? 'Good' : 'Warning';
 
             // 4. Generar el Array para el Gráfico (Sparkline)
             // El reto: La DB devuelve ventas sueltas, el gráfico necesita un array de 30/31 puntos (uno por día)
