@@ -367,6 +367,7 @@ model Client {
   allowCredit     Boolean @default(true)  // ¿Este cliente específico puede pedir fiado?
   useCustomLimit  Boolean @default(false) // ¿Ignoramos el límite del negocio?
   customLimit     Decimal @default(0) @db.Decimal(15, 2) // Solo se usa si useCustomLimit = true
+  createdAt       DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id])
   sales    Sale[]

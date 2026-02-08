@@ -9,8 +9,8 @@ import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRo
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute } from '../modules/finance';
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
 import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
+import { DashboardRoute } from '@/modules/report/analytics/routes/dashboard.routes';
 import { initCronJobs } from '@/cron';
-
 export class Server {
 
     public app: express.Application;
@@ -52,6 +52,7 @@ export class Server {
             clients: `${this.prefix}/sales/client`,
             sales: `${this.prefix}/sales/sale`,
             creditNotes: `${this.prefix}/sales/credit-note`,
+            reports: `${this.prefix}/report/dashboard`
         };
 
         this.dbConnection();
@@ -109,6 +110,7 @@ export class Server {
         this.app.use(this.paths.clients, ClientRoute);
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
+        this.app.use(this.paths.reports, DashboardRoute);
 
         this.app.use((req, res) => {
             console.log(`[404 ERROR] Se intentó acceder a: ${req.originalUrl}`);
