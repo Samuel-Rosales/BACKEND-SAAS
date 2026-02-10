@@ -4,7 +4,7 @@ import morgan from 'morgan';
 import { stream, connectDB } from '../configs';
 
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } from '../modules/aim';
-import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute } from '../modules/platform';
+import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, AdminRoute } from '../modules/platform';
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute } from '../modules/finance';
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
@@ -18,7 +18,7 @@ export class Server {
     private apiUrl: string;
     private prefix: string;
     private paths: any;
-    
+
     constructor() {
         this.app = express();
         this.apiPort = process.env.API_PORT || "3000";
@@ -52,7 +52,8 @@ export class Server {
             clients: `${this.prefix}/sales/client`,
             sales: `${this.prefix}/sales/sale`,
             creditNotes: `${this.prefix}/sales/credit-note`,
-            reports: `${this.prefix}/report/dashboard`
+            reports: `${this.prefix}/report/dashboard`,
+            admin: `${this.prefix}/admin`
         };
 
         this.dbConnection();
@@ -73,9 +74,9 @@ export class Server {
 
     private routes() {
         this.app.get('/', (req, res) => {
-            res.status(200).json({ 
-                status: 'online', 
-                message: 'Backend SaaS is running correctly' 
+            res.status(200).json({
+                status: 'online',
+                message: 'Backend SaaS is running correctly'
             });
         });
 
@@ -111,13 +112,14 @@ export class Server {
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
         this.app.use(this.paths.reports, DashboardRoute);
+        this.app.use(this.paths.admin, AdminRoute);
 
         this.app.use((req, res) => {
             console.log(`[404 ERROR] Se intentó acceder a: ${req.originalUrl}`);
-            res.status(404).json({ 
-                error: 'Not Found', 
+            res.status(404).json({
+                error: 'Not Found',
                 requestedPath: req.originalUrl,
-                validPrefix: this.prefix 
+                validPrefix: this.prefix
             });
         });
     }
@@ -125,19 +127,19 @@ export class Server {
     async dbConnection() {
         await connectDB();
     }
-    
+
     async listen() {
 
         initCronJobs();
 
         this.app.listen(this.apiPort, () => {
 
-        console.log(`🚀 Server running at ${this.apiUrl}`);
+            console.log(`🚀 Server running at ${this.apiUrl}`);
 
-        // Log opcional para ver las rutas activas al iniciar
+            // Log opcional para ver las rutas activas al iniciar
 
-        console.log(`Endpoints disponibles en ${this.prefix}/...`);
-        
+            console.log(`Endpoints disponibles en ${this.prefix}/...`);
+
         })
     }
 }
