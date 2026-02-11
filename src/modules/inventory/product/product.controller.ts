@@ -9,7 +9,7 @@ export class ProductController {
     async create(req: Request, res: Response) {
         try {
             
-            const { businessId, membershipId } = req.user;
+            const { businessId, id: userId } = req.user;
 
             if (!businessId) {
                 return res.status(400).json({
@@ -19,15 +19,15 @@ export class ProductController {
                 });
             }
 
-            if (!membershipId) {
+            if (!userId) {
                 return res.status(400).json({
                     status: 400,
-                    message: 'No se pudo resolver la membresía del usuario para este negocio. Verifica el header x-business-id y tus permisos.',
+                    message: 'El ID del usuario es obligatorio',
                     data: null
                 });
             }
 
-            const result = await service.create(businessId, membershipId, req.body);
+            const result = await service.create(businessId, userId, req.body);
 
             return res.status(result.status).json(result);
 
