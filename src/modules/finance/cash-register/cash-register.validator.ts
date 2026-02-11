@@ -1,10 +1,10 @@
 import { body, param, ValidationChain } from 'express-validator';
 
 export class CashRegisterValidator {
-  
+
     public validateOpen: ValidationChain[] = [
         // body('memberId').isInt().withMessage('ID de miembro requerido'),
-        
+
         body('initialAmount')
             .isFloat({ min: 0 }).withMessage('Monto inicial debe ser >= 0')
             .toFloat(),
@@ -20,18 +20,19 @@ export class CashRegisterValidator {
     public validateClose: ValidationChain[] = [
         param('id').isInt().toInt(),
 
+        // finalAmount is optional - will be auto-calculated if not provided
         body('finalAmount')
-            .isFloat({ min: 0 }).withMessage('Monto final requerido')
+            .optional()
+            .isFloat({ min: 0 }).withMessage('Monto final debe ser >= 0')
             .toFloat(),
-        
-        // Validación OBLIGATORIA de Array de Billetes (Cierre)
-        // Un cierre serio requiere conteo físico explícito
-        body('counts').isArray({ min: 1 }).withMessage('Debes registrar el conteo de billetes para cerrar'),
-        
-        body('counts.*.denomination').isFloat().withMessage('Denominación inválida'),
-        body('counts.*.quantity').isInt({ min: 1 }).withMessage('Cantidad debe ser entero positivo'),
-        body('counts.*.currency').isIn(['USD', 'VES']).withMessage('Moneda inválida'),
-        body('counts.*.exchangeRateId').isInt().withMessage('Tasa de cambio requerida para el conteo')
+
+        // counts is optional - can close without cash count
+        body('counts').optional().isArray().withMessage('Debe ser un arreglo de conteos'),
+
+        body('counts.*.denomination').optional().isFloat().withMessage('Denominación inválida'),
+        body('counts.*.quantity').optional().isInt({ min: 1 }).withMessage('Cantidad debe ser entero positivo'),
+        body('counts.*.currency').optional().isIn(['USD', 'VES']).withMessage('Moneda inválida'),
+        body('counts.*.exchangeRateId').optional().isInt().withMessage('Tasa de cambio requerida para el conteo')
     ];
 
     public validateId: ValidationChain[] = [

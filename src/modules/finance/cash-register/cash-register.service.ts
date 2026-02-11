@@ -185,9 +185,27 @@ export class CashRegisterService {
 
             if (!register) return { status: 404, message: 'Caja no encontrada o ya cerrada', data: null };
 
+            // Calculate final amount from system transactions if not provided
+            let finalAmount = data.finalAmount;
+
+            if (!data.counts || data.counts.length === 0) {
+                // Auto-calculate from payments
+                const paymentsTotal = await prisma.salePayment.aggregate({
+                    where: { cashRegisterId: register.id },
+                    _sum: { amount: true }
+                });
+
+                // Convert initial amount to Decimal for safe arithmetic
+                const initialAmount = new Decimal(register.initialAmount);
+                const paymentsSum = new Decimal(paymentsTotal._sum.amount || 0);
+
+                // Final amount = initial + payments
+                finalAmount = initialAmount.add(paymentsSum).toNumber();
+            }
+
             const result = await prisma.$transaction(async (tx) => {
 
-                // A. Guardar la evidencia física (Conteo de billetes)
+                // A. Guardar la evidencia física (Conteo de billetes) - OPCIONAL
                 if (data.counts && data.counts.length > 0) {
                     await tx.cashCount.createMany({
                         data: data.counts.map(c => ({
@@ -206,7 +224,7 @@ export class CashRegisterService {
                     where: { id: register.id },
                     data: {
                         status: CashStatus.CLOSED,
-                        finalAmount: data.finalAmount, // Total calculado por el front (suma de counts)
+                        finalAmount: finalAmount, // Calculated or provided
                         closeTime: data.closeTime || new Date()
                     }
                 });

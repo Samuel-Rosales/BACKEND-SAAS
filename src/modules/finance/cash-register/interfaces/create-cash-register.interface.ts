@@ -1,5 +1,5 @@
 // interfaces.ts
-import { Currency } from '@prisma/client'; 
+import { Currency } from '@prisma/client';
 
 export interface CashCountInput {
     denomination: number; // Ej: 10.00
@@ -14,7 +14,7 @@ export interface CreateCashRegisterInterface {
 }
 
 export interface CloseCashRegisterInterface {
-    finalAmount: number; // Total contado por el usuario
-    counts: CashCountInput[]; // DETALLE OBLIGATORIO (Billetes de cierre)
+    finalAmount?: number; // Optional - auto-calculated if not provided
+    counts?: CashCountInput[]; // Optional - can close without cash count
     closeTime?: Date;
 }
