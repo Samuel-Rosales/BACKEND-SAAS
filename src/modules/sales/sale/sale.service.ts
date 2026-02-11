@@ -41,17 +41,17 @@ export class SaleService {
 
             // Validación estricta: El ID que manda el front DEBE ser el ID de la tasa actual
             if (data.exchangeRateId && data.exchangeRateId !== currentRateRecord.id) {
-                return { 
+                return {
                     status: 409, // Conflict
-                    message: 'La tasa de cambio ha variado durante la operación. Por favor recargue.', 
-                    data: { newRate: currentRateRecord.rate } 
+                    message: 'La tasa de cambio ha variado durante la operación. Por favor recargue.',
+                    data: { newRate: currentRateRecord.rate }
                 };
             }
 
             // =================================================================
             // FASE 1: CARGA DE DATOS Y VALIDACIONES
             // =================================================================
-            
+
             // 1. Cargar Cliente y Vendedor
             const [client, member, business] = await Promise.all([
                 prisma.client.findFirst({ where: { id: data.clientId, businessId } }),
@@ -82,17 +82,17 @@ export class SaleService {
             // =================================================================
             // FASE 2: CÁLCULOS FINANCIEROS (PRECIOS, IVA, DESCUENTOS)
             // =================================================================
-            
+
             // 1. Pre-cálculo para determinar el Subtotal Bruto (Antes de descuentos)
             // Necesitamos esto para saber el "peso" de cada producto en la venta total
             let rawSubTotal = new Decimal(0);
 
             const preProcessedItems = data.items.map(item => {
                 const product = products.find(p => p.id === item.productId)!;
-                
+
                 // A. Manejo de Presentaciones (Cajas/Packs) y Precio Base
                 let factor = new Decimal(1);
-                let unitPrice = new Decimal(product.salePrice); 
+                let unitPrice = new Decimal(product.salePrice);
                 let presentationUsed = null;
 
                 if (item.productPresentationId) {
@@ -100,11 +100,11 @@ export class SaleService {
                     presentationUsed = product.presentations.find(p => p.id === item.productPresentationId);
 
                     if (!presentationUsed) throw new BusinessError(`Presentación inválida`, 400);
-                    
+
                     factor = new Decimal(presentationUsed.factor);
 
-                    unitPrice = new Decimal(presentationUsed.price).greaterThan(0) 
-                        ? new Decimal(presentationUsed.price) 
+                    unitPrice = new Decimal(presentationUsed.price).greaterThan(0)
+                        ? new Decimal(presentationUsed.price)
                         : new Decimal(product.salePrice).mul(factor);
                 }
 
@@ -122,7 +122,7 @@ export class SaleService {
             });
 
             // 2. Aplicación de Descuento Global (Prorrateo) y Cálculo de Impuestos
-           const globalDiscount = new Decimal(data.discount || 0);
+            const globalDiscount = new Decimal(data.discount || 0);
 
             // 2. Compara usando .gt() (Greater Than / Mayor Que)
             if (globalDiscount.gt(rawSubTotal)) {
@@ -134,12 +134,12 @@ export class SaleService {
 
             // Asumimos que rawSubTotal ya es un Decimal calculado previamente
             const processedItems = preProcessedItems.map(item => {
-                
+
                 // ---------------------------------------------------------
                 // A. Prorrateo del Descuento Global
                 // ---------------------------------------------------------
                 // Lógica: (SubtotalLinea / SubtotalTotal) * DescuentoGlobal
-                
+
                 let weight = new Decimal(0);
 
                 // rawSubTotal > 0 ---> .gt(0)
@@ -150,7 +150,7 @@ export class SaleService {
 
                 // globalDiscount * weight ---> .mul()
                 const lineDiscount = globalDiscount.mul(weight);
-                
+
                 // Base Imponible de la línea (Subtotal Neto)
                 // item.lineGrossAmount - lineDiscount ---> .sub()
                 const lineNetAmount = item.lineGrossAmount.sub(lineDiscount);
@@ -159,7 +159,7 @@ export class SaleService {
                 // B. Cálculo de IVA Individual
                 // ---------------------------------------------------------
                 let lineTax = new Decimal(0);
-                
+
                 // Validamos si existe tax y si el rate es válido. 
                 // Convertimos tax.rate a Decimal por seguridad.
                 const taxRate = item.product.tax.rate ? new Decimal(item.product.tax.rate) : new Decimal(0);
@@ -180,13 +180,13 @@ export class SaleService {
                 finalTaxAmount = finalTaxAmount.add(lineTax);
 
                 return {
-                    ...item, 
+                    ...item,
                     // Conversión segura para stock (cantidad * factor de presentación)
                     // Usamos Decimal para la multiplicacion para evitar 3 * 0.1 = 0.3000000004
                     quantityToDeductFromStock: new Decimal(item.quantity).mul(item.factor),
-                    
+
                     // Guardamos los valores finales como Decimal para la BD
-                    finalLinePrice: lineNetAmount, 
+                    finalLinePrice: lineNetAmount,
                     finalLineTax: lineTax
                 };
             });
@@ -202,8 +202,8 @@ export class SaleService {
             let totalPaidBase = new Decimal(0);
 
             // Buscamos los métodos válidos
-            const validMethods = await prisma.paymentMethod.findMany({ 
-                where: { id: { in: data.payments.map(p => p.paymentMethodId) } } 
+            const validMethods = await prisma.paymentMethod.findMany({
+                where: { id: { in: data.payments.map(p => p.paymentMethodId) } }
             });
 
             for (const pay of data.payments) {
@@ -221,12 +221,12 @@ export class SaleService {
                     // Conversión VES -> USD
                     // Fórmula: MontoVES / Tasa
                     const rate = new Decimal(currentRateRecord.rate);
-                    
+
                     // Validación anti-división por cero (Defensive Programming)
                     if (rate.equals(0)) throw new BusinessError('La tasa de cambio no puede ser 0', 500);
 
                     const convertedAmount = paymentAmount.div(rate);
-                    
+
                     totalPaidBase = totalPaidBase.add(convertedAmount);
                 }
             }
@@ -242,7 +242,7 @@ export class SaleService {
             // =================================================================
             // VALIDACIÓN DE CRÉDITO
             // =================================================================
-            
+
             // Usamos remainingBalance, que es exactamente lo que se va a crédito
             if (data.condition === Conditions.CREDIT && remainingBalance.gt(0)) {
 
@@ -257,12 +257,12 @@ export class SaleService {
                 }
 
                 // 3. CALCULAR EL LÍMITE EFECTIVO
-                const effectiveLimit = client.useCustomLimit 
-                    ? new Decimal(client.customLimit) 
+                const effectiveLimit = client.useCustomLimit
+                    ? new Decimal(client.customLimit)
                     : new Decimal(business.defaultCreditLimit);
 
                 const currentDebt = new Decimal(client.currentDebt);
-                
+
                 // 4. Validar Disponibilidad
                 const projectedDebt = currentDebt.add(remainingBalance);
 
@@ -273,7 +273,7 @@ export class SaleService {
                     const safeAvailable = available.lt(0) ? new Decimal(0) : available;
 
                     throw new BusinessError(
-                        `Límite de crédito excedido. Cupo: $${effectiveLimit.toFixed(2)}. Disponible: $${safeAvailable.toFixed(2)}. Intentas sumar: $${remainingBalance.toFixed(2)}`, 
+                        `Límite de crédito excedido. Cupo: $${effectiveLimit.toFixed(2)}. Disponible: $${safeAvailable.toFixed(2)}. Intentas sumar: $${remainingBalance.toFixed(2)}`,
                         409
                     );
                 }
@@ -289,11 +289,11 @@ export class SaleService {
                 // remainingBalance > 0.05 ---> .gt(0.05)
                 if (remainingBalance.gt(0.05)) {
                     throw new BusinessError(
-                        `Monto insuficiente para venta de Contado. Faltan $${remainingBalance.toString()}`, 
+                        `Monto insuficiente para venta de Contado. Faltan $${remainingBalance.toString()}`,
                         400
                     );
                 }
-            } 
+            }
             // B. Caso CRÉDITO (CREDIT)
             else if (data.condition === Conditions.CREDIT) {
                 if (!data.installments || data.installments.length === 0) {
@@ -302,18 +302,18 @@ export class SaleService {
 
                 // Sumatoria de Cuotas (Uso correcto de REDUCE con Decimal)
                 const totalInstallments = data.installments.reduce(
-                    (acc, curr) => acc.add(new Decimal(curr.amount)), 
+                    (acc, curr) => acc.add(new Decimal(curr.amount)),
                     new Decimal(0) // Valor inicial debe ser new Decimal(0)
                 );
 
                 // Verificación de cuadre: |TotalCuotas - Deuda| > 0.05
                 // 1. Restamos
                 const diff = totalInstallments.sub(remainingBalance);
-                
+
                 // 2. Valor Absoluto (.abs) y Comparación (.gt)
                 if (diff.abs().gt(0.01)) {
                     throw new BusinessError(
-                        `La suma de cuotas ($${totalInstallments.toString()}) no coincide con la deuda ($${remainingBalance.toString()})`, 
+                        `La suma de cuotas ($${totalInstallments.toString()}) no coincide con la deuda ($${remainingBalance.toString()})`,
                         400
                     );
                 }
@@ -327,8 +327,8 @@ export class SaleService {
             // Si la deuda es mayor a 1 centavo (tolerancia)
             if (remainingBalance.gt(0.01)) {
                 // Si ya pagó algo (mayor a 0), es PARCIAL, si no, es PENDIENTE
-                derivedPaymentStatus = totalPaidFinal.gt(0) 
-                    ? PaymentStatus.PARTIAL 
+                derivedPaymentStatus = totalPaidFinal.gt(0)
+                    ? PaymentStatus.PARTIAL
                     : PaymentStatus.PENDING;
             }
 
@@ -343,10 +343,24 @@ export class SaleService {
             const differenceSubTotal = incomingSubTotal.sub(finalSubTotal).abs();
             const differenceTaxAmount = incomingTax.sub(finalTaxAmount).abs();
 
-            // 3. Validación
-            if (differenceTotalAmount.gt(EPSILON) || differenceSubTotal.gt(EPSILON) || differenceTaxAmount.gt(EPSILON)) {
+            // 3. Validación - Solo lanzar error si hay una diferencia real mayor al epsilon
+            if (differenceTotalAmount.gt(EPSILON)) {
                 throw new BusinessError(
-                    `Discrepancia en totales: Recibido ${incomingTotal.toString()} vs Calculado ${totalAmount.toString()}`, 
+                    `Discrepancia en total: Recibido ${incomingTotal.toFixed(2)} vs Calculado ${totalAmount.toFixed(2)} (Diferencia: ${differenceTotalAmount.toFixed(2)})`,
+                    400
+                );
+            }
+
+            if (differenceSubTotal.gt(EPSILON)) {
+                throw new BusinessError(
+                    `Discrepancia en subtotal: Recibido ${incomingSubTotal.toFixed(2)} vs Calculado ${finalSubTotal.toFixed(2)} (Diferencia: ${differenceSubTotal.toFixed(2)})`,
+                    400
+                );
+            }
+
+            if (differenceTaxAmount.gt(EPSILON)) {
+                throw new BusinessError(
+                    `Discrepancia en impuestos: Recibido ${incomingTax.toFixed(2)} vs Calculado ${finalTaxAmount.toFixed(2)} (Diferencia: ${differenceTaxAmount.toFixed(2)})`,
                     400
                 );
             }
@@ -356,47 +370,47 @@ export class SaleService {
             const result = await prisma.$transaction(async (tx) => {
 
                 await this.verifyStockAvailability(tx, processedItems, data.depotId);
-                
+
                 // A. Generar Número de Factura
                 const nextReceipt = await this.generateNextReceiptNumber(tx, businessId);
-                
+
                 // B. Crear Venta
                 const sale = await tx.sale.create({
                     data: {
                         businessId,
                         memberId,
                         clientId: data.clientId,
-                        exchangeRateId: currentRateRecord.id, 
+                        exchangeRateId: currentRateRecord.id,
                         receiptNumber: nextReceipt,
-                        
+
                         type: data.type,
                         status: SaleStatus.COMPLETED,
                         conditions: data.condition,
-                        
+
                         // Pasamos los objetos Decimal DIRECTAMENTE. 
                         // Prisma sabe cómo mapear Decimal.js a la base de datos.
                         subTotal: finalSubTotal,
                         discount: globalDiscount,
                         taxAmount: finalTaxAmount,
                         totalAmount: totalAmount,
-                        
+
                         // Validación segura de saldo negativo
                         // Si remainingBalance < 0 (por error de redondeo), guardamos 0
                         remainingBalance: remainingBalance.gt(0) ? remainingBalance : new Decimal(0),
-                        
+
                         // Usamos el estado calculado arriba
                         paymentStatus: derivedPaymentStatus,
-                        
+
                         paymentDueDate: data.paymentDueDate ? new Date(data.paymentDueDate) : new Date()
                     }
                 });
-                
+
                 if (data.condition === Conditions.CREDIT && data.installments) {
 
                     let moneyDistributor = new Decimal(totalPaidFinal); // Dinero disponible para abonar
 
                     for (const inst of data.installments) {
-                        
+
                         const quotaAmount = new Decimal(inst.amount);
                         let amountToPayNow = new Decimal(0);
 
@@ -404,12 +418,12 @@ export class SaleService {
                         if (moneyDistributor.gt(0)) {
 
                             if (moneyDistributor.gte(quotaAmount)) {
-                                
+
                                 // El abono cubre toda esta cuota
                                 amountToPayNow = quotaAmount;
                                 moneyDistributor = moneyDistributor.sub(quotaAmount);
                             } else {
-                                
+
                                 // El abono solo cubre una parte
                                 amountToPayNow = moneyDistributor;
                                 moneyDistributor = new Decimal(0); // Se acabó el abono
@@ -418,7 +432,7 @@ export class SaleService {
 
                         // 2. Determinar Estado
                         let status: InstallmentStatus = InstallmentStatus.PENDING;
-                        
+
                         // Usamos una pequeña tolerancia (epsilon) para evitar errores de flotantes extremos, 
                         // aunque con Decimal.js es raro.
                         if (amountToPayNow.gte(quotaAmount.sub(0.001))) {
@@ -429,21 +443,21 @@ export class SaleService {
 
                         // 3. Crear la Cuota SIEMPRE (tenga pago o no)
                         await tx.saleInstallment.create({
-                            data: { 
+                            data: {
                                 saleId: sale.id,
                                 number: inst.number,
                                 amount: quotaAmount,
                                 dueDate: new Date(inst.dueDate),
-                                
+
                                 status: status,
                                 amountPaid: amountToPayNow,
-                                
+
                                 // Si se pagó algo ahora, marcamos la fecha, si no, null
-                                paidAt: amountToPayNow.gt(0) ? new Date() : null 
+                                paidAt: amountToPayNow.gt(0) ? new Date() : null
                             }
                         });
                     }
-                    
+
                     // Safety check opcional: Si sobró dinero en moneyDistributor, 
                     // significa que pagaron más que el total de la deuda. 
                     // Deberías manejar ese "saldo a favor" o lanzar un error antes.
@@ -457,7 +471,7 @@ export class SaleService {
                             saleId: sale.id,
                             productId: item.productId,
                             productPresentationId: item.presentationUsed?.id || null,
-                            quantity: item.quantity, 
+                            quantity: item.quantity,
                             unitPrice: item.unitPrice,
                             subTotal: item.finalLinePrice,
                         }
@@ -465,12 +479,12 @@ export class SaleService {
 
                     // 2. DESCUENTO DE STOCK (Recursivo con cantidad convertida)
                     await this.processStockExit(
-                        tx, 
-                        businessId, 
-                        memberId, 
-                        sale.id, 
-                        saleItem.id, 
-                        item.product, 
+                        tx,
+                        businessId,
+                        memberId,
+                        sale.id,
+                        saleItem.id,
+                        item.product,
                         item.quantityToDeductFromStock,
                         item.depotId || data.depotId || 0 // Use item specific depot, or sale default, or 0 (global search logic)
                     );
@@ -489,13 +503,13 @@ export class SaleService {
                         }))
                     });
                 }
-                 
+
                 // Si quedó debiendo algo (remainingBalance > 0), se lo sumamos a su cuenta.
                 if (remainingBalance.gt(0)) {
                     await tx.client.update({
                         where: { id: client.id }, // Usamos el objeto 'client' que cargamos al principio
-                        data: { 
-                            currentDebt: { increment: remainingBalance } 
+                        data: {
+                            currentDebt: { increment: remainingBalance }
                         }
                     });
                 }
@@ -535,12 +549,12 @@ export class SaleService {
     // HELPER: DESCUENTO DE STOCK RECURSIVO (FIFO)
     // =================================================================
     private async processStockExit(
-        tx: Prisma.TransactionClient, 
+        tx: Prisma.TransactionClient,
         businessId: number,
         memberId: number,
         saleId: number,
         saleItemId: number,
-        product: any, 
+        product: any,
         quantityToRemove: Decimal,
         depotId: number // <--- Recibimos el Depósito (Opcional)
     ) {
@@ -550,20 +564,20 @@ export class SaleService {
         // Si es un servicio, no hacemos nada. Simplemente salimos.
         // Esto evita errores de "Stock insuficiente" en cosas que no tienen stock.
         if (product.type === ProductType.SERVICE) {
-            return; 
+            return;
         }
 
         // =========================================================
         // CASO 1: PRODUCTO SIMPLE (Físico)
         // =========================================================
         if (product.type === ProductType.SIMPLE) {
-            
+
             // Construimos el filtro (Depot Global vs Específico)
             // Si hay depotId, filtramos por él. Si no, traemos de todos los almacenes.
             const whereFilter: Prisma.StockLotWhereInput = {
-                productId: product.id, 
+                productId: product.id,
                 quantity: { gt: 0 },
-                ...(depotId ? { depotId } : {}) 
+                ...(depotId ? { depotId } : {})
             };
 
             // Buscar lotes disponibles (FIFO: Primero en entrar, primero en salir)
@@ -644,7 +658,7 @@ export class SaleService {
 
                 const childProduct = await tx.product.findUnique({
                     where: { id: comp.childProductId },
-                    include: { components: { include: { child: true } } } 
+                    include: { components: { include: { child: true } } }
                 });
 
                 if (!childProduct) {
@@ -655,14 +669,14 @@ export class SaleService {
                 // Pasamos ingredientQty como Decimal. 
                 // Tu función processStockExit debe estar preparada para recibir number | Decimal
                 await this.processStockExit(
-                    tx, 
-                    businessId, 
-                    memberId, 
-                    saleId, 
-                    saleItemId, 
-                    childProduct, 
+                    tx,
+                    businessId,
+                    memberId,
+                    saleId,
+                    saleItemId,
+                    childProduct,
                     ingredientQty, // Se envía el objeto Decimal con precisión total
-                    depotId 
+                    depotId
                 );
             }
         }
@@ -682,8 +696,8 @@ export class SaleService {
      */
     private async verifyStockAvailability(
         tx: Prisma.TransactionClient,
-        items: any[], 
-        depotId: number 
+        items: any[],
+        depotId: number
     ): Promise<void> {
 
         // 1. Aplanamos la lista de necesidades usando Decimal en el Map
@@ -697,7 +711,7 @@ export class SaleService {
 
         // 2. Consultamos Stock Físico
         const productIds = Array.from(requirements.keys());
-        
+
         const stockSummary = await tx.stockLot.groupBy({
             by: ['productId'],
             _sum: { quantity: true },
@@ -711,18 +725,18 @@ export class SaleService {
         // 3. Comparamos Requerido vs Disponible
         for (const [productId, requiredQty] of requirements.entries()) {
             const stock = stockSummary.find(s => s.productId === productId);
-            
+
             // Prisma.groupBy devuelve objetos Decimal en los campos de suma
             const available = new Prisma.Decimal(stock?._sum.quantity || 0);
 
             // COMPARACIÓN CRÍTICA: available < requiredQty
             if (available.lt(requiredQty)) {
                 // Buscamos el nombre para el error
-                const prodName = items.find(i => i.productId === productId)?.product.name 
+                const prodName = items.find(i => i.productId === productId)?.product.name
                     || `Producto ID ${productId} (Ingrediente)`;
-                    
+
                 throw new BusinessError(
-                    `Stock insuficiente para "${prodName}". Requerido: ${requiredQty.toNumber()}, Disponible: ${available.toNumber()}`, 
+                    `Stock insuficiente para "${prodName}". Requerido: ${requiredQty.toNumber()}, Disponible: ${available.toNumber()}`,
                     409
                 );
             }
@@ -744,23 +758,23 @@ export class SaleService {
 
             // 2. Obtenemos el valor actual del mapa o inicializamos en 0
             const current = map.get(product.id) || new Prisma.Decimal(0);
-            
+
             // 3. Sumamos usando .add() para mantener precisión total
             map.set(product.id, current.add(needed));
-        } 
+        }
         else if (product.type === ProductType.COMPOSITE) {
             if (product.components) {
                 for (const comp of product.components) {
                     const childProduct = await tx.product.findUnique({
                         where: { id: comp.childProductId },
-                        include: { components: true } 
+                        include: { components: true }
                     });
-                    
+
                     if (childProduct) {
                         // 4. Multiplicación de alta precisión: 
                         // (Cantidad de combos) * (Cantidad que lleva la receta)
                         const ingredientQty = needed.mul(new Prisma.Decimal(comp.quantity));
-                        
+
                         // 5. Llamada recursiva con el nuevo Decimal
                         await this.accumulateRequirements(tx, map, childProduct, ingredientQty);
                     }
@@ -778,11 +792,11 @@ export class SaleService {
             const search = query.search ? String(query.search).trim() : undefined;
 
             // 1. Where Base
-            const whereClause: any = { 
+            const whereClause: any = {
                 businessId,
                 status: { not: 'CANCELLED' } // Opcional: Si quieres ocultar las anuladas por defecto
             };
-            
+
             // 2. Filtros de Fecha
             if (query.fromDate && query.toDate) {
                 whereClause.createdAt = {
@@ -840,10 +854,10 @@ export class SaleService {
                 totalAmount: Number(sale.totalAmount),
                 remainingBalance: Number(sale.remainingBalance),
                 // Calculamos si está vencida (solo visual)
-                isOverdue: sale.conditions === 'CREDIT' && 
-                        sale.paymentStatus !== 'PAID' && 
-                        sale.paymentDueDate && 
-                        new Date(sale.paymentDueDate) < new Date()
+                isOverdue: sale.conditions === 'CREDIT' &&
+                    sale.paymentStatus !== 'PAID' &&
+                    sale.paymentDueDate &&
+                    new Date(sale.paymentDueDate) < new Date()
             }));
 
             return {
@@ -872,19 +886,19 @@ export class SaleService {
                 where: { id, businessId },
                 include: {
                     client: true, // Datos del cliente
-                    member: { 
-                        include: { 
-                            user: { select: { name: true, ci: true } } 
-                        } 
+                    member: {
+                        include: {
+                            user: { select: { name: true, ci: true } }
+                        }
                     },
                     exchangeRate: true, // Tasa del día de la venta
                     items: {
                         include: {
-                            product: { 
-                                select: { name: true, sku: true, imageUrl: true, category: true } 
+                            product: {
+                                select: { name: true, sku: true, imageUrl: true, category: true }
                             },
-                            productPresentation: { 
-                                select: { name: true, factor: true } 
+                            productPresentation: {
+                                select: { name: true, factor: true }
                             },
                             // TRAZABILIDAD: ¿De qué lotes salió este ítem?
                             lotAllocations: {
@@ -927,14 +941,14 @@ export class SaleService {
                 receiptNumber: sale.receiptNumber, // Ojo: Asegura que sea string o number según tu UI
                 createdAt: sale.createdAt,
                 status: sale.status, // PAID, PENDING, CANCELLED
-                
+
                 // --- Financiero (CONVERSIÓN DE DECIMAL A NUMBER) ---
                 subTotal: Number(sale.subTotal),
                 taxAmount: Number(sale.taxAmount),
                 discountAmount: Number(sale.discount || 0),
                 totalAmount: Number(sale.totalAmount),
                 remainingBalance: Number(sale.remainingBalance),
-                
+
                 // --- Cliente y Vendedor ---
                 client: {
                     id: sale.client.id,
@@ -956,7 +970,7 @@ export class SaleService {
                 items: sale.items.map(item => {
                     // Lógica de Snapshot: ¿Tenemos nombre guardado en el item? Si no, usa el del producto actual.
                     const displayName = item.product.name || 'Producto Desconocido';
-                    
+
                     return {
                         id: item.id,
                         productId: item.productId,
@@ -965,7 +979,7 @@ export class SaleService {
                         quantity: Number(item.quantity),
                         price: Number(item.unitPrice), // Precio unitario al momento de la venta
                         total: Number(item.subTotal), // Total línea (qty * price)
-                        
+
                         // Info de Presentación (ej. "Caja x 12")
                         presentation: item.productPresentation ? {
                             name: item.productPresentation.name,
@@ -1009,21 +1023,21 @@ export class SaleService {
                 }))
             };
 
-            return { 
-                status: 200, 
-                message: 'Venta obtenida exitosamente', 
-                data: formattedSale 
+            return {
+                status: 200,
+                message: 'Venta obtenida exitosamente',
+                data: formattedSale
             };
 
         } catch (error) {
             // Log detallado para ti (Backend)
             console.error(`[SaleService.findOne] Error ID ${id}:`, error);
-            
+
             // Respuesta genérica para el cliente (Seguridad)
-            return { 
-                status: 500, 
-                message: 'Error interno al procesar la solicitud', 
-                data: null 
+            return {
+                status: 500,
+                message: 'Error interno al procesar la solicitud',
+                data: null
             };
         }
     }
@@ -1043,15 +1057,15 @@ export class SaleService {
 
             // Validación estricta: El ID que manda el front DEBE ser el ID de la tasa actual
             if (data.exchangeRateId && data.exchangeRateId !== currentRateRecord.id) {
-                return { 
+                return {
                     status: 409, // Conflict
-                    message: 'La tasa de cambio ha variado durante la operación. Por favor recargue.', 
-                    data: { newRate: currentRateRecord.rate } 
+                    message: 'La tasa de cambio ha variado durante la operación. Por favor recargue.',
+                    data: { newRate: currentRateRecord.rate }
                 };
             }
 
             const result = await prisma.$transaction(async (tx) => {
-                
+
                 // 1. Consultas Iniciales
                 const [exchangeRate, sale, paymentMethod] = await Promise.all([
 
@@ -1061,24 +1075,24 @@ export class SaleService {
 
                     tx.paymentMethod.findUnique({ where: { id: data.paymentMethodId } })
                 ]);
-        
+
                 // 2. Validaciones de Seguridad
                 if (!sale) throw new BusinessError("Venta no encontrada", 404);
-                
+
                 // USO CORRECTO DEL ENUM
                 if (sale.paymentStatus === PaymentStatus.PAID) {
                     throw new BusinessError("Esta venta ya está pagada por completo", 400);
                 }
-                
+
                 if (!exchangeRate) throw new BusinessError("Tasa de cambio inválida", 400);
 
                 if (!paymentMethod) throw new BusinessError("Método de pago inválido", 400);
-        
+
                 // 3. Normalizar el Pago a Moneda Base (USD)
-                let paymentInBaseCurrency =  new Decimal(data.amount);
+                let paymentInBaseCurrency = new Decimal(data.amount);
 
                 const rate = new Decimal(exchangeRate.rate);
-                
+
                 // USO CORRECTO DEL ENUM (Currency)
                 if (paymentMethod.currency !== Currency.USD) {
 
@@ -1086,7 +1100,7 @@ export class SaleService {
 
                     paymentInBaseCurrency = paymentInBaseCurrency.div(rate);
                 }
-        
+
                 // Redondeo a 2 decimales
                 paymentInBaseCurrency = paymentInBaseCurrency.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
@@ -1094,12 +1108,12 @@ export class SaleService {
                 const currentDebt = new Decimal(sale.remainingBalance);
 
                 const tolerance = new Decimal(0.05); // Margen de error pequeño
-        
+
                 // 4. Validar sobrepago
                 if (paymentInBaseCurrency.gt(currentDebt.add(tolerance))) {
                     throw new BusinessError(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`, 400);
                 }
-        
+
                 // 5. Crear el registro del Pago (Histórico)
                 const newPayment = await tx.salePayment.create({
                     data: {
@@ -1114,14 +1128,14 @@ export class SaleService {
                 // =================================================================
                 // 6. LÓGICA DE CASCADA DE CUOTAS (Waterfall)
                 // =================================================================
-                
+
                 if (sale.conditions === Conditions.CREDIT) {
-                    
+
                     // A. Buscamos cuotas pendientes (FIFO)
                     const pendingInstallments = await tx.saleInstallment.findMany({
-                        where: { 
+                        where: {
                             saleId: saleId,
-                            status: { not: InstallmentStatus.PAID } 
+                            status: { not: InstallmentStatus.PAID }
                         },
                         orderBy: { dueDate: 'asc' } // Primero vence, primero se paga
                     });
@@ -1151,7 +1165,7 @@ export class SaleService {
 
                         // C. Calculamos el nuevo total pagado
                         const newAmountPaid = alreadyPaid.add(amountToPayNow);
-                        
+
                         // D. Determinamos si se liquidó (con tolerancia de centavos)
                         // Usamos 0.005 para evitar problemas de redondeo en el último decimal
                         const isFullyPaid = newAmountPaid.gte(totalAmount.sub(new Decimal(0.002)));
@@ -1177,10 +1191,10 @@ export class SaleService {
                 let newBalance = currentDebt.sub(paymentInBaseCurrency);
 
                 newBalance = newBalance.lt(0) ? new Decimal(0) : newBalance;
-        
+
                 // DECLARACIÓN EXPLÍCITA DEL TIPO (Para evitar error de TS)
                 let newStatus: PaymentStatus = sale.paymentStatus;
-                
+
                 // Si debe menos de 5 centavos, lo consideramos PAGADO
                 if (newBalance.lte(tolerance)) {
                     newStatus = PaymentStatus.PAID;
@@ -1188,7 +1202,7 @@ export class SaleService {
                 } else {
                     newStatus = PaymentStatus.PARTIAL;
                 }
-        
+
                 await tx.sale.update({
                     where: { id: saleId },
                     data: {
@@ -1199,11 +1213,11 @@ export class SaleService {
 
                 await tx.client.update({
                     where: { id: sale.client.id }, // Usamos el objeto 'client' que cargamos al principio
-                    data: { 
-                        currentDebt: { decrement: paymentInBaseCurrency } 
+                    data: {
+                        currentDebt: { decrement: paymentInBaseCurrency }
                     }
                 });
-        
+
                 return {
                     payment: newPayment,
                     newBalance: newBalance,
@@ -1211,7 +1225,7 @@ export class SaleService {
                     message: newStatus === PaymentStatus.PAID ? '¡Venta liquidada correctamente!' : 'Abono registrado correctamente'
                 };
             });
-            
+
             return { status: 200, message: 'Pago agregado exitosamente', data: result };
 
         } catch (error) {
@@ -1239,15 +1253,15 @@ export class SaleService {
             }
 
             const updateData: any = {};
-            
+
             if (data.status) {
                 updateData.status = data.status;
             }
-            
+
             if (data.remainingBalance !== undefined) {
                 updateData.remainingBalance = data.remainingBalance;
             }
-            
+
             if (data.paymentDueDate) {
                 updateData.paymentDueDate = new Date(data.paymentDueDate);
             }
@@ -1339,14 +1353,14 @@ export class SaleService {
             const mappedCredits = credits.map(sale => ({
                 id: sale.id,
                 receiptNumber: sale.receiptNumber,
-                
+
                 clientId: sale.client.id,
                 clientName: sale.client.name,
                 clientPhone: sale.client.phone,
 
                 totalAmount: Number(sale.totalAmount),
                 remainingBalance: Number(sale.remainingBalance),
-                
+
                 status: sale.paymentStatus,
                 createdAt: sale.createdAt, // Fecha de creación para la tabla
 
@@ -1361,7 +1375,7 @@ export class SaleService {
                 }))
             }));
 
-            return { 
+            return {
                 message: 'Créditos obtenidos exitosamente',
                 status: 200,
                 data: mappedCredits
@@ -1409,10 +1423,10 @@ export class SaleService {
             const formattedPayments = payments.map(p => {
                 const rate = Number(p.exchangeRate.rate);
                 const originalAmount = Number(p.amount);
-                const usdEquivalent = p.paymentMethod.currency === 'VES' 
-                    ? originalAmount / rate 
+                const usdEquivalent = p.paymentMethod.currency === 'VES'
+                    ? originalAmount / rate
                     : originalAmount;
-                
+
                 return {
                     id: p.id,
                     date: p.date,
