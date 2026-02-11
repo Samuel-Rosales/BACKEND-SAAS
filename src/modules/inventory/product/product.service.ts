@@ -133,13 +133,14 @@ export class ProductService {
     }
 
     // 2. LISTAR TODOS
-    async findAll(businessId: number, query: { page?: number, limit?: number, search?: string, categoryId?: number }) {
+    async findAll(businessId: number, query: { page?: number, limit?: number, search?: string, categoryId?: number, type?: string }) {
         try {
             const page = Number(query.page) || 1;
             const limit = Number(query.limit) || 20;
             const skip = (page - 1) * limit;
             const search = query.search ? String(query.search).trim() : undefined;
             const categoryId = query.categoryId ? Number(query.categoryId) : undefined;
+            const type = query.type ? String(query.type) : undefined;
 
             const whereClause: any = { businessId };
 
@@ -149,6 +150,10 @@ export class ProductService {
                     { name: { contains: search, mode: 'insensitive' } },
                     { sku: { contains: search, mode: 'insensitive' } }
                 ];
+            }
+
+            if (type) {
+                whereClause.type = type;
             }
 
             const [products, total] = await Promise.all([

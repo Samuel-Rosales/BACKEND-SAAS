@@ -798,11 +798,21 @@ export class SaleService {
 
             // 4. BÚSQUEDA AVANZADA (La mejora clave)
             if (search) {
+                const searchAsNumber = Number(search);
+                const isNumeric = !isNaN(searchAsNumber);
+
                 whereClause.OR = [
-                    { receiptNumber: { contains: search, mode: 'insensitive' } }, // Por Nro Factura
-                    { client: { name: { contains: search, mode: 'insensitive' } } }, // Por Nombre Cliente
-                    { client: { ci: { contains: search, mode: 'insensitive' } } }    // Por Cédula
+                    // Búsqueda por texto (Cliente, Cédula - asumiendo que CI es string en DB)
+                    { client: { name: { contains: search, mode: 'insensitive' } } },
+                    { client: { ci: { contains: search, mode: 'insensitive' } } }
                 ];
+
+                // Solo agregamos búsqueda por ID de factura si el input es un número válido
+                if (isNumeric) {
+                    whereClause.OR.push({
+                        receiptNumber: { equals: searchAsNumber }
+                    });
+                }
             }
 
             // 5. Query

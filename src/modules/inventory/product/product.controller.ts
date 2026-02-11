@@ -51,7 +51,8 @@ export class ProductController {
                 page: req.query.page ? Number(req.query.page) : undefined,
                 limit: req.query.limit ? Number(req.query.limit) : undefined,
                 search: req.query.search ? String(req.query.search) : undefined,
-                categoryId: req.query.categoryId ? Number(req.query.categoryId) : undefined
+                categoryId: req.query.categoryId ? Number(req.query.categoryId) : undefined,
+                type: req.query.type as string
             };
 
             const result = await service.findAll(businessId, query);
