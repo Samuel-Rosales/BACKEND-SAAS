@@ -60,9 +60,8 @@ export class SaleController {
                 fromDate: req.query.fromDate as string,
                 toDate: req.query.toDate as string,
                 clientId: req.query.clientId ? Number(req.query.clientId) : undefined,
-                status: req.query.status as string,
+                paymentStatus: req.query.paymentStatus as string,
                 search: req.query.search as string,
-                type: req.query.type as string
             };
 
             const {data, message, status, pagination} = await service.findAll(businessId, query);
