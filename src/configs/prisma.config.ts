@@ -2,20 +2,32 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-// 1. Creamos la conexión con el driver 'pg'
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// 1. Configuración robusta del Pool
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  max: 20,                  // Límite de conexiones simultáneas
+  idleTimeoutMillis: 30000, // Tiempo antes de cerrar conexiones inactivas
+  connectionTimeoutMillis: 2000, 
+  keepAlive: true           // ¡Vital para evitar cortes por firewalls!
+});
 
-// 2. Creamos el adaptador de Prisma para PostgreSQL
+// 2. EL FIX CRÍTICO: Manejador de errores del Pool
+// Si no pones esto, cualquier micro-corte de red matará tu proceso Node.js
+pool.on('error', (err) => {
+  console.error('⚠️ Unexpected error on idle SQL client', err);
+  // No es necesario process.exit(1) aquí. 
+  // El pool simplemente descartará la conexión rota.
+});
+
 const adapter = new PrismaPg(pool);
-
-// 3. Inicializamos Prisma con el adaptador
 export const prisma = new PrismaClient({ adapter });
 
 export const connectDB = async () => {
   try {
-    // Con el adaptador, verificamos la conexión a través del pool
-    await pool.connect();
+    // Verificamos conexión inicial
+    const client = await pool.connect();
     console.log('🚀 Database connected with Driver Adapter (Prisma 7)');
+    client.release(); // ¡No olvides liberar el cliente al pool!
   } catch (error) {
     console.error('❌ Database connection failed:', error);
     process.exit(1);
