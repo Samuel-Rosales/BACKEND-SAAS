@@ -142,7 +142,7 @@ export class ProductService {
             const categoryId = query.categoryId ? Number(query.categoryId) : undefined;
             const type = query.type ? String(query.type) : undefined;
 
-            const whereClause: any = { businessId };
+            const whereClause: any = { businessId, isActive: true };
 
             if (categoryId) whereClause.categoryId = categoryId;
             if (search) {
