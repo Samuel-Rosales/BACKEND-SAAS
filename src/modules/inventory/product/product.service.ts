@@ -6,6 +6,16 @@ import { Decimal } from '@prisma/client/runtime/client';
 
 export class ProductService {
 
+    // Helper para obtener el nombre en español del tipo de producto
+    private getProductTypeName(type: ProductType): string {
+        const typeNames: Record<ProductType, string> = {
+            [ProductType.SIMPLE]: 'Simple',
+            [ProductType.COMPOSITE]: 'Compuesto',
+            [ProductType.SERVICE]: 'Servicio'
+        };
+        return typeNames[type] || type;
+    }
+
     async create(businessId: number, userId: number, data: CreateProductInterface) {
         try {
             // =================================================================
@@ -168,9 +178,9 @@ export class ProductService {
                         presentations: true,
 
                         // --- CAMBIO 1: Traemos el stock físico (para productos Simples) ---
-                        stockLots: { 
+                        stockLots: {
                             where: { quantity: { gt: 0 } },
-                            select: { 
+                            select: {
                                 quantity: true,
                                 expirationDate: true,
                                 depot: {
@@ -179,7 +189,7 @@ export class ProductService {
                                         name: true
                                     }
                                 }
-                            } 
+                            }
                         },
 
                         // --- CAMBIO 2: Traemos la receta y el stock de los ingredientes (para Compuestos) ---
@@ -268,6 +278,7 @@ export class ProductService {
                 // =========================================================
                 return {
                     ...product,
+                    typeName: this.getProductTypeName(product.type),
                     stockLots: undefined,
                     components: undefined,
 
@@ -396,6 +407,7 @@ export class ProductService {
                 description: product.description,
                 imageUrl: product.imageUrl,
                 type: product.type,
+                typeName: this.getProductTypeName(product.type),
                 isPerishable: product.isPerishable,
 
                 // Conversión de Decimal a Number (JS nativo)
