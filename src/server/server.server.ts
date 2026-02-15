@@ -11,6 +11,7 @@ import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute }
 import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
 import { DashboardRoute } from '@/modules/report/analytics/routes/dashboard.routes';
 import { initCronJobs } from '@/cron';
+import { SalesReportRoute } from '@/modules/report/analytics/routes/salesReport.route';
 export class Server {
 
     public app: express.Application;
@@ -52,7 +53,8 @@ export class Server {
             clients: `${this.prefix}/sales/client`,
             sales: `${this.prefix}/sales/sale`,
             creditNotes: `${this.prefix}/sales/credit-note`,
-            reports: `${this.prefix}/report/dashboard`,
+            dashboardReports: `${this.prefix}/report/dashboard`,
+            salesReports: `${this.prefix}/report/sales`,
             admin: `${this.prefix}/admin`
         };
 
@@ -111,7 +113,8 @@ export class Server {
         this.app.use(this.paths.clients, ClientRoute);
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
-        this.app.use(this.paths.reports, DashboardRoute);
+        this.app.use(this.paths.dashboardReports, DashboardRoute);
+        this.app.use(this.paths.salesReports, SalesReportRoute);
         this.app.use(this.paths.admin, AdminRoute);
 
         this.app.use((req, res) => {
