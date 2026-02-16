@@ -30,25 +30,25 @@ export class ClientService {
   }
 
   // 2. LISTAR (Tenant Scoped + Search + Status)
-  async findAll(businessId: number, query?: { search?: string, status?: string }) {
+  async findAll(businessId: number, query?: { page?: number, limit?: number, search?: string, isActive?: string }) {
     try {
       const search = query?.search ? String(query.search).trim() : undefined;
-      const statusParam = query?.status ? String(query.status).toLowerCase() : undefined;
+      const isActiveParam = query?.isActive ? String(query.isActive).toLowerCase() : undefined;
 
       const whereClause: any = { businessId };
 
       if (search) {
         whereClause.OR = [
           { name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } }
+          { ci: { contains: search, mode: 'insensitive' } }
         ];
       }
 
       
-      if (statusParam) {
-        if (statusParam === 'true' || statusParam === 'active') {
+      if (isActiveParam) {
+        if (isActiveParam === 'true' || isActiveParam === 'active') {
           whereClause.isActive = true;
-        } else if (statusParam === 'false' || statusParam === 'inactive') {
+        } else if (isActiveParam === 'false' || isActiveParam === 'inactive') {
           whereClause.isActive = false;
         }
       }

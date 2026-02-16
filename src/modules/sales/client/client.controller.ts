@@ -29,8 +29,10 @@ export class ClientController {
         }
 
         const query = {
+            page: req.query.page ? Number(req.query.page) : undefined,
+            limit: req.query.limit ? Number(req.query.limit) : undefined,
             search: req.query.search ? String(req.query.search) : undefined,
-            status: req.query.status ? String(req.query.status) : undefined
+            isActive: req.query.isActive ? String(req.query.isActive) : undefined
         };
 
         const { status, data, message } = await this.service.findAll(businessId, query);
