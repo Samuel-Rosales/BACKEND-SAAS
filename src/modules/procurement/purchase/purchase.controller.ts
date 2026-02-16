@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { PurchaseService } from './purchase.service';
+import { paymentMethods } from '@/data/index.data';
+import { Search } from '@nestjs/common';
 
 // Instanciamos el servicio una sola vez
 const service = new PurchaseService();
@@ -57,7 +59,9 @@ export class PurchaseController {
                 page: req.query.page ? Number(req.query.page) : undefined,
                 limit: req.query.limit ? Number(req.query.limit) : undefined,
                 fromDate: req.query.fromDate as string,
-                toDate: req.query.toDate as string
+                toDate: req.query.toDate as string,
+                paymentStatus: req.query.paymentStatus as string,
+                search: req.query.search as string
             };
 
             const result = await service.findAll(businessId, query);

@@ -794,7 +794,7 @@ export class SaleService {
             // 1. Where Base
             const whereClause: any = {
                 businessId,
-                status: { not: 'CANCELLED' } // Opcional: Si quieres ocultar las anuladas por defecto
+                //status: { not: 'CANCELLED' } // Opcional: Si quieres ocultar las anuladas por defecto
             };
 
             // 2. Filtros de Fecha
