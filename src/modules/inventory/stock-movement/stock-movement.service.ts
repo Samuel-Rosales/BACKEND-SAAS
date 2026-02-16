@@ -12,8 +12,11 @@ export class StockMovementService {
             // 1. Validaciones Paralelas (Sin cambios aquí, esto está perfecto)
             const [product, depot, member, targetDepot] = await Promise.all([
                 prisma.product.findFirst({ where: { id: data.productId, businessId } }),
+
                 prisma.depot.findFirst({ where: { id: data.depotId, businessId, isActive: true } }),
+                
                 prisma.businessMember.findFirst({ where: { id: membershipId, businessId, isActive: true } }),
+
                 (data.type === 'TRANSFER' && data.targetDepotId)
                     ? prisma.depot.findFirst({ where: { id: data.targetDepotId, businessId, isActive: true } })
                     : Promise.resolve(null)
@@ -36,14 +39,14 @@ export class StockMovementService {
                 // =========================================================
                 // CASO A: ENTRADAS (IN, RETURN)
                 // =========================================================
-                if (data.type === 'IN' || data.type === 'RETURN' || (data.type === 'ADJUSTMENT' && qtyInput.isPositive())) {
+                if (data.type === 'ADJUSTMENT' && qtyInput.isPositive()) {
                     
                     return await this.addStockLog(tx, businessId, {
                         ...data,
                         quantity: qtyAbs // Pasamos el Decimal positivo
                     }, membershipId);
-                } 
 
+                }
                 // =========================================================
                 // CASO B: TRANSFERENCIAS
                 // =========================================================
@@ -238,7 +241,7 @@ export class StockMovementService {
                 type: data.type, 
                 // data.quantity puede venir number, aseguramos guardarlo tal cual o como Decimal
                 quantity: new Decimal(data.quantity), 
-                reason: `${data.reason || ''} (Auto-FEFO)`,
+                reason: `${data.reason || ''} Descuento Automático`,
                 date: data.date || new Date(),
                 stockLotId: null // En FEFO masivo no vinculamos un lote único (por ahora)
             }
@@ -261,7 +264,8 @@ export class StockMovementService {
     ) {
         // Validar datos obligatorios para lote
         if (!data.unitCost && data.type !== 'TRANSFER') throw new BusinessError("El costo unitario es obligatorio para entradas", 400);
-        
+        if (!data.expirationDate) throw new BusinessError("La fecha de vencimiento es obligatoria para entradas", 400);
+
         // Crear Lote
         const newLot = await tx.stockLot.create({
             data: {
