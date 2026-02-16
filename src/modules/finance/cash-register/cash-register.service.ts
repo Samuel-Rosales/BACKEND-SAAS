@@ -67,13 +67,93 @@ export class CashRegisterService {
                 where: { businessId },
                 include: {
                     member: { include: { user: { select: { name: true } } } },
-                    _count: { select: { payments: true } } // Contamos cuántos pagos recibió
+                    _count: { select: { payments: true } }, // Contamos cuántos pagos recibió
                 },
                 orderBy: { openTime: 'desc' },
                 take: 50 // Paginación recomendada
             });
-            return { status: 200, message: 'Histórico obtenido', data: registers };
+
+            // Para cada caja, calculamos el resumen del sistema (totales por método de pago)
+            const registersWithSummary = await Promise.all(
+                registers.map(async (register) => {
+                    // Agrupar pagos por método de pago
+                    const paymentsGrouped = await prisma.salePayment.groupBy({
+                        by: ['paymentMethodId'],
+                        where: { cashRegisterId: register.id },
+                        _sum: { amount: true }
+                    });
+
+                    // Obtener información de los métodos de pago
+                    const methods = await prisma.paymentMethod.findMany({
+                        where: { id: { in: paymentsGrouped.map(p => p.paymentMethodId) } }
+                    });
+
+                    // Crear resumen del sistema
+                    const systemSummary = paymentsGrouped.map(pg => {
+                        const method = methods.find(m => m.id === pg.paymentMethodId);
+                        return {
+                            method: method?.name,
+                            type: method?.type,
+                            currency: method?.currency,
+                            total: pg._sum.amount
+                        };
+                    });
+
+                    return {
+                        ...register,
+                        systemSummary
+                    };
+                })
+            );
+
+            // === CALCULAR TOTALES DEL DÍA DE HOY ===
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            // Filtrar cajas de hoy
+            const todayRegisters = registersWithSummary.filter(register => {
+                const openDate = new Date(register.openTime);
+                return openDate >= today && openDate < tomorrow;
+            });
+
+            // Calcular totales por moneda
+            let totalUSD = 0;
+            let totalVES = 0;
+            let totalPayments = 0;
+
+            todayRegisters.forEach(register => {
+                // Sumar conteo de pagos
+                if (register._count?.payments) {
+                    totalPayments += register._count.payments;
+                }
+
+                // Sumar por moneda
+                register.systemSummary?.forEach(item => {
+                    if (item.currency === 'USD') {
+                        totalUSD += Number(item.total || 0);
+                    } else if (item.currency === 'VES') {
+                        totalVES += Number(item.total || 0);
+                    }
+                });
+            });
+
+            return {
+                status: 200,
+                message: 'Histórico obtenido',
+                data: {
+                    registers: registersWithSummary,
+                    dailyTotals: {
+                        totalUSD,
+                        totalVES,
+                        totalPayments,
+                        registersCount: todayRegisters.length
+                    }
+                }
+            };
         } catch (error) {
+            console.error('Error in findAll:', error);
             return { status: 500, message: 'Error interno', data: null };
         }
     }
