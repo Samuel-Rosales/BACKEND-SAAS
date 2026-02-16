@@ -90,4 +90,20 @@ export class ClientController {
             data
         });
     };
+
+    purchaseHistory = async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const businessId = req.user!.businessId;
+
+        if (!businessId) {
+            return res.status(400).json({ message: 'Falta el ID de la empresa en el header.' });
+        }
+
+        const { status, data, message } = await this.service.purchaseHistory(businessId, +id);
+
+        return res.status(status).json({
+            message,
+            data
+        });
+    };
 }
