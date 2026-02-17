@@ -224,7 +224,8 @@ export class CashRegisterService {
             const paymentsGrouped = await prisma.salePayment.groupBy({
                 by: ['paymentMethodId'],
                 where: { cashRegisterId: register.id },
-                _sum: { amount: true }
+                _sum: { amount: true },
+                _count: true
             });
 
             const methods = await prisma.paymentMethod.findMany({
@@ -237,8 +238,28 @@ export class CashRegisterService {
                     method: method?.name,
                     type: method?.type,
                     currency: method?.currency,
-                    total: pg._sum.amount
+                    total: pg._sum.amount,
+                    count: pg._count
                 };
+            });
+
+            // === OBTENER TODAS LAS TRANSACCIONES INDIVIDUALES ===
+            const transactions = await prisma.salePayment.findMany({
+                where: { cashRegisterId: register.id },
+                include: {
+                    paymentMethod: true,
+                    sale: {
+                        include: {
+                            client: {
+                                select: { name: true, ci: true }
+                            }
+                        }
+                    },
+                    exchangeRate: {
+                        select: { rate: true }
+                    }
+                },
+                orderBy: { date: 'desc' }
             });
 
             return {
@@ -246,7 +267,8 @@ export class CashRegisterService {
                 message: 'Detalle de caja obtenido',
                 data: {
                     ...register,
-                    systemSummary: systemTotals
+                    systemSummary: systemTotals,
+                    transactions
                 }
             };
 
