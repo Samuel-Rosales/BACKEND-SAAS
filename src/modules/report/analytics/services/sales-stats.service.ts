@@ -132,7 +132,8 @@ export class SalesStatsService {
                 prisma.creditNote.aggregate({
                     where: {
                         businessId,
-                        createdAt: { gte: currentStart, lte: currentEnd }
+                        createdAt: { gte: currentStart, lte: currentEnd },
+                        sale: { status: { not: 'CANCELLED' } } // Solo devoluciones de ventas válidas
                     },
                     _sum: { totalAmount: true }
                 })
