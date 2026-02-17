@@ -41,7 +41,11 @@ export class CashRegisterController {
             });
         }
 
-        const { status, data, message } = await this.service.findAll(businessId);
+        // Extract query parameters for filtering
+        const filterDate = req.query.date as string | undefined;
+        const filterStatus = req.query.status as 'OPEN' | 'CLOSED' | 'ALL' | undefined;
+
+        const { status, data, message } = await this.service.findAll(businessId, filterDate, filterStatus);
 
         res.status(status).json({
             message,
