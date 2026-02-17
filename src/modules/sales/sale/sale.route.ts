@@ -64,6 +64,13 @@ router.post(
     controller.addPayment
 );
 
+router.post(
+    '/:id/cancel',
+    validator.validateId,
+    handleValidationErrors,
+    controller.cancel
+);
+
 export const SaleRoute = router;
 
 export default router;

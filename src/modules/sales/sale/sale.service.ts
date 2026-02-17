@@ -1475,4 +1475,136 @@ export class SaleService {
             return { status: 500, message: 'Error interno', data: null };
         }
     }
+
+    async cancel(businessId: number, saleId: number, memberId: number, reason: string) {
+        try {
+            await prisma.$transaction(async (tx) => {
+                // 1. Bloquear y validar la venta
+                const sale = await tx.sale.findUniqueOrThrow({
+                    where: { id: saleId, businessId },
+                    include: { 
+                        items: { include: { lotAllocations: { include: { stockLot: { select: { depotId: true, lotCost: true } } } } } },
+                        creditNotes: true,
+                        payments: true // Necesitamos saber cuánto devolvemos de dinero
+                    }
+                });
+
+                // 2. Validaciones Estrictas
+                if (sale.status === SaleStatus.CANCELLED) {
+                    throw new BusinessError('La venta ya está anulada', 400);
+                }
+
+                // CRÍTICO: No permitir anular si ya hay notas de crédito (devoluciones parciales)
+                // Si ya devolvió algo, debe terminar de devolver el resto, no anular.
+                if (sale.creditNotes.length > 0) {
+
+                    throw new BusinessError('No se puede anular una venta con devoluciones previas. Debe realizar una devolución total.', 400);
+                }
+
+                // 3. Generar Nota de Crédito Automática (Para auditoría fiscal/contable)
+                // Aunque se anule, debe quedar rastro del movimiento de inventario y dinero.
+                const nextCnNumber = (await tx.creditNote.count({ where: { businessId } })) + 1;
+                
+                const creditNote = await tx.creditNote.create({
+                    data: {
+                        businessId,
+                        saleId: sale.id,
+                        number: nextCnNumber,
+                        reason: `ANULACIÓN DE VENTA: ${reason}`,
+                        totalAmount: sale.totalAmount, // Monto total original
+                        items: {
+                            create: sale.items.map(item => ({
+                                productId: item.productId,
+                                quantity: item.quantity,
+                                unitPrice: item.unitPrice,
+                                subTotal: new Decimal(item.quantity).mul(item.unitPrice),
+                                returnToStock: true // En anulación SIEMPRE regresa al stock
+                            }))
+                        }
+                    }
+                });
+
+                // 4. Restaurar Inventario (Iteración simple, sin cálculos de ratio complejos)
+                for (const item of sale.items) {
+                    // Ignorar servicios
+                    if (item.lotAllocations.length > 0) {
+                        for (const allocation of item.lotAllocations) {
+                            // Restaurar Stock Físico
+                            const updatedStockLot = await tx.stockLot.update({
+                                where: { id: allocation.stockLotId },
+                                data: { quantity: { increment: allocation.quantity } }
+                            });
+
+                            // Kardex: Entrada por Anulación
+                            // (Aquí deberías buscar info del lote como en tu servicio anterior)
+                            await tx.stockMovement.create({
+                                data: {
+                                    businessId,
+                                    memberId,
+                                    productId: item.productId,
+                                    depotId: allocation.stockLot.depotId, // Ojo: Obtener del lote original
+                                    type: MovementType.IN,
+                                    quantity: allocation.quantity,
+                                    reason: `Anulación Venta #${sale.receiptNumber}`,
+                                    stockLotId: updatedStockLot.id, // Asociamos al mismo lote para trazabilidad
+                                    historicalCost: updatedStockLot.lotCost // Usamos el costo original del lote para el movimiento
+                                }
+                            });
+                        }
+                    }
+                }
+
+                // 5. Reversar Pagos (Caja)
+                // Si la venta tuvo pagos, hay que registrar la salida del dinero
+                // Opcional: Esto depende de si anulas el día mismo o después.
+                // Si es el mismo día, a veces se eliminan los pagos. 
+                // Si es contabilidad estricta, se crea un egreso (CreditNotePayment).
+                
+                /* Lógica simplificada: Crear contra-movimientos para cada pago */
+                for (const payment of sale.payments) {
+                    await tx.creditNotePayment.create({
+                        data: {
+                            creditNoteId: creditNote.id,
+                            paymentMethodId: payment.paymentMethodId,
+                            amount: payment.amount, // Devolvemos todo
+                            exchangeRateId: payment.exchangeRateId,
+                            cashRegisterId: payment.cashRegisterId, // Afecta la caja original si está abierta
+                            reference: `Reverso Ref: ${payment.reference}`
+                        }
+                    });
+                }
+
+                // 6. Actualizar Estado FINAL de la Venta
+                await tx.sale.update({
+                    where: { id: sale.id },
+                    data: {
+                        status: SaleStatus.CANCELLED, // <--- Aquí está la clave
+                        remainingBalance: 0, // Ya no debe nada porque se anuló
+                        paymentStatus: PaymentStatus.REFUNDED // O el enum que uses
+                    }
+                });
+
+                // 7. Limpiar Deuda del Cliente (Si fue a crédito)
+                // Si la venta generó deuda, hay que restarla totalmente.
+                const amountOnCredit = sale.totalAmount.sub(sale.remainingBalance);
+                if (amountOnCredit.gt(0)) {
+                    await tx.client.update({
+                        where: { id: sale.clientId },
+                        data: { currentDebt: { decrement: amountOnCredit } }
+                    });
+                }
+                
+                return creditNote;
+            });
+            
+            return { status: 200, message: 'Venta anulada exitosamente', data: null };
+
+        } catch (error) {
+            console.error('Error al anular venta:', error);
+            if (error instanceof BusinessError) {
+                return { status: error.status, message: error.message, data: null };
+            }
+            return { status: 500, message: 'Error interno al anular la venta', data: null };
+        }
+    }
 }
