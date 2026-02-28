@@ -143,7 +143,17 @@ export class ProductService {
     }
 
     // 2. LISTAR TODOS
-    async findAll(businessId: number, query: { page?: number, limit?: number, search?: string, categoryId?: number, type?: string }) {
+    async findAll(
+        businessId: number,
+        query: {
+            page?: number;
+            limit?: number;
+            search?: string;
+            categoryId?: number;
+            type?: string;
+            withPresentations?: string | number | boolean;
+        }
+    ) {
         try {
             const page = Number(query.page) || 1;
             const limit = Number(query.limit) || 20;
@@ -158,13 +168,21 @@ export class ProductService {
             if (search) {
                 whereClause.OR = [
                     { name: { contains: search, mode: 'insensitive' } },
-                    { sku: { contains: search, mode: 'insensitive' } }
+                    { sku: { contains: search, mode: 'insensitive' } },
+                    { presentations: { some: { name: { contains: search, mode: 'insensitive' } } } },
+                    { presentations: { some: { barCode: { contains: search, mode: 'insensitive' } } } }
                 ];
             }
 
             if (type) {
                 whereClause.type = type;
             }
+
+            const withPresentations =
+                query.withPresentations === true ||
+                query.withPresentations === 1 ||
+                String(query.withPresentations || '').toLowerCase() === 'true' ||
+                String(query.withPresentations || '') === '1';
 
             const [products, total] = await Promise.all([
                 prisma.product.findMany({
@@ -175,7 +193,7 @@ export class ProductService {
                     include: {
                         category: { select: { id: true, name: true } },
                         unit: { select: { id: true, symbol: true } },
-                        presentations: true,
+                        presentations: { where: { isActive: true } },
 
                         // --- CAMBIO 1: Traemos el stock físico (para productos Simples) ---
                         stockLots: {
@@ -215,80 +233,91 @@ export class ProductService {
                 prisma.product.count({ where: whereClause })
             ]);
 
-            const formattedProducts = products.map(product => {
-                // Inicializamos como Decimal para mantener la cadena de precisión
-                let calculatedStock = new Decimal(0);
-
+            const baseProducts = products.map(product => {
                 // =========================================================
-                // LÓGICA DE CÁLCULO CON DECIMAL.JS
+                // LÓGICA DE CÁLCULO (STOCK EN UNIDAD BASE)
                 // =========================================================
+                let calculatedStockBase = new Decimal(0);
 
                 if (product.type === 'SERVICE') {
-                    calculatedStock = new Decimal(0);
-                }
-
-                else if (product.type === 'SIMPLE') {
-                    // SUMA PRECIS: Usamos .add() en lugar de +
-                    calculatedStock = product.stockLots.reduce(
+                    calculatedStockBase = new Decimal(0);
+                } else if (product.type === 'SIMPLE') {
+                    calculatedStockBase = product.stockLots.reduce(
                         (acc, lot) => acc.add(new Decimal(lot.quantity)),
                         new Decimal(0)
                     );
-                }
-
-                else if (product.type === 'COMPOSITE') {
-                    // LÓGICA DEL FACTOR LIMITANTE (Reactivo Limitante)
-
+                } else if (product.type === 'COMPOSITE') {
                     if (!product.components || product.components.length === 0) {
-                        calculatedStock = new Decimal(0);
+                        calculatedStockBase = new Decimal(0);
                     } else {
-                        // Mapeamos a un array de Decimals con la cantidad posible por ingrediente
                         const possibleQuantities = product.components.map(component => {
                             const requiredQty = new Decimal(component.quantity);
-
-                            // Evitar división por cero
                             if (requiredQty.isZero() || requiredQty.isNegative()) return new Decimal(0);
 
-                            // 1. Sumamos el stock del ingrediente (child)
                             const ingredientTotalStock = component.child.stockLots.reduce(
                                 (acc, lot) => acc.add(new Decimal(lot.quantity)),
                                 new Decimal(0)
                             );
 
-                            // 2. División precisa: StockDisponible / CantidadRequerida
-                            // Ej: 1000g Harina / 250g Receta = 4 Pasteles
-                            // Usamos .floor() porque no podemos hacer 3.9 pasteles completos
                             return ingredientTotalStock.div(requiredQty).floor();
                         });
 
-                        // 3. Encontrar el Mínimo (Cuello de botella)
-                        // Decimal.min(...array) funciona si usas la librería directa, 
-                        // pero para mayor compatibilidad con Prisma iteramos:
-                        if (possibleQuantities.length > 0) {
-                            calculatedStock = possibleQuantities.reduce((min, current) =>
-                                current.lessThan(min) ? current : min
-                            );
-                        } else {
-                            calculatedStock = new Decimal(0);
-                        }
+                        calculatedStockBase = possibleQuantities.length > 0
+                            ? possibleQuantities.reduce((min, current) => (current.lessThan(min) ? current : min))
+                            : new Decimal(0);
                     }
                 }
 
-                // =========================================================
-                // SALIDA PARA EL FRONTEND
-                // =========================================================
-                return {
+                const baseItem = {
                     ...product,
                     typeName: this.getProductTypeName(product.type),
                     stockLots: undefined,
                     components: undefined,
-
-                    // FINALMENTE convertimos a Number para que el JSON sea ligero
-                    // y el frontend (React) pueda hacer cálculos simples o mostrarlo.
-                    // Usamos toNumber() de la librería Decimal.
-                    currentStock: calculatedStock.toNumber(),
-                    stockByDepot: this.groupStockByDepot(product.stockLots)
+                    currentStock: calculatedStockBase.toNumber(),
+                    stockByDepot: this.groupStockByDepot(product.stockLots),
+                    isPresentation: false,
+                    baseProductId: product.id,
+                    presentationId: null as number | null,
+                    factor: 1
                 };
+
+                return baseItem;
             });
+
+            const formattedProducts = withPresentations
+                ? baseProducts.flatMap((baseItem: any) => {
+                    const presentationItems = (baseItem.presentations || []).map((p: any) => {
+                        const factor = new Decimal(p.factor || 1);
+                        const currentStockPresentation = factor.lte(0)
+                            ? new Decimal(0)
+                            : new Decimal(baseItem.currentStock).div(factor).floor();
+
+                        return {
+                            ...baseItem,
+                            name: `${baseItem.name} - ${p.name}`,
+                            sku: p.barCode || baseItem.sku,
+                            salePrice: new Decimal(p.price).toNumber(),
+                            presentations: [
+                                {
+                                    ...p,
+                                    price: new Decimal(p.price).toNumber(),
+                                    factor: factor.toNumber()
+                                }
+                            ],
+                            currentStock: currentStockPresentation.toNumber(),
+                            stockByDepot: null,
+                            isPresentation: true,
+                            baseProductId: baseItem.id,
+                            presentationId: p.id,
+                            factor: factor.toNumber()
+                        };
+                    });
+
+                    return [baseItem, ...presentationItems];
+                })
+                : baseProducts;
+
+
 
             return {
                 message: 'Productos obtenidos exitosamente',
