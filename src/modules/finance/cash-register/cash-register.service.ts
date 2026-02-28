@@ -61,10 +61,33 @@ export class CashRegisterService {
     }
 
     // 2. LISTAR CAJAS (Histórico)
-    async findAll(businessId: number) {
+    async findAll(businessId: number, filterDate?: string, filterStatus?: 'OPEN' | 'CLOSED' | 'ALL') {
         try {
+            // Build where clause based on filters
+            const whereClause: any = { businessId };
+
+            // Apply status filter if provided and not 'ALL'
+            if (filterStatus && filterStatus !== 'ALL') {
+                whereClause.status = filterStatus;
+            }
+
+            // Apply date filter if provided
+            let dateStart: Date | undefined;
+            let dateEnd: Date | undefined;
+            if (filterDate) {
+                dateStart = new Date(filterDate);
+                dateStart.setHours(0, 0, 0, 0);
+                dateEnd = new Date(filterDate);
+                dateEnd.setHours(23, 59, 59, 999);
+
+                whereClause.openTime = {
+                    gte: dateStart,
+                    lte: dateEnd
+                };
+            }
+
             const registers = await prisma.cashRegister.findMany({
-                where: { businessId },
+                where: whereClause,
                 include: {
                     member: { include: { user: { select: { name: true } } } },
                     _count: { select: { payments: true } }, // Contamos cuántos pagos recibió
@@ -106,16 +129,17 @@ export class CashRegisterService {
                 })
             );
 
-            // === CALCULAR TOTALES DEL DÍA DE HOY ===
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
+            // === CALCULAR TOTALES DEL DÍA FILTRADO ===
+            // Si hay filtro de fecha, usar ese día, sino usar hoy
+            const targetDate = filterDate ? new Date(filterDate) : new Date();
+            targetDate.setHours(0, 0, 0, 0);
+            const nextDay = new Date(targetDate);
+            nextDay.setDate(nextDay.getDate() + 1);
 
-            // Filtrar cajas de hoy
-            const todayRegisters = registersWithSummary.filter(register => {
+            // Filtrar cajas del día objetivo
+            const dayRegisters = registersWithSummary.filter(register => {
                 const openDate = new Date(register.openTime);
-                return openDate >= today && openDate < tomorrow;
+                return openDate >= targetDate && openDate < nextDay;
             });
 
             // Calcular totales por moneda
@@ -123,7 +147,7 @@ export class CashRegisterService {
             let totalVES = 0;
             let totalPayments = 0;
 
-            todayRegisters.forEach(register => {
+            dayRegisters.forEach(register => {
                 // Sumar conteo de pagos
                 if (register._count?.payments) {
                     totalPayments += register._count.payments;
@@ -148,7 +172,7 @@ export class CashRegisterService {
                         totalUSD,
                         totalVES,
                         totalPayments,
-                        registersCount: todayRegisters.length
+                        registersCount: dayRegisters.length
                     }
                 }
             };
@@ -224,7 +248,8 @@ export class CashRegisterService {
             const paymentsGrouped = await prisma.salePayment.groupBy({
                 by: ['paymentMethodId'],
                 where: { cashRegisterId: register.id },
-                _sum: { amount: true }
+                _sum: { amount: true },
+                _count: true
             });
 
             const methods = await prisma.paymentMethod.findMany({
@@ -237,8 +262,28 @@ export class CashRegisterService {
                     method: method?.name,
                     type: method?.type,
                     currency: method?.currency,
-                    total: pg._sum.amount
+                    total: pg._sum.amount,
+                    count: pg._count
                 };
+            });
+
+            // === OBTENER TODAS LAS TRANSACCIONES INDIVIDUALES ===
+            const transactions = await prisma.salePayment.findMany({
+                where: { cashRegisterId: register.id },
+                include: {
+                    paymentMethod: true,
+                    sale: {
+                        include: {
+                            client: {
+                                select: { name: true, ci: true }
+                            }
+                        }
+                    },
+                    exchangeRate: {
+                        select: { rate: true }
+                    }
+                },
+                orderBy: { date: 'desc' }
             });
 
             return {
@@ -246,7 +291,8 @@ export class CashRegisterService {
                 message: 'Detalle de caja obtenido',
                 data: {
                     ...register,
-                    systemSummary: systemTotals
+                    systemSummary: systemTotals,
+                    transactions
                 }
             };
 
