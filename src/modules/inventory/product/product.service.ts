@@ -41,6 +41,40 @@ export class ProductService {
         await cloudinary.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
     }
 
+    async deleteCloudinaryImage(publicId: string) {
+        try {
+            const cfg = this.getCloudinaryConfig();
+            if (!cfg) {
+                return {
+                    status: 500,
+                    message: 'Cloudinary no está configurado. Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET',
+                    data: null
+                };
+            }
+
+            cloudinary.config({
+                cloud_name: cfg.cloudName,
+                api_key: cfg.apiKey,
+                api_secret: cfg.apiSecret,
+            });
+
+            const destroyResult = await cloudinary.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+
+            return {
+                status: 200,
+                message: 'Imagen eliminada',
+                data: destroyResult
+            };
+        } catch (error) {
+            console.error('Error deleteCloudinaryImage:', error);
+            return {
+                status: 500,
+                message: 'No se pudo eliminar la imagen',
+                data: null
+            };
+        }
+    }
+
     // Helper para obtener el nombre en español del tipo de producto
     private getProductTypeName(type: ProductType): string {
         const typeNames: Record<ProductType, string> = {

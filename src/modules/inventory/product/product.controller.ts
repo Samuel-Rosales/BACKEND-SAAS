@@ -53,6 +53,49 @@ export class ProductController {
         }
     }
 
+    // Cloudinary: borrar imagen por public_id (cleanup si falla create/update)
+    async deleteCloudinaryImage(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user;
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El ID del negocio es obligatorio',
+                    data: null
+                });
+            }
+
+            const publicId = req.body?.publicId;
+            if (!publicId || typeof publicId !== 'string') {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'publicId es obligatorio',
+                    data: null
+                });
+            }
+
+            const allowedPrefix = `guardian/products/${businessId}`;
+            if (!publicId.startsWith(allowedPrefix)) {
+                return res.status(403).json({
+                    status: 403,
+                    message: 'No autorizado para borrar esta imagen',
+                    data: null
+                });
+            }
+
+            const result = await service.deleteCloudinaryImage(publicId);
+            return res.status(result.status).json(result);
+        } catch (error) {
+            console.error('Error en ProductController.deleteCloudinaryImage:', error);
+            return res.status(500).json({
+                message: 'Error interno del servidor',
+                status: 500,
+                data: null
+            });
+        }
+    }
+
     // 1. CREAR
     async create(req: Request, res: Response) {
         try {
