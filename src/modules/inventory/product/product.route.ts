@@ -11,6 +11,9 @@ const validator = new ProductValidator();
 // Todas las rutas requieren autenticación
 router.use(authMiddleware);
 
+// Cloudinary: firma para subida directa (cliente -> Cloudinary)
+router.get('/cloudinary/signature', controller.getCloudinarySignature);
+
 router.post(
   '/', 
   validator.validateCreate, 
