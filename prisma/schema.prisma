@@ -230,6 +230,7 @@ model Product {
   sku           String?
   description   String? @default("")
   imageUrl      String?
+  imagePublicId String?
 
   // --- COMPORTAMIENTO ---
   // Reemplaza a isService. Define CÓMO se comporta el producto.

@@ -3,8 +3,43 @@ import { CreateProductInterface, DepotInterface, StockLotInterface, UpdateProduc
 import { ProductType } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
+import { v2 as cloudinary } from 'cloudinary';
 
 export class ProductService {
+
+    private getCloudinaryConfig() {
+        const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+        const apiKey = process.env.CLOUDINARY_API_KEY;
+        const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+        if (!cloudName || !apiKey || !apiSecret) return null;
+
+        return { cloudName, apiKey, apiSecret };
+    }
+
+    private extractCloudinaryPublicIdFromUrl(imageUrl: string, cloudName: string): string | null {
+        // Only attempt extraction for this Cloudinary cloud
+        if (!imageUrl.includes(`res.cloudinary.com/${cloudName}/`)) return null;
+
+        // Typical Cloudinary URL:
+        // https://res.cloudinary.com/<cloudName>/image/upload/v12345/folder/name.ext
+        const match = imageUrl.match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-z0-9]+(?:\?.*)?$/i);
+        if (!match?.[1]) return null;
+        return match[1];
+    }
+
+    private async deleteCloudinaryAssetIfPossible(publicId: string) {
+        const cfg = this.getCloudinaryConfig();
+        if (!cfg) return;
+
+        cloudinary.config({
+            cloud_name: cfg.cloudName,
+            api_key: cfg.apiKey,
+            api_secret: cfg.apiSecret,
+        });
+
+        await cloudinary.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+    }
 
     // Helper para obtener el nombre en español del tipo de producto
     private getProductTypeName(type: ProductType): string {
@@ -96,6 +131,7 @@ export class ProductService {
                     sku: data.sku || null,
                     description: data.description,
                     imageUrl: data.imageUrl || null,
+                    imagePublicId: data.imagePublicId || null,
                     categoryId: data.categoryId,
                     unitId: data.unitId,
                     taxId: data.taxId,
@@ -646,6 +682,13 @@ export class ProductService {
             // =================================================================
             // FASE DE PERSISTENCIA
             // =================================================================
+            const wantsToUpdateImage =
+                Object.prototype.hasOwnProperty.call(rest, 'imageUrl') ||
+                Object.prototype.hasOwnProperty.call(rest, 'imagePublicId');
+
+            const oldImageUrl = existingProduct.imageUrl || null;
+            const oldImagePublicId = existingProduct.imagePublicId || null;
+
             const updatedProduct = await prisma.product.update({
                 where: { id },
                 data: {
@@ -669,6 +712,32 @@ export class ProductService {
                     }
                 }
             });
+
+            // =================================================================
+            // FASE DE LIMPIEZA CLOUDINARY (NO BLOQUEANTE) 🧹
+            // =================================================================
+            if (wantsToUpdateImage) {
+                const newImageUrl = updatedProduct.imageUrl || null;
+                const newImagePublicId = updatedProduct.imagePublicId || null;
+
+                const imageChanged = oldImageUrl !== newImageUrl;
+
+                if (imageChanged && oldImageUrl) {
+                    const cfg = this.getCloudinaryConfig();
+
+                    // Solo borramos si Cloudinary está configurado y la imagen anterior
+                    // pertenece a este cloud.
+                    if (cfg && oldImageUrl.includes(`res.cloudinary.com/${cfg.cloudName}/`)) {
+                        const publicIdToDelete =
+                            oldImagePublicId || this.extractCloudinaryPublicIdFromUrl(oldImageUrl, cfg.cloudName);
+
+                        if (publicIdToDelete && publicIdToDelete !== newImagePublicId) {
+                            this.deleteCloudinaryAssetIfPossible(publicIdToDelete)
+                                .catch((e) => console.error('Cloudinary delete failed:', e));
+                        }
+                    }
+                }
+            }
 
             // =================================================================
             // FASE DE RECURSIVIDAD (EFECTO DOMINÓ) 🎲
