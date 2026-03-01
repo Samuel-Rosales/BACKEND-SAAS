@@ -976,6 +976,7 @@ export class SaleService {
                         productId: item.productId,
                         name: displayName,
                         sku: item.product?.sku,
+                        imageUrl: item.product?.imageUrl || null,
                         quantity: Number(item.quantity),
                         price: Number(item.unitPrice), // Precio unitario al momento de la venta
                         total: Number(item.subTotal), // Total línea (qty * price)
