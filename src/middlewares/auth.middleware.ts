@@ -32,30 +32,43 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     const businessIdHeader = req.headers['x-business-id'];
 
     if (businessIdHeader) {
-        const businessId = Number(businessIdHeader);
+      const businessId = Number(businessIdHeader);
 
-        // Validamos que sea un número válido
-        if (isNaN(businessId)) {
-             return res.status(400).json({ message: 'Header x-business-id inválido' });
-        }
+      // Validamos que sea un número válido
+      if (isNaN(businessId)) {
+        return res.status(400).json({ message: 'Header x-business-id inválido' });
+      }
 
-        // VERIFICAMOS PERTENENCIA: ¿Este usuario trabaja en esta empresa?
-        const membership = await prisma.businessMember.findFirst({
-            where: {
-                userId: user.id,
-                businessId: businessId,
-                isActive: true // Solo si sigue activo
-            }
-        });
+      // Aseguramos que el negocio exista
+      const businessExists = await prisma.business.findUnique({ where: { id: businessId }, select: { id: true } });
+      if (!businessExists) {
+        return res.status(404).json({ message: 'Negocio no encontrado.' });
+      }
 
-        if (!membership) {
-            return res.status(403).json({ message: 'No tienes acceso a esta empresa.' });
-        }
+      // Intentamos resolver membresía (para obtener roleId/membershipId cuando aplique)
+      const membership = await prisma.businessMember.findFirst({
+        where: {
+          userId: user.id,
+          businessId: businessId,
+          isActive: true,
+        },
+      });
 
-        // Si pasa, inyectamos el ID seguro y el ROL (muy útil para permisos después)
-        req.user.businessId = businessId;
+      // Si NO hay membresía:
+      // - Super admin: permitimos seleccionar el negocio, pero sin membershipId/roleId.
+      // - Usuario normal: 403.
+      if (!membership && !user.isSuperAdmin) {
+        return res.status(403).json({ message: 'No tienes acceso a esta empresa.' });
+      }
+
+      // Inyectamos el ID seguro del negocio
+      req.user.businessId = businessId;
+
+      // Inyectamos datos de membresía solo si existe
+      if (membership) {
         req.user.roleId = membership.roleId;
         req.user.membershipId = membership.id;
+      }
     }
 
     next();
