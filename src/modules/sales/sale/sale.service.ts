@@ -122,11 +122,19 @@ export class SaleService {
             });
 
             // 2. Aplicación de Descuento Global (Prorrateo) y Cálculo de Impuestos
-            const globalDiscount = new Decimal(data.discount || 0);
+            // NOTA: En este proyecto `discount` se maneja como MONTO total (USD), no como porcentaje.
+            const discountAmount = new Decimal(data.discount || 0);
 
-            // 2. Compara usando .gt() (Greater Than / Mayor Que)
-            if (globalDiscount.gt(rawSubTotal)) {
-                throw new BusinessError('El descuento no puede ser mayor al total de la venta', 400);
+            if (discountAmount.lt(0)) {
+                throw new BusinessError('El descuento no puede ser negativo', 400);
+            }
+
+            // El descuento no puede ser mayor al subtotal bruto (antes de descuento)
+            if (discountAmount.gt(rawSubTotal)) {
+                throw new BusinessError(
+                    `El descuento no puede ser mayor al subtotal ($${rawSubTotal.toFixed(2)})`,
+                    400
+                );
             }
 
             let finalSubTotal = new Decimal(0);
@@ -148,9 +156,9 @@ export class SaleService {
                     weight = item.lineGrossAmount.div(rawSubTotal);
                 }
 
-                // globalDiscount * weight ---> .mul()
-                const lineDiscount = globalDiscount.mul(weight);
-
+                // discountAmount * weight ---> .mul()
+                const lineDiscount = discountAmount.mul(weight);
+                console.log(`Producto ${item.product.name}: lineGrossAmount=${item.lineGrossAmount.toFixed(2)}, weight=${weight.toFixed(4)}, lineDiscount=${lineDiscount.toFixed(2)}`);
                 // Base Imponible de la línea (Subtotal Neto)
                 // item.lineGrossAmount - lineDiscount ---> .sub()
                 const lineNetAmount = item.lineGrossAmount.sub(lineDiscount);
@@ -340,7 +348,10 @@ export class SaleService {
 
             // 2. Ahora sí podemos usar .sub() con seguridad
             const differenceTotalAmount = incomingTotal.sub(totalAmount).abs();
-            const differenceSubTotal = incomingSubTotal.sub(finalSubTotal).abs();
+            // Compat: algunos frontends mandan subtotal BRUTO (sin descuento) y otros el NETO (con descuento).
+            // Guardamos en BD el BRUTO para que coincida con la UI (Subtotal - Descuento).
+            const differenceSubTotalGross = incomingSubTotal.sub(rawSubTotal).abs();
+            const differenceSubTotalNet = incomingSubTotal.sub(finalSubTotal).abs();
             const differenceTaxAmount = incomingTax.sub(finalTaxAmount).abs();
 
             // 3. Validación - Solo lanzar error si hay una diferencia real mayor al epsilon
@@ -351,9 +362,10 @@ export class SaleService {
                 );
             }
 
-            if (differenceSubTotal.gt(EPSILON)) {
+            // Aceptamos si coincide con bruto o neto dentro del epsilon.
+            if (differenceSubTotalGross.gt(EPSILON) && differenceSubTotalNet.gt(EPSILON)) {
                 throw new BusinessError(
-                    `Discrepancia en subtotal: Recibido ${incomingSubTotal.toFixed(2)} vs Calculado ${finalSubTotal.toFixed(2)} (Diferencia: ${differenceSubTotal.toFixed(2)})`,
+                    `Discrepancia en subtotal: Recibido ${incomingSubTotal.toFixed(2)} vs Calculado $${rawSubTotal.toFixed(2)} (bruto) / $${finalSubTotal.toFixed(2)} (neto). Diferencias: ${differenceSubTotalGross.toFixed(2)} / ${differenceSubTotalNet.toFixed(2)}`,
                     400
                 );
             }
@@ -389,8 +401,8 @@ export class SaleService {
 
                         // Pasamos los objetos Decimal DIRECTAMENTE. 
                         // Prisma sabe cómo mapear Decimal.js a la base de datos.
-                        subTotal: finalSubTotal,
-                        discount: globalDiscount,
+                        subTotal: rawSubTotal,
+                        discount: discountAmount,
                         taxAmount: finalTaxAmount,
                         totalAmount: totalAmount,
 
@@ -473,7 +485,8 @@ export class SaleService {
                             productPresentationId: item.presentationUsed?.id || null,
                             quantity: item.quantity,
                             unitPrice: item.unitPrice,
-                            subTotal: item.finalLinePrice,
+                            // Guardamos el subtotal bruto por línea (qty * unitPrice).
+                            subTotal: item.lineGrossAmount,
                         }
                     });
 

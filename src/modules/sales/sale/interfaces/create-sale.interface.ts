@@ -31,7 +31,7 @@ export interface CreateSaleInterface {
     depotId: number;
     
     // --- FINANZAS ---
-    discount: Decimal; // Descuento Global en dinero (ej: $5.00)
+    discount?: Decimal; // Descuento global en MONTO (USD). Ej: 10.00
     
     // --- CONDICIONES ---
     condition: Conditions; // CASH / CREDIT
