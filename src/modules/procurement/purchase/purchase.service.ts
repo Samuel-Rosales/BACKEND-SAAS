@@ -11,6 +11,14 @@ const costTolerance = new Decimal(0.0001);
 
 export class PurchaseService {
 
+    private parseDateOnlyStart(value: string) {
+        return new Date(`${value}T00:00:00.000`);
+    }
+
+    private parseDateOnlyEnd(value: string) {
+        return new Date(`${value}T23:59:59.999`);
+    }
+
     async create(businessId: number, userId: number, data: CreatePurchaseInterface) {
         try {
             // =================================================================
@@ -473,8 +481,8 @@ export class PurchaseService {
             // Filtro por Fechas
             if (query.fromDate && query.toDate) {
                 whereClause.createdAt = { // Ojo: Usamos createdAt según tu schema
-                    gte: new Date(query.fromDate),
-                    lte: new Date(new Date(query.toDate).setHours(23, 59, 59))
+                    gte: this.parseDateOnlyStart(query.fromDate),
+                    lte: this.parseDateOnlyEnd(query.toDate)
                 };
             }
 

@@ -1,14 +1,40 @@
 import { prisma } from '@/configs';
 import { Decimal } from '@prisma/client/runtime/client';
-import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { differenceInCalendarDays, endOfMonth, startOfMonth, subDays, subMonths } from 'date-fns';
+
+type DateRangeQuery = {
+    fromDate?: string;
+    toDate?: string;
+};
+
+const parseDateOnlyStart = (value: string) => new Date(`${value}T00:00:00.000`);
+const parseDateOnlyEnd = (value: string) => new Date(`${value}T23:59:59.999`);
 
 export class PurchaseStatsService {
-    async getDetailedPurchaseReport(businessId: number) {
+    async getDetailedPurchaseReport(businessId: number, range?: DateRangeQuery) {
         const now = new Date();
-        const currentStart = startOfMonth(now);
-        const currentEnd = endOfMonth(now);
-        const prevStart = startOfMonth(subMonths(now, 1));
-        const prevEnd = endOfMonth(subMonths(now, 1));
+
+        let currentStart = startOfMonth(now);
+        let currentEnd = endOfMonth(now);
+
+        let prevStart = startOfMonth(subMonths(now, 1));
+        let prevEnd = endOfMonth(subMonths(now, 1));
+
+        // Si se envía rango, usamos ese período y comparamos con el período anterior equivalente
+        if (range?.fromDate && range?.toDate) {
+            currentStart = parseDateOnlyStart(range.fromDate);
+            currentEnd = parseDateOnlyEnd(range.toDate);
+
+            const spanDays = Math.max(1, differenceInCalendarDays(currentEnd, currentStart) + 1);
+            prevEnd = subDays(currentStart, 1);
+            prevStart = subDays(currentStart, spanDays);
+        } else if (range?.fromDate && !range?.toDate) {
+            currentStart = parseDateOnlyStart(range.fromDate);
+            currentEnd = now;
+        } else if (!range?.fromDate && range?.toDate) {
+            currentStart = startOfMonth(parseDateOnlyStart(range.toDate));
+            currentEnd = parseDateOnlyEnd(range.toDate);
+        }
 
         try {
             const [currentStats, prevStats, activeSuppliers] = await Promise.all([
