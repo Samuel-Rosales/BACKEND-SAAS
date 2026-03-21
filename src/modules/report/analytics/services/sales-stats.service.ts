@@ -2,6 +2,14 @@ import { prisma } from '@/configs';
 import { Decimal } from '@prisma/client/runtime/client';
 import { startOfMonth, endOfMonth, subMonths, getDaysInMonth, getDate } from 'date-fns';
 
+type DateRangeQuery = {
+    fromDate?: string;
+    toDate?: string;
+};
+
+const parseDateOnlyStart = (value: string) => new Date(`${value}T00:00:00.000`);
+const parseDateOnlyEnd = (value: string) => new Date(`${value}T23:59:59.999`);
+
 export class SalesStatsService {
 
     async getSalesDashboardMetrics(businessId: number) {
@@ -105,10 +113,22 @@ export class SalesStatsService {
         }
     }
 
-    async getDetailedReport(businessId: number) {
+    async getDetailedReport(businessId: number, range?: DateRangeQuery) {
         const now = new Date();
-        const currentStart = startOfMonth(now);
-        const currentEnd = endOfMonth(now);
+
+        let currentStart = startOfMonth(now);
+        let currentEnd = endOfMonth(now);
+
+        if (range?.fromDate && range?.toDate) {
+            currentStart = parseDateOnlyStart(range.fromDate);
+            currentEnd = parseDateOnlyEnd(range.toDate);
+        } else if (range?.fromDate && !range?.toDate) {
+            currentStart = parseDateOnlyStart(range.fromDate);
+            currentEnd = now;
+        } else if (!range?.fromDate && range?.toDate) {
+            currentStart = startOfMonth(parseDateOnlyStart(range.toDate));
+            currentEnd = parseDateOnlyEnd(range.toDate);
+        }
 
         try {
             // Ejecutamos consultas en paralelo para no bloquear el hilo

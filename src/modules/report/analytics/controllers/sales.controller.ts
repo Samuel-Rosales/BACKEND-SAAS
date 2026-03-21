@@ -6,12 +6,14 @@ const salesStats = new SalesStatsService();
 export class SalesReportController {
      SalesMetrics = async (req: Request, res: Response) => {
         const { businessId } = req.user;
+    const fromDate = req.query.fromDate as string | undefined;
+    const toDate = req.query.toDate as string | undefined;
 
         if (!businessId) {
             return res.status(400).json({ message: 'Falta el header x-business-id' });
         }
         try {
-            const salesMetrics = await salesStats.getDetailedReport(businessId);
+            const salesMetrics = await salesStats.getDetailedReport(businessId, { fromDate, toDate });
             if (salesMetrics.status !== 200) {
                 return res.status(salesMetrics.status).json({ error: salesMetrics.message });
             }

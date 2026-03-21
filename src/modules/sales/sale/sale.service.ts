@@ -16,6 +16,9 @@ interface FindSalesQuery {
     toDate?: string;
 }
 
+const parseDateOnlyStart = (value: string) => new Date(`${value}T00:00:00.000`);
+const parseDateOnlyEnd = (value: string) => new Date(`${value}T23:59:59.999`);
+
 export class SaleService {
 
     // =================================================================
@@ -813,8 +816,8 @@ export class SaleService {
             // 2. Filtros de Fecha
             if (query.fromDate && query.toDate) {
                 whereClause.createdAt = {
-                    gte: new Date(query.fromDate),
-                    lte: new Date(new Date(query.toDate).setHours(23, 59, 59))
+                    gte: parseDateOnlyStart(query.fromDate),
+                    lte: parseDateOnlyEnd(query.toDate)
                 };
             }
 
