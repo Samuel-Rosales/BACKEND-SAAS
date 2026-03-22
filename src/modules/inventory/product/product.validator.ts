@@ -71,6 +71,10 @@ export class ProductValidator {
             .trim()
             .isURL().withMessage('La URL de la imagen debe ser válida'),
 
+        body('imagePublicId')
+            .optional({ nullable: true })
+            .isString().withMessage('imagePublicId debe ser un string'),
+
         // 4. DATOS FINANCIEROS
         body('costPrice')
             .isFloat({ min: 0 }).withMessage('El precio de costo debe ser positivo')
@@ -153,6 +157,7 @@ export class ProductValidator {
         body('sku').optional({ nullable: true }).trim().isString().isLength({ max: 100 }),
         body('description').optional().trim().isString().isLength({ max: 1000 }),
         body('imageUrl').optional({ nullable: true }).trim().isURL(),
+        body('imagePublicId').optional({ nullable: true }).isString(),
         
         body('costPrice').optional().isFloat({ min: 0 }).toFloat(),
         body('salePrice').optional().isFloat({ min: 0 }).toFloat(),

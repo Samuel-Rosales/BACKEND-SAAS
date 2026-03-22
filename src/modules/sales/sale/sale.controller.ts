@@ -235,4 +235,60 @@ export class SaleController {
             });
         }
     }
+
+    async cancel(req: Request, res: Response) {
+        try {
+            const { businessId, membershipId } = req.user;
+            const saleId = Number(req.params.id);
+            console.log('Received cancel request for businessId:', businessId, 'saleId:', saleId, 'with body:', req.body);
+            const reason = req.body.reason as string;
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            if (!membershipId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID del miembro (vendedor) en el header.',
+                    data: null
+                });
+            }
+
+            if (isNaN(saleId)) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El ID de la venta debe ser un número válido',
+                    data: null
+                });
+            }
+
+            if (!reason || reason.trim() === '') {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'La razón de la anulación es obligatoria',
+                    data: null
+                });
+            }
+
+            const { data, message, status } = await service.cancel(businessId, saleId, membershipId, reason);
+
+            return res.status(status).json({
+                data,
+                message
+            });
+
+        } catch (error) {
+            console.error('Error en SaleController.cancel:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al anular la venta',
+                data: null
+            });
+        }
+    }
 }

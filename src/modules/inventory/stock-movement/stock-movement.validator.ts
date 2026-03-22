@@ -31,11 +31,6 @@ export class StockMovementValidator {
             .isIn(Object.values(MovementType))
             .withMessage(`El tipo debe ser uno de: ${Object.values(MovementType).join(', ')}`),
 
-        body('quantity')
-            .isFloat({ gt: 0 })
-            .withMessage('La cantidad debe ser un número mayor a 0 (acepta decimales)')
-            .notEmpty().withMessage('La cantidad es requerida'),
-
         // --- CAMPOS DE LOTES ---
         body('lotId')
             .optional()

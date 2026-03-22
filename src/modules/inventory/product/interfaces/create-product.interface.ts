@@ -19,6 +19,7 @@ export interface CreateProductInterface {
     
     isPerishable?: boolean;
     imageUrl?: string;
+    imagePublicId?: string;
     
     costPrice: number;
     profitMargin: number;

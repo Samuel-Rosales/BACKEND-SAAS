@@ -30,25 +30,25 @@ export class ClientService {
   }
 
   // 2. LISTAR (Tenant Scoped + Search + Status)
-  async findAll(businessId: number, query?: { search?: string, status?: string }) {
+  async findAll(businessId: number, query?: { page?: number, limit?: number, search?: string, isActive?: string }) {
     try {
       const search = query?.search ? String(query.search).trim() : undefined;
-      const statusParam = query?.status ? String(query.status).toLowerCase() : undefined;
+      const isActiveParam = query?.isActive ? String(query.isActive).toLowerCase() : undefined;
 
       const whereClause: any = { businessId };
 
       if (search) {
         whereClause.OR = [
           { name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } }
+          { ci: { contains: search, mode: 'insensitive' } }
         ];
       }
 
       
-      if (statusParam) {
-        if (statusParam === 'true' || statusParam === 'active') {
+      if (isActiveParam) {
+        if (isActiveParam === 'true' || isActiveParam === 'active') {
           whereClause.isActive = true;
-        } else if (statusParam === 'false' || statusParam === 'inactive') {
+        } else if (isActiveParam === 'false' || isActiveParam === 'inactive') {
           whereClause.isActive = false;
         }
       }
@@ -205,6 +205,116 @@ export class ClientService {
       return {
         message: 'Error interno al procesar la eliminación',
         status: 500,
+        data: null
+      };
+    }
+  }
+
+  // 6. HISTORIAL DE COMPRAS (VENTAS) DE UN CLIENTE
+  async purchaseHistory(businessId: number, clientId: number) {
+    try {
+      const client = await prisma.client.findFirst({
+        where: { id: clientId, businessId }
+      });
+
+      if (!client) {
+        return {
+          status: 404,
+          message: 'Cliente no encontrado',
+          data: null
+        };
+      }
+
+      const sales = await prisma.sale.findMany({
+        where: {
+          businessId,
+          clientId,
+          deletedAt: null
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          exchangeRate: { select: { rate: true } },
+          items: {
+            include: {
+              product: { select: { id: true, name: true, sku: true } },
+              productPresentation: { select: { id: true, name: true, factor: true } }
+            }
+          },
+          payments: {
+            include: {
+              paymentMethod: { select: { id: true, name: true, type: true, currency: true } },
+              exchangeRate: { select: { rate: true } }
+            }
+          },
+          creditNotes: {
+            include: {
+              items: {
+                include: { product: { select: { id: true, name: true, sku: true } } }
+              },
+              creditNotePayments: {
+                include: {
+                  paymentMethod: { select: { id: true, name: true, type: true, currency: true } },
+                  exchangeRate: { select: { rate: true } }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const formatted = sales.map(sale => ({
+        ...sale,
+        subTotal: Number(sale.subTotal),
+        taxAmount: Number(sale.taxAmount),
+        discount: Number(sale.discount),
+        totalAmount: Number(sale.totalAmount),
+        remainingBalance: Number(sale.remainingBalance),
+        exchangeRate: sale.exchangeRate ? { ...sale.exchangeRate, rate: Number(sale.exchangeRate.rate) } : sale.exchangeRate,
+        items: sale.items.map(item => ({
+          ...item,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          subTotal: Number(item.subTotal),
+          productPresentation: item.productPresentation
+            ? { ...item.productPresentation, factor: Number(item.productPresentation.factor) }
+            : item.productPresentation
+        })),
+        payments: sale.payments.map(p => ({
+          ...p,
+          amount: Number(p.amount),
+          exchangeRate: p.exchangeRate ? { ...p.exchangeRate, rate: Number(p.exchangeRate.rate) } : p.exchangeRate
+        })),
+        creditNotes: sale.creditNotes.map(cn => ({
+          ...cn,
+          totalAmount: Number(cn.totalAmount),
+          items: cn.items.map(it => ({
+            ...it,
+            quantity: Number(it.quantity),
+            unitPrice: Number(it.unitPrice),
+            subTotal: Number(it.subTotal)
+          })),
+          creditNotePayments: cn.creditNotePayments.map(pay => ({
+            ...pay,
+            amount: Number(pay.amount),
+            exchangeRate: pay.exchangeRate ? { ...pay.exchangeRate, rate: Number(pay.exchangeRate.rate) } : pay.exchangeRate
+          }))
+        }))
+      }));
+
+      return {
+        status: 200,
+        message: 'Historial de compras obtenido exitosamente',
+        data: {
+          client,
+          sales: formatted
+        }
+      };
+
+    } catch (error) {
+      console.error('Error en purchaseHistory:', error);
+      return {
+        status: 500,
+        message: 'Error interno al obtener el historial de compras',
         data: null
       };
     }

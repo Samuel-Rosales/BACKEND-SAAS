@@ -21,6 +21,13 @@ router.post(
 router.get('/', controller.findAll);
 
 router.get(
+  '/:id/history',
+  validator.validateId,
+  handleValidationErrors,
+  controller.purchaseHistory
+);
+
+router.get(
     '/:id', 
     validator.validateId,
     handleValidationErrors,

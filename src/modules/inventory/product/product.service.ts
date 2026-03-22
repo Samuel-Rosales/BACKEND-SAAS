@@ -3,8 +3,87 @@ import { CreateProductInterface, DepotInterface, StockLotInterface, UpdateProduc
 import { ProductType } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
+import { v2 as cloudinary } from 'cloudinary';
 
 export class ProductService {
+
+    private getCloudinaryConfig() {
+        const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+        const apiKey = process.env.CLOUDINARY_API_KEY;
+        const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+        if (!cloudName || !apiKey || !apiSecret) return null;
+
+        return { cloudName, apiKey, apiSecret };
+    }
+
+    private extractCloudinaryPublicIdFromUrl(imageUrl: string, cloudName: string): string | null {
+        // Only attempt extraction for this Cloudinary cloud
+        if (!imageUrl.includes(`res.cloudinary.com/${cloudName}/`)) return null;
+
+        // Typical Cloudinary URL:
+        // https://res.cloudinary.com/<cloudName>/image/upload/v12345/folder/name.ext
+        const match = imageUrl.match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-z0-9]+(?:\?.*)?$/i);
+        if (!match?.[1]) return null;
+        return match[1];
+    }
+
+    private async deleteCloudinaryAssetIfPossible(publicId: string) {
+        const cfg = this.getCloudinaryConfig();
+        if (!cfg) return;
+
+        cloudinary.config({
+            cloud_name: cfg.cloudName,
+            api_key: cfg.apiKey,
+            api_secret: cfg.apiSecret,
+        });
+
+        await cloudinary.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+    }
+
+    async deleteCloudinaryImage(publicId: string) {
+        try {
+            const cfg = this.getCloudinaryConfig();
+            if (!cfg) {
+                return {
+                    status: 500,
+                    message: 'Cloudinary no está configurado. Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET',
+                    data: null
+                };
+            }
+
+            cloudinary.config({
+                cloud_name: cfg.cloudName,
+                api_key: cfg.apiKey,
+                api_secret: cfg.apiSecret,
+            });
+
+            const destroyResult = await cloudinary.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+
+            return {
+                status: 200,
+                message: 'Imagen eliminada',
+                data: destroyResult
+            };
+        } catch (error) {
+            console.error('Error deleteCloudinaryImage:', error);
+            return {
+                status: 500,
+                message: 'No se pudo eliminar la imagen',
+                data: null
+            };
+        }
+    }
+
+    // Helper para obtener el nombre en español del tipo de producto
+    private getProductTypeName(type: ProductType): string {
+        const typeNames: Record<ProductType, string> = {
+            [ProductType.SIMPLE]: 'Simple',
+            [ProductType.COMPOSITE]: 'Compuesto',
+            [ProductType.SERVICE]: 'Servicio'
+        };
+        return typeNames[type] || type;
+    }
 
     async create(businessId: number, userId: number, data: CreateProductInterface) {
         try {
@@ -86,6 +165,7 @@ export class ProductService {
                     sku: data.sku || null,
                     description: data.description,
                     imageUrl: data.imageUrl || null,
+                    imagePublicId: data.imagePublicId || null,
                     categoryId: data.categoryId,
                     unitId: data.unitId,
                     taxId: data.taxId,
@@ -133,7 +213,17 @@ export class ProductService {
     }
 
     // 2. LISTAR TODOS
-    async findAll(businessId: number, query: { page?: number, limit?: number, search?: string, categoryId?: number, type?: string }) {
+    async findAll(
+        businessId: number,
+        query: {
+            page?: number;
+            limit?: number;
+            search?: string;
+            categoryId?: number;
+            type?: string;
+            withPresentations?: string | number | boolean;
+        }
+    ) {
         try {
             const page = Number(query.page) || 1;
             const limit = Number(query.limit) || 20;
@@ -148,13 +238,21 @@ export class ProductService {
             if (search) {
                 whereClause.OR = [
                     { name: { contains: search, mode: 'insensitive' } },
-                    { sku: { contains: search, mode: 'insensitive' } }
+                    { sku: { contains: search, mode: 'insensitive' } },
+                    { presentations: { some: { name: { contains: search, mode: 'insensitive' } } } },
+                    { presentations: { some: { barCode: { contains: search, mode: 'insensitive' } } } }
                 ];
             }
 
             if (type) {
                 whereClause.type = type;
             }
+
+            const withPresentations =
+                query.withPresentations === true ||
+                query.withPresentations === 1 ||
+                String(query.withPresentations || '').toLowerCase() === 'true' ||
+                String(query.withPresentations || '') === '1';
 
             const [products, total] = await Promise.all([
                 prisma.product.findMany({
@@ -165,12 +263,12 @@ export class ProductService {
                     include: {
                         category: { select: { id: true, name: true } },
                         unit: { select: { id: true, symbol: true } },
-                        presentations: true,
+                        presentations: { where: { isActive: true } },
 
                         // --- CAMBIO 1: Traemos el stock físico (para productos Simples) ---
-                        stockLots: { 
+                        stockLots: {
                             where: { quantity: { gt: 0 } },
-                            select: { 
+                            select: {
                                 quantity: true,
                                 expirationDate: true,
                                 depot: {
@@ -179,7 +277,7 @@ export class ProductService {
                                         name: true
                                     }
                                 }
-                            } 
+                            }
                         },
 
                         // --- CAMBIO 2: Traemos la receta y el stock de los ingredientes (para Compuestos) ---
@@ -205,79 +303,91 @@ export class ProductService {
                 prisma.product.count({ where: whereClause })
             ]);
 
-            const formattedProducts = products.map(product => {
-                // Inicializamos como Decimal para mantener la cadena de precisión
-                let calculatedStock = new Decimal(0);
-
+            const baseProducts = products.map(product => {
                 // =========================================================
-                // LÓGICA DE CÁLCULO CON DECIMAL.JS
+                // LÓGICA DE CÁLCULO (STOCK EN UNIDAD BASE)
                 // =========================================================
+                let calculatedStockBase = new Decimal(0);
 
                 if (product.type === 'SERVICE') {
-                    calculatedStock = new Decimal(0);
-                }
-
-                else if (product.type === 'SIMPLE') {
-                    // SUMA PRECIS: Usamos .add() en lugar de +
-                    calculatedStock = product.stockLots.reduce(
+                    calculatedStockBase = new Decimal(0);
+                } else if (product.type === 'SIMPLE') {
+                    calculatedStockBase = product.stockLots.reduce(
                         (acc, lot) => acc.add(new Decimal(lot.quantity)),
                         new Decimal(0)
                     );
-                }
-
-                else if (product.type === 'COMPOSITE') {
-                    // LÓGICA DEL FACTOR LIMITANTE (Reactivo Limitante)
-
+                } else if (product.type === 'COMPOSITE') {
                     if (!product.components || product.components.length === 0) {
-                        calculatedStock = new Decimal(0);
+                        calculatedStockBase = new Decimal(0);
                     } else {
-                        // Mapeamos a un array de Decimals con la cantidad posible por ingrediente
                         const possibleQuantities = product.components.map(component => {
                             const requiredQty = new Decimal(component.quantity);
-
-                            // Evitar división por cero
                             if (requiredQty.isZero() || requiredQty.isNegative()) return new Decimal(0);
 
-                            // 1. Sumamos el stock del ingrediente (child)
                             const ingredientTotalStock = component.child.stockLots.reduce(
                                 (acc, lot) => acc.add(new Decimal(lot.quantity)),
                                 new Decimal(0)
                             );
 
-                            // 2. División precisa: StockDisponible / CantidadRequerida
-                            // Ej: 1000g Harina / 250g Receta = 4 Pasteles
-                            // Usamos .floor() porque no podemos hacer 3.9 pasteles completos
                             return ingredientTotalStock.div(requiredQty).floor();
                         });
 
-                        // 3. Encontrar el Mínimo (Cuello de botella)
-                        // Decimal.min(...array) funciona si usas la librería directa, 
-                        // pero para mayor compatibilidad con Prisma iteramos:
-                        if (possibleQuantities.length > 0) {
-                            calculatedStock = possibleQuantities.reduce((min, current) =>
-                                current.lessThan(min) ? current : min
-                            );
-                        } else {
-                            calculatedStock = new Decimal(0);
-                        }
+                        calculatedStockBase = possibleQuantities.length > 0
+                            ? possibleQuantities.reduce((min, current) => (current.lessThan(min) ? current : min))
+                            : new Decimal(0);
                     }
                 }
 
-                // =========================================================
-                // SALIDA PARA EL FRONTEND
-                // =========================================================
-                return {
+                const baseItem = {
                     ...product,
+                    typeName: this.getProductTypeName(product.type),
                     stockLots: undefined,
                     components: undefined,
-
-                    // FINALMENTE convertimos a Number para que el JSON sea ligero
-                    // y el frontend (React) pueda hacer cálculos simples o mostrarlo.
-                    // Usamos toNumber() de la librería Decimal.
-                    currentStock: calculatedStock.toNumber(),
-                    stockByDepot: this.groupStockByDepot(product.stockLots)
+                    currentStock: calculatedStockBase.toNumber(),
+                    stockByDepot: this.groupStockByDepot(product.stockLots),
+                    isPresentation: false,
+                    baseProductId: product.id,
+                    presentationId: null as number | null,
+                    factor: 1
                 };
+
+                return baseItem;
             });
+
+            const formattedProducts = withPresentations
+                ? baseProducts.flatMap((baseItem: any) => {
+                    const presentationItems = (baseItem.presentations || []).map((p: any) => {
+                        const factor = new Decimal(p.factor || 1);
+                        const currentStockPresentation = factor.lte(0)
+                            ? new Decimal(0)
+                            : new Decimal(baseItem.currentStock).div(factor).floor();
+
+                        return {
+                            ...baseItem,
+                            name: `${baseItem.name} - ${p.name}`,
+                            sku: p.barCode || baseItem.sku,
+                            salePrice: new Decimal(p.price).toNumber(),
+                            presentations: [
+                                {
+                                    ...p,
+                                    price: new Decimal(p.price).toNumber(),
+                                    factor: factor.toNumber()
+                                }
+                            ],
+                            currentStock: currentStockPresentation.toNumber(),
+                            stockByDepot: null,
+                            isPresentation: true,
+                            baseProductId: baseItem.id,
+                            presentationId: p.id,
+                            factor: factor.toNumber()
+                        };
+                    });
+
+                    return [baseItem, ...presentationItems];
+                })
+                : baseProducts;
+
+
 
             return {
                 message: 'Productos obtenidos exitosamente',
@@ -396,6 +506,7 @@ export class ProductService {
                 description: product.description,
                 imageUrl: product.imageUrl,
                 type: product.type,
+                typeName: this.getProductTypeName(product.type),
                 isPerishable: product.isPerishable,
 
                 // Conversión de Decimal a Number (JS nativo)
@@ -605,6 +716,13 @@ export class ProductService {
             // =================================================================
             // FASE DE PERSISTENCIA
             // =================================================================
+            const wantsToUpdateImage =
+                Object.prototype.hasOwnProperty.call(rest, 'imageUrl') ||
+                Object.prototype.hasOwnProperty.call(rest, 'imagePublicId');
+
+            const oldImageUrl = existingProduct.imageUrl || null;
+            const oldImagePublicId = existingProduct.imagePublicId || null;
+
             const updatedProduct = await prisma.product.update({
                 where: { id },
                 data: {
@@ -628,6 +746,32 @@ export class ProductService {
                     }
                 }
             });
+
+            // =================================================================
+            // FASE DE LIMPIEZA CLOUDINARY (NO BLOQUEANTE) 🧹
+            // =================================================================
+            if (wantsToUpdateImage) {
+                const newImageUrl = updatedProduct.imageUrl || null;
+                const newImagePublicId = updatedProduct.imagePublicId || null;
+
+                const imageChanged = oldImageUrl !== newImageUrl;
+
+                if (imageChanged && oldImageUrl) {
+                    const cfg = this.getCloudinaryConfig();
+
+                    // Solo borramos si Cloudinary está configurado y la imagen anterior
+                    // pertenece a este cloud.
+                    if (cfg && oldImageUrl.includes(`res.cloudinary.com/${cfg.cloudName}/`)) {
+                        const publicIdToDelete =
+                            oldImagePublicId || this.extractCloudinaryPublicIdFromUrl(oldImageUrl, cfg.cloudName);
+
+                        if (publicIdToDelete && publicIdToDelete !== newImagePublicId) {
+                            this.deleteCloudinaryAssetIfPossible(publicIdToDelete)
+                                .catch((e) => console.error('Cloudinary delete failed:', e));
+                        }
+                    }
+                }
+            }
 
             // =================================================================
             // FASE DE RECURSIVIDAD (EFECTO DOMINÓ) 🎲

@@ -1,5 +1,12 @@
-import { Product, SaleItem, SaleItemLot } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/client";
+
+export type SaleItemForCreditNote = Prisma.SaleItemGetPayload<{
+    include: {
+        product: true;
+        lotAllocations: { include: { stockLot: true } };
+    };
+}>;
 
 export interface CreateCreditNoteInterface {
     saleId: number;
@@ -24,10 +31,7 @@ export interface CreditNotePaymentInterface {
 }
 
 export interface ItemProcessingData {
-    originalItem: SaleItem & {
-        product: Product;
-        lotAllocations: SaleItemLot[];
-    };
+    originalItem: SaleItemForCreditNote;
     quantityToReturn: Decimal;
     refundAmount: Decimal;
     ratio: Decimal;

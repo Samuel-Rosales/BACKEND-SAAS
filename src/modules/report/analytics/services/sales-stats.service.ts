@@ -2,6 +2,14 @@ import { prisma } from '@/configs';
 import { Decimal } from '@prisma/client/runtime/client';
 import { startOfMonth, endOfMonth, subMonths, getDaysInMonth, getDate } from 'date-fns';
 
+type DateRangeQuery = {
+    fromDate?: string;
+    toDate?: string;
+};
+
+const parseDateOnlyStart = (value: string) => new Date(`${value}T00:00:00.000`);
+const parseDateOnlyEnd = (value: string) => new Date(`${value}T23:59:59.999`);
+
 export class SalesStatsService {
 
     async getSalesDashboardMetrics(businessId: number) {
@@ -100,6 +108,99 @@ export class SalesStatsService {
                 message: 'Error interno al calcular métricas de ventas',
                 data: {
                     currentMonthRevenue: 0, status: 'Neutral', trend: [] 
+                }
+            };
+        }
+    }
+
+    async getDetailedReport(businessId: number, range?: DateRangeQuery) {
+        const now = new Date();
+
+        let currentStart = startOfMonth(now);
+        let currentEnd = endOfMonth(now);
+
+        if (range?.fromDate && range?.toDate) {
+            currentStart = parseDateOnlyStart(range.fromDate);
+            currentEnd = parseDateOnlyEnd(range.toDate);
+        } else if (range?.fromDate && !range?.toDate) {
+            currentStart = parseDateOnlyStart(range.fromDate);
+            currentEnd = now;
+        } else if (!range?.fromDate && range?.toDate) {
+            currentStart = startOfMonth(parseDateOnlyStart(range.toDate));
+            currentEnd = parseDateOnlyEnd(range.toDate);
+        }
+
+        try {
+            // Ejecutamos consultas en paralelo para no bloquear el hilo
+            const [salesStats, creditNotes] = await Promise.all([
+                // 1. Estadísticas de Ventas (Brutas y Deuda)
+                prisma.sale.aggregate({
+                    where: {
+                        businessId,
+                        status: { not: 'CANCELLED' }, // Solo ventas válidas
+                        createdAt: { gte: currentStart, lte: currentEnd },
+                        deletedAt: null // Importante si usas Soft Delete
+                    },
+                    _sum: {
+                        totalAmount: true,      // Venta Bruta
+                        remainingBalance: true, // Lo que deben actualmente
+                    },
+                    _count: { id: true }
+                }),
+
+                // 2. Estadísticas de Notas de Crédito (Devoluciones)
+                prisma.creditNote.aggregate({
+                    where: {
+                        businessId,
+                        createdAt: { gte: currentStart, lte: currentEnd },
+                        sale: { status: { not: 'CANCELLED' } } // Solo devoluciones de ventas válidas
+                    },
+                    _sum: { totalAmount: true }
+                })
+            ]);
+
+            // --- LÓGICA DE NEGOCIO (SENIOR LEVEL) ---
+
+            const grossSales = new Decimal(salesStats._sum.totalAmount || 0);
+            const totalReturns = new Decimal(creditNotes._sum.totalAmount || 0);
+            const totalDebt = new Decimal(salesStats._sum.remainingBalance || 0);
+
+            // Ventas Totales (Netas): Es lo que realmente se vendió tras devoluciones
+            const netSales = grossSales.minus(totalReturns);
+
+            // Ingreso Real (Recaudado): 
+            // Lo que se vendió (neto) menos lo que aún me deben
+            const totalIncome = netSales.minus(totalDebt);
+
+            // Ticket Promedio: Basado en la venta neta
+            const averageTicket = salesStats._count.id > 0 
+                ? netSales.div(salesStats._count.id) 
+                : new Decimal(0);
+
+            return {
+                status: 200,
+                data: {
+                    totalSales: netSales.toNumber(),      // Ventas Netas
+                    totalIncome: totalIncome.toNumber(),    // Dinero en mano
+                    pendingDebt: totalDebt.toNumber(),      // Lo que te deben
+                    averageTicket: averageTicket.toNumber(),
+                    totalOrders: salesStats._count.id
+                },
+                message: 'Reporte de ventas calculado exitosamente'
+            };
+
+        } catch (error) {
+            console.error("Error en reporte detallado:", error);
+            
+            return {
+                status: 500,
+                message: 'Error interno al calcular reporte detallado de ventas',
+                data: {
+                    totalSales: 0,
+                    totalIncome: 0,
+                    pendingDebt: 0,
+                    averageTicket: 0,
+                    totalOrders: 0
                 }
             };
         }

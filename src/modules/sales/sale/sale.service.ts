@@ -16,6 +16,9 @@ interface FindSalesQuery {
     toDate?: string;
 }
 
+const parseDateOnlyStart = (value: string) => new Date(`${value}T00:00:00.000`);
+const parseDateOnlyEnd = (value: string) => new Date(`${value}T23:59:59.999`);
+
 export class SaleService {
 
     // =================================================================
@@ -122,11 +125,19 @@ export class SaleService {
             });
 
             // 2. Aplicación de Descuento Global (Prorrateo) y Cálculo de Impuestos
-            const globalDiscount = new Decimal(data.discount || 0);
+            // NOTA: En este proyecto `discount` se maneja como MONTO total (USD), no como porcentaje.
+            const discountAmount = new Decimal(data.discount || 0);
 
-            // 2. Compara usando .gt() (Greater Than / Mayor Que)
-            if (globalDiscount.gt(rawSubTotal)) {
-                throw new BusinessError('El descuento no puede ser mayor al total de la venta', 400);
+            if (discountAmount.lt(0)) {
+                throw new BusinessError('El descuento no puede ser negativo', 400);
+            }
+
+            // El descuento no puede ser mayor al subtotal bruto (antes de descuento)
+            if (discountAmount.gt(rawSubTotal)) {
+                throw new BusinessError(
+                    `El descuento no puede ser mayor al subtotal ($${rawSubTotal.toFixed(2)})`,
+                    400
+                );
             }
 
             let finalSubTotal = new Decimal(0);
@@ -148,9 +159,9 @@ export class SaleService {
                     weight = item.lineGrossAmount.div(rawSubTotal);
                 }
 
-                // globalDiscount * weight ---> .mul()
-                const lineDiscount = globalDiscount.mul(weight);
-
+                // discountAmount * weight ---> .mul()
+                const lineDiscount = discountAmount.mul(weight);
+                console.log(`Producto ${item.product.name}: lineGrossAmount=${item.lineGrossAmount.toFixed(2)}, weight=${weight.toFixed(4)}, lineDiscount=${lineDiscount.toFixed(2)}`);
                 // Base Imponible de la línea (Subtotal Neto)
                 // item.lineGrossAmount - lineDiscount ---> .sub()
                 const lineNetAmount = item.lineGrossAmount.sub(lineDiscount);
@@ -341,7 +352,10 @@ export class SaleService {
 
             // 2. Ahora sí podemos usar .sub() con seguridad
             const differenceTotalAmount = incomingTotal.sub(totalAmount).abs();
-            const differenceSubTotal = incomingSubTotal.sub(finalSubTotal).abs();
+            // Compat: algunos frontends mandan subtotal BRUTO (sin descuento) y otros el NETO (con descuento).
+            // Guardamos en BD el BRUTO para que coincida con la UI (Subtotal - Descuento).
+            const differenceSubTotalGross = incomingSubTotal.sub(rawSubTotal).abs();
+            const differenceSubTotalNet = incomingSubTotal.sub(finalSubTotal).abs();
             const differenceTaxAmount = incomingTax.sub(finalTaxAmount).abs();
 
             // 3. Validación - Solo lanzar error si hay una diferencia real mayor al epsilon
@@ -352,9 +366,10 @@ export class SaleService {
                 );
             }
 
-            if (differenceSubTotal.gt(EPSILON)) {
+            // Aceptamos si coincide con bruto o neto dentro del epsilon.
+            if (differenceSubTotalGross.gt(EPSILON) && differenceSubTotalNet.gt(EPSILON)) {
                 throw new BusinessError(
-                    `Discrepancia en subtotal: Recibido ${incomingSubTotal.toFixed(2)} vs Calculado ${finalSubTotal.toFixed(2)} (Diferencia: ${differenceSubTotal.toFixed(2)})`,
+                    `Discrepancia en subtotal: Recibido ${incomingSubTotal.toFixed(2)} vs Calculado $${rawSubTotal.toFixed(2)} (bruto) / $${finalSubTotal.toFixed(2)} (neto). Diferencias: ${differenceSubTotalGross.toFixed(2)} / ${differenceSubTotalNet.toFixed(2)}`,
                     400
                 );
             }
@@ -390,8 +405,8 @@ export class SaleService {
 
                         // Pasamos los objetos Decimal DIRECTAMENTE. 
                         // Prisma sabe cómo mapear Decimal.js a la base de datos.
-                        subTotal: finalSubTotal,
-                        discount: globalDiscount,
+                        subTotal: rawSubTotal,
+                        discount: discountAmount,
                         taxAmount: finalTaxAmount,
                         totalAmount: totalAmount,
 
@@ -474,7 +489,8 @@ export class SaleService {
                             productPresentationId: item.presentationUsed?.id || null,
                             quantity: item.quantity,
                             unitPrice: item.unitPrice,
-                            subTotal: item.finalLinePrice,
+                            // Guardamos el subtotal bruto por línea (qty * unitPrice).
+                            subTotal: item.lineGrossAmount,
                         }
                     });
 
@@ -793,14 +809,14 @@ export class SaleService {
             // 1. Where Base
             const whereClause: any = {
                 businessId,
-                status: { not: 'CANCELLED' } // Opcional: Si quieres ocultar las anuladas por defecto
+                //status: { not: 'CANCELLED' } // Opcional: Si quieres ocultar las anuladas por defecto
             };
 
             // 2. Filtros de Fecha
             if (query.fromDate && query.toDate) {
                 whereClause.createdAt = {
-                    gte: new Date(query.fromDate),
-                    lte: new Date(new Date(query.toDate).setHours(23, 59, 59))
+                    gte: parseDateOnlyStart(query.fromDate),
+                    lte: parseDateOnlyEnd(query.toDate)
                 };
             }
 
@@ -975,6 +991,7 @@ export class SaleService {
                         productId: item.productId,
                         name: displayName,
                         sku: item.product?.sku,
+                        imageUrl: item.product?.imageUrl || null,
                         quantity: Number(item.quantity),
                         price: Number(item.unitPrice), // Precio unitario al momento de la venta
                         total: Number(item.subTotal), // Total línea (qty * price)
@@ -1473,6 +1490,138 @@ export class SaleService {
         } catch (error) {
             console.error(error);
             return { status: 500, message: 'Error interno', data: null };
+        }
+    }
+
+    async cancel(businessId: number, saleId: number, memberId: number, reason: string) {
+        try {
+            await prisma.$transaction(async (tx) => {
+                // 1. Bloquear y validar la venta
+                const sale = await tx.sale.findUniqueOrThrow({
+                    where: { id: saleId, businessId },
+                    include: { 
+                        items: { include: { lotAllocations: { include: { stockLot: { select: { depotId: true, lotCost: true } } } } } },
+                        creditNotes: true,
+                        payments: true // Necesitamos saber cuánto devolvemos de dinero
+                    }
+                });
+
+                // 2. Validaciones Estrictas
+                if (sale.status === SaleStatus.CANCELLED) {
+                    throw new BusinessError('La venta ya está anulada', 400);
+                }
+
+                // CRÍTICO: No permitir anular si ya hay notas de crédito (devoluciones parciales)
+                // Si ya devolvió algo, debe terminar de devolver el resto, no anular.
+                if (sale.creditNotes.length > 0) {
+
+                    throw new BusinessError('No se puede anular una venta con devoluciones previas. Debe realizar una devolución total.', 400);
+                }
+
+                // 3. Generar Nota de Crédito Automática (Para auditoría fiscal/contable)
+                // Aunque se anule, debe quedar rastro del movimiento de inventario y dinero.
+                const nextCnNumber = (await tx.creditNote.count({ where: { businessId } })) + 1;
+                
+                const creditNote = await tx.creditNote.create({
+                    data: {
+                        businessId,
+                        saleId: sale.id,
+                        number: nextCnNumber,
+                        reason: `ANULACIÓN DE VENTA: ${reason}`,
+                        totalAmount: sale.totalAmount, // Monto total original
+                        items: {
+                            create: sale.items.map(item => ({
+                                productId: item.productId,
+                                quantity: item.quantity,
+                                unitPrice: item.unitPrice,
+                                subTotal: new Decimal(item.quantity).mul(item.unitPrice),
+                                returnToStock: true // En anulación SIEMPRE regresa al stock
+                            }))
+                        }
+                    }
+                });
+
+                // 4. Restaurar Inventario (Iteración simple, sin cálculos de ratio complejos)
+                for (const item of sale.items) {
+                    // Ignorar servicios
+                    if (item.lotAllocations.length > 0) {
+                        for (const allocation of item.lotAllocations) {
+                            // Restaurar Stock Físico
+                            const updatedStockLot = await tx.stockLot.update({
+                                where: { id: allocation.stockLotId },
+                                data: { quantity: { increment: allocation.quantity } }
+                            });
+
+                            // Kardex: Entrada por Anulación
+                            // (Aquí deberías buscar info del lote como en tu servicio anterior)
+                            await tx.stockMovement.create({
+                                data: {
+                                    businessId,
+                                    memberId,
+                                    productId: item.productId,
+                                    depotId: allocation.stockLot.depotId, // Ojo: Obtener del lote original
+                                    type: MovementType.IN,
+                                    quantity: allocation.quantity,
+                                    reason: `Anulación Venta #${sale.receiptNumber}`,
+                                    stockLotId: updatedStockLot.id, // Asociamos al mismo lote para trazabilidad
+                                    historicalCost: updatedStockLot.lotCost // Usamos el costo original del lote para el movimiento
+                                }
+                            });
+                        }
+                    }
+                }
+
+                // 5. Reversar Pagos (Caja)
+                // Si la venta tuvo pagos, hay que registrar la salida del dinero
+                // Opcional: Esto depende de si anulas el día mismo o después.
+                // Si es el mismo día, a veces se eliminan los pagos. 
+                // Si es contabilidad estricta, se crea un egreso (CreditNotePayment).
+                
+                /* Lógica simplificada: Crear contra-movimientos para cada pago */
+                for (const payment of sale.payments) {
+                    await tx.creditNotePayment.create({
+                        data: {
+                            creditNoteId: creditNote.id,
+                            paymentMethodId: payment.paymentMethodId,
+                            amount: payment.amount, // Devolvemos todo
+                            exchangeRateId: payment.exchangeRateId,
+                            cashRegisterId: payment.cashRegisterId, // Afecta la caja original si está abierta
+                            reference: `Reverso Ref: ${payment.reference}`
+                        }
+                    });
+                }
+
+                // 6. Actualizar Estado FINAL de la Venta
+                await tx.sale.update({
+                    where: { id: sale.id },
+                    data: {
+                        status: SaleStatus.CANCELLED, // <--- Aquí está la clave
+                        remainingBalance: 0, // Ya no debe nada porque se anuló
+                        paymentStatus: PaymentStatus.REFUNDED // O el enum que uses
+                    }
+                });
+
+                // 7. Limpiar Deuda del Cliente (Si fue a crédito)
+                // Si la venta generó deuda, hay que restarla totalmente.
+                const amountOnCredit = sale.totalAmount.sub(sale.remainingBalance);
+                if (amountOnCredit.gt(0)) {
+                    await tx.client.update({
+                        where: { id: sale.clientId },
+                        data: { currentDebt: { decrement: amountOnCredit } }
+                    });
+                }
+                
+                return creditNote;
+            });
+            
+            return { status: 200, message: 'Venta anulada exitosamente', data: null };
+
+        } catch (error) {
+            console.error('Error al anular venta:', error);
+            if (error instanceof BusinessError) {
+                return { status: error.status, message: error.message, data: null };
+            }
+            return { status: 500, message: 'Error interno al anular la venta', data: null };
         }
     }
 }

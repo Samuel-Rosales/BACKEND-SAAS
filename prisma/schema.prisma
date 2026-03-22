@@ -17,6 +17,11 @@ model User {
   password String // Hash de la contraseña (nunca texto plano)
   name     String
 
+  // Plataforma
+  // Si es true, puede seleccionar cualquier business vía header x-business-id
+  // sin requerir un BusinessMember activo (membresía).
+  isSuperAdmin Boolean @default(false)
+
   contacts UserContact?
 
   // Relaciones
@@ -225,6 +230,7 @@ model Product {
   sku           String?
   description   String? @default("")
   imageUrl      String?
+  imagePublicId String?
 
   // --- COMPORTAMIENTO ---
   // Reemplaza a isService. Define CÓMO se comporta el producto.
