@@ -1601,15 +1601,14 @@ export class SaleService {
                     }
                 });
 
-                // 7. Limpiar Deuda del Cliente (Si fue a crédito)
-                // Si la venta generó deuda, hay que restarla totalmente.
-                const amountOnCredit = sale.totalAmount.sub(sale.remainingBalance);
-                if (amountOnCredit.gt(0)) {
-                    await tx.client.update({
-                        where: { id: sale.clientId },
-                        data: { currentDebt: { decrement: amountOnCredit } }
-                    });
-                }
+                // 7. Sincronizar Estado Financiero del Cliente (Deuda)
+                // Fuente de verdad: sumatoria de saldos pendientes en ventas NO anuladas.
+                const syncedDebt = await computeClientDebt(tx, { businessId, clientId: sale.clientId });
+
+                await tx.client.update({
+                    where: { id: sale.clientId },
+                    data: { currentDebt: syncedDebt }
+                });
                 
                 return creditNote;
             });
