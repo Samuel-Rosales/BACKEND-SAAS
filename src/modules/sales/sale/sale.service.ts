@@ -2,7 +2,7 @@ import { prisma } from '@/configs';
 import { CreateSaleInterface, CreateSalePaymentDto, UpdateSaleInterface } from './interfaces';
 import { PaymentStatus, Conditions, SaleStatus, SaleType, ProductType, Prisma, MovementType, Currency, InstallmentStatus } from '@prisma/client';
 import { BusinessError } from '@/utils/catch-errors.util';
-import { resolveBusinessExchangeRate } from '@/utils';
+import { computeClientDebt, resolveBusinessExchangeRate } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
 
 const EPSILON = 0.02;
@@ -261,7 +261,8 @@ export class SaleService {
                     ? new Decimal(client.customLimit)
                     : new Decimal(business.defaultCreditLimit);
 
-                const currentDebt = new Decimal(client.currentDebt);
+                // Fuente de verdad: sumatoria de saldos pendientes en ventas (evita desincronización)
+                const currentDebt = await computeClientDebt(prisma, { businessId, clientId: client.id });
 
                 // 4. Validar Disponibilidad
                 const projectedDebt = currentDebt.add(remainingBalance);
@@ -504,15 +505,13 @@ export class SaleService {
                     });
                 }
 
-                // Si quedó debiendo algo (remainingBalance > 0), se lo sumamos a su cuenta.
-                if (remainingBalance.gt(0)) {
-                    await tx.client.update({
-                        where: { id: client.id }, // Usamos el objeto 'client' que cargamos al principio
-                        data: {
-                            currentDebt: { increment: remainingBalance }
-                        }
-                    });
-                }
+                // Sincronización robusta de deuda del cliente (evita negativos y drift)
+                const syncedDebt = await computeClientDebt(tx, { businessId, clientId: client.id });
+
+                await tx.client.update({
+                    where: { id: client.id },
+                    data: { currentDebt: syncedDebt }
+                });
 
                 return sale;
             });
@@ -1211,11 +1210,12 @@ export class SaleService {
                     }
                 });
 
+                // Recalcular y sincronizar la deuda global (fuente de verdad = saldos pendientes)
+                const syncedDebt = await computeClientDebt(tx, { businessId, clientId: sale.client.id });
+
                 await tx.client.update({
-                    where: { id: sale.client.id }, // Usamos el objeto 'client' que cargamos al principio
-                    data: {
-                        currentDebt: { decrement: paymentInBaseCurrency }
-                    }
+                    where: { id: sale.client.id },
+                    data: { currentDebt: syncedDebt }
                 });
 
                 return {

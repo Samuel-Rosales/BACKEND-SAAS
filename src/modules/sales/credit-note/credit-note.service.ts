@@ -1,5 +1,6 @@
 import { prisma } from '@/configs';
 import { BusinessError } from '@/utils/catch-errors.util';
+import { computeClientDebt } from '@/utils';
 import { CreateCreditNoteInterface, ItemProcessingData, ListCreditNoteQuery } from './interfaces';
 import { InstallmentStatus, MovementType, ProductType, SaleStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -196,9 +197,11 @@ export class CreditNoteService {
                     });
 
                     // B. Actualizar Deuda Global del Cliente
+                    const syncedDebt = await computeClientDebt(tx, { businessId, clientId: currentSale.clientId });
+
                     await tx.client.update({
                         where: { id: currentSale.clientId },
-                        data: { currentDebt: { decrement: amountAppliedToDebt } }
+                        data: { currentDebt: syncedDebt }
                     });
                     
                     // C. SINCRONIZACIÓN DE CUOTAS (ROBUSTO) ✅
