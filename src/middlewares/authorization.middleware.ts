@@ -57,3 +57,15 @@ export const requireBusinessPermission = (permission: BusinessPermissionCode) =>
     }
   };
 };
+
+export const requireSuperAdmin = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ message: "No autorizado." });
+  }
+
+  if (!req.user?.isSuperAdmin) {
+    return res.status(403).json({ message: "Acceso restringido a super administradores." });
+  }
+
+  return next();
+};

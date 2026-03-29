@@ -1,8 +1,7 @@
 import { prisma } from '@/configs';
 import { CreateBusinessInterface, UpdateBusinessInterface, UpdateExchangeConfigInterface } from './interfaces';
 import { PlanType, SubStatus, ExchangeRateStrategy } from '@prisma/client'; // Importamos Enums de Prisma
-import { BusinessError, resolveBusinessExchangeRate } from '@/utils';
-import { canAccessBusinessPermission } from '@/utils';
+import { BusinessError, resolveBusinessExchangeRate, canAccessBusinessPermission, getRolePermissions } from '@/utils';
 import { BusinessPermissionCode } from '@/data/aim/role-permissions.data';
 
 export class BusinessService {
@@ -159,7 +158,7 @@ export class BusinessService {
               include: {
                   members: { 
                       where: { userId: userId }, 
-                      select: { role: { select: { name: true } } } 
+                    select: { role: { select: { name: true, code: true } } } 
                   }
                   // ❌ Eliminamos exchangeRates de aquí.
                   // No podemos confiar en una simple relación de base de datos 
@@ -187,9 +186,12 @@ export class BusinessService {
           }
 
           // 3. Formateamos la respuesta
+            const memberRoleCode = business.members[0]?.role?.code || null;
           const formattedBusiness = {
               ...business,
               memberRole: business.members[0]?.role?.name || 'Miembro',
+              memberRoleCode,
+              memberPermissions: memberRoleCode ? getRolePermissions(memberRoleCode) : [],
               
               // Inyectamos la tasa correcta calculada
               // Lo enviamos como un objeto único o array según lo espere tu frontend
