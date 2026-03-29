@@ -3,6 +3,7 @@ import { StockMovementController } from './stock-movement.controller';
 import { StockMovementValidator } from './stock-movement.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
 import { authMiddleware } from '@/middlewares/auth.middleware';
+import { requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
 const controller = new StockMovementController();
@@ -20,6 +21,7 @@ router.use(authMiddleware);
 // Ya no necesitas rutas separadas por tipo o producto.
 router.get(
     '/', 
+  requireBusinessPermission('STOCK_MOVEMENTS_READ'),
     validator.validateListQuery,
     handleValidationErrors, 
     controller.findAll
@@ -28,6 +30,7 @@ router.get(
 // OBTENER UNO POR ID
 router.get(
     '/:id', 
+  requireBusinessPermission('STOCK_MOVEMENTS_READ'),
     validator.validateId,
     handleValidationErrors,
     controller.findOne
@@ -40,6 +43,7 @@ router.get(
 // CREAR MOVIMIENTO
 router.post(
   '/', 
+  requireBusinessPermission('STOCK_MOVEMENTS_WRITE'),
   validator.validateCreate, 
   handleValidationErrors, 
   controller.create
@@ -59,6 +63,7 @@ router.post(
 // ELIMINAR (Reversión lógica o física)
 router.delete(
   '/:id', 
+  requireBusinessPermission('STOCK_MOVEMENTS_WRITE'),
   validator.validateId, 
   handleValidationErrors,
   controller.remove

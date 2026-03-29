@@ -3,6 +3,7 @@ import { BusinessController } from './business.controller';
 import { BusinessValidator } from './business.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
 import { authMiddleware } from '@/middlewares/auth.middleware';
+import { requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
 const controller = new BusinessController();
@@ -34,6 +35,7 @@ router.get(
 // 2. Obtener configuración completa (Para el formulario React)
 router.get(
     '/:id/settings',
+  requireBusinessPermission('BUSINESS_SETTINGS_VIEW'),
     validator.validateId,
     handleValidationErrors,
     controller.getSettings

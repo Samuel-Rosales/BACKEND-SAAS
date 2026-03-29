@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { PurchaseReportController } from '../controllers/purchase-report.controller';
 import { authMiddleware } from '@/middlewares/auth.middleware'; // Ajusta la ruta a tu proyecto
+import { requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
 const controller = new PurchaseReportController();
@@ -12,6 +13,7 @@ router.use(authMiddleware);
 // Protegemos la ruta para asegurarnos de tener el usuario y el businessId
 router.get(
     '/overview',
+    requireBusinessPermission('REPORTS_PURCHASES_VIEW'),
     controller.PurchaseMetrics
 );
 
