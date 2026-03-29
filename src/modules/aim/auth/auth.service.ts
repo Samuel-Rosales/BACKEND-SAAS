@@ -75,7 +75,8 @@ export class AuthService {
                 select: {
                     id: true,
                     ci: true,
-                    name: true,      
+                    name: true,
+                    isSuperAdmin: true,
                 }
             });
 
