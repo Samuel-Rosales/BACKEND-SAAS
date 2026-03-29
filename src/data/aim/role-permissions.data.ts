@@ -1,5 +1,8 @@
 export type RoleCode =
   | "OWNER"
+  | "ADMIN"
+  | "OPERATOR"
+  | "AUDITOR"
   | "CASHIER"
   | "BUYER"
   | "MANAGER"
@@ -109,6 +112,90 @@ const ALL_PERMISSIONS: BusinessPermissionCode[] = [
 
 export const ROLE_PERMISSIONS: Record<RoleCode, BusinessPermissionCode[]> = {
   OWNER: [...ALL_PERMISSIONS],
+
+  // Legacy alias used in older databases; equivalent to MANAGER privileges.
+  ADMIN: [
+    "BUSINESS_SETTINGS_VIEW",
+    "BUSINESS_SETTINGS_EDIT",
+    "BUSINESS_EXCHANGE_RATE_EDIT",
+    "BUSINESS_POLICIES_EDIT",
+    "MEMBERS_VIEW",
+    "MEMBERS_MANAGE",
+    "CLIENTS_READ",
+    "CLIENTS_WRITE",
+    "SUPPLIERS_READ",
+    "SUPPLIERS_WRITE",
+    "PRODUCTS_READ",
+    "PRODUCTS_WRITE",
+    "CATEGORIES_READ",
+    "CATEGORIES_WRITE",
+    "PRESENTATIONS_READ",
+    "PRESENTATIONS_WRITE",
+    "DEPOSITS_READ",
+    "DEPOSITS_WRITE",
+    "STOCK_MOVEMENTS_READ",
+    "STOCK_MOVEMENTS_WRITE",
+    "CASH_REGISTER_READ",
+    "CASH_REGISTER_OPEN",
+    "CASH_REGISTER_CLOSE",
+    "CASH_COUNT",
+    "CREDITS_SALES_COLLECT",
+    "CREDITS_PURCHASES_PAY",
+    "CREDIT_NOTES_CREATE",
+    "REPORTS_SALES_VIEW",
+    "REPORTS_PURCHASES_VIEW",
+    "REPORTS_FINANCE_VIEW",
+    "INVENTORY_READ",
+    "INVENTORY_WRITE",
+    "SALES_READ",
+    "SALES_WRITE",
+    "PROCUREMENT_READ",
+    "PROCUREMENT_WRITE",
+    "FINANCE_READ",
+    "FINANCE_WRITE",
+    "REPORTS_VIEW",
+  ],
+
+  // Legacy operator profile focused on daily POS operations.
+  OPERATOR: [
+    "CLIENTS_READ",
+    "CLIENTS_WRITE",
+    "PRODUCTS_READ",
+    "DEPOSITS_READ",
+    "SALES_READ",
+    "SALES_WRITE",
+    "CREDITS_SALES_COLLECT",
+    "CREDIT_NOTES_CREATE",
+    "CASH_REGISTER_READ",
+    "CASH_REGISTER_OPEN",
+    "CASH_REGISTER_CLOSE",
+    "CASH_COUNT",
+    "REPORTS_SALES_VIEW",
+    "FINANCE_READ",
+    "FINANCE_WRITE",
+  ],
+
+  // Legacy read-only profile.
+  AUDITOR: [
+    "BUSINESS_SETTINGS_VIEW",
+    "MEMBERS_VIEW",
+    "CLIENTS_READ",
+    "SUPPLIERS_READ",
+    "PRODUCTS_READ",
+    "CATEGORIES_READ",
+    "PRESENTATIONS_READ",
+    "DEPOSITS_READ",
+    "STOCK_MOVEMENTS_READ",
+    "CASH_REGISTER_READ",
+    "REPORTS_SALES_VIEW",
+    "REPORTS_PURCHASES_VIEW",
+    "REPORTS_FINANCE_VIEW",
+    "INVENTORY_READ",
+    "SALES_READ",
+    "PROCUREMENT_READ",
+    "FINANCE_READ",
+    "REPORTS_VIEW",
+  ],
 
   MANAGER: [
     "BUSINESS_SETTINGS_VIEW",
@@ -247,6 +334,7 @@ export const hasBusinessPermission = (
   roleCode: string,
   permission: BusinessPermissionCode
 ): boolean => {
-  const permissions = ROLE_PERMISSIONS[roleCode as RoleCode] || [];
+  const normalizedRoleCode = roleCode.trim().toUpperCase() as RoleCode;
+  const permissions = ROLE_PERMISSIONS[normalizedRoleCode] || [];
   return permissions.includes(permission);
 };

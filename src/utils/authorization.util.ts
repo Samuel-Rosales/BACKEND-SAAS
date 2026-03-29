@@ -6,7 +6,8 @@ import {
 } from "@/data/aim/role-permissions.data";
 
 export const getRolePermissions = (roleCode: string): BusinessPermissionCode[] => {
-  const permissions = ROLE_PERMISSIONS[roleCode as RoleCode] || [];
+  const normalizedRoleCode = roleCode.trim().toUpperCase() as RoleCode;
+  const permissions = ROLE_PERMISSIONS[normalizedRoleCode] || [];
   return [...permissions];
 };
 
