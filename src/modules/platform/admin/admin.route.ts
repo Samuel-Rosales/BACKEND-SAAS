@@ -1,38 +1,36 @@
 import { Router } from 'express';
 import { AdminController } from './admin.controller';
-import { authMiddleware } from '@/middlewares/auth.middleware';
+import { authMiddleware, requireSuperAdmin } from '@/middlewares';
 
 const router = Router();
 const adminController = new AdminController();
 
 // Todas las rutas requieren autenticación
 router.use(authMiddleware);
-
-// TODO: Agregar middleware de verificación de rol admin
-// router.use(adminRoleMiddleware);
+router.use(requireSuperAdmin);
 
 /**
  * GET /api/v1/admin/businesses
  * Listar todos los negocios
  */
-router.get('/businesses', authMiddleware, adminController.findAllBusinesses.bind(adminController));
+router.get('/businesses', adminController.findAllBusinesses.bind(adminController));
 
 /**
  * PATCH /api/v1/admin/businesses/:id/status
  * Activar/desactivar negocio
  */
-router.patch('/businesses/:id/status', authMiddleware, adminController.toggleBusinessStatus.bind(adminController));
+router.patch('/businesses/:id/status', adminController.toggleBusinessStatus.bind(adminController));
 
 /**
  * PATCH /api/v1/admin/businesses/:id/subscription
  * Actualizar suscripción
  */
-router.patch('/businesses/:id/subscription', authMiddleware, adminController.updateBusinessSubscription.bind(adminController));
+router.patch('/businesses/:id/subscription', adminController.updateBusinessSubscription.bind(adminController));
 
 /**
  * GET /api/v1/admin/stats
  * Estadísticas del sistema
  */
-router.get('/stats', authMiddleware, adminController.getStats.bind(adminController));
+router.get('/stats', adminController.getStats.bind(adminController));
 
 export default router;

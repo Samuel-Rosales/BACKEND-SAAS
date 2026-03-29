@@ -3,6 +3,7 @@ import { PurchasePaymentController } from './purchase-payment.controller';
 import { PurchasePaymentValidator } from './purchase-payment.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
 import { authMiddleware } from '@/middlewares/auth.middleware';
+import { requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
 const controller = new PurchasePaymentController();
@@ -13,6 +14,7 @@ router.use(authMiddleware);
 
 router.post(
   '/', 
+  requireBusinessPermission('CREDITS_PURCHASES_PAY'),
   validator.validateCreate, 
   handleValidationErrors, 
   controller.create
@@ -20,6 +22,7 @@ router.post(
 
 router.get(
   '/',
+  requireBusinessPermission('PROCUREMENT_READ'),
   validator.validatePurchaseId,
   handleValidationErrors,
   controller.findAll
@@ -27,6 +30,7 @@ router.get(
 
 router.get(
     '/:id', 
+  requireBusinessPermission('PROCUREMENT_READ'),
     validator.validateId,
     handleValidationErrors,
     controller.findOne
@@ -34,6 +38,7 @@ router.get(
 
 router.patch(
   '/:id', 
+  requireBusinessPermission('CREDITS_PURCHASES_PAY'),
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
