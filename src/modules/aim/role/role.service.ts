@@ -1,5 +1,6 @@
 import { prisma } from '@/configs';
 import { CreateRoleDto, UpdateRoleDto } from './interfaces';
+import { getRolePermissions } from '@/utils';
 
 export class RoleService {
 
@@ -61,7 +62,10 @@ export class RoleService {
             return {
                 message: 'Roles obtenidos exitosamente',
                 status: 200,
-                data: roles
+                data: roles.map((role) => ({
+                    ...role,
+                    permissions: getRolePermissions(role.code)
+                }))
             };
 
         } catch (error) {
@@ -94,7 +98,10 @@ export class RoleService {
             return {
                 message: 'Rol obtenido exitosamente',
                 status: 200,
-                data: role
+                data: {
+                    ...role,
+                    permissions: getRolePermissions(role.code)
+                }
             };
 
          } catch (error) {
