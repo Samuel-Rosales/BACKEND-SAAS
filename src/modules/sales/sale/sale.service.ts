@@ -14,10 +14,29 @@ interface FindSalesQuery {
     paymentStatus?: string; // <--- NUEVO: PENDING, PAID, PARTIAL
     fromDate?: string;
     toDate?: string;
+    /**
+     * Client timezone offset in minutes (Date.getTimezoneOffset()).
+     * Used to correctly interpret yyyy-MM-dd ranges.
+     */
+    tzOffset?: number | string;
 }
 
-const parseDateOnlyStart = (value: string) => new Date(`${value}T00:00:00.000`);
-const parseDateOnlyEnd = (value: string) => new Date(`${value}T23:59:59.999`);
+const parseDateOnlyStart = (value: string, tzOffsetMinutes: number) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return new Date(value);
+
+    const utcMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000);
+    return new Date(utcMs);
+};
+
+const parseDateOnlyEnd = (value: string, tzOffsetMinutes: number) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return new Date(value);
+
+    // End of the local day = start of next local day - 1ms
+    const utcMs = Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000) - 1;
+    return new Date(utcMs);
+};
 
 export class SaleService {
 
@@ -806,6 +825,16 @@ export class SaleService {
             const skip = (page - 1) * limit;
             const search = query.search ? String(query.search).trim() : undefined;
 
+            // Timezone offset (minutes) for correct date-only filtering.
+            // If not provided, we fall back to server timezone (keeps previous behavior).
+            const tzOffsetMinutes = (() => {
+                if (query.tzOffset === null || query.tzOffset === undefined) {
+                    return new Date().getTimezoneOffset();
+                }
+                const parsed = Number(query.tzOffset);
+                return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+            })();
+
             // 1. Where Base
             const whereClause: any = {
                 businessId,
@@ -815,8 +844,8 @@ export class SaleService {
             // 2. Filtros de Fecha
             if (query.fromDate && query.toDate) {
                 whereClause.createdAt = {
-                    gte: parseDateOnlyStart(query.fromDate),
-                    lte: parseDateOnlyEnd(query.toDate)
+                    gte: parseDateOnlyStart(query.fromDate, tzOffsetMinutes),
+                    lte: parseDateOnlyEnd(query.toDate, tzOffsetMinutes)
                 };
             }
 
