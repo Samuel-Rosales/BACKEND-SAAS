@@ -11,12 +11,20 @@ const costTolerance = new Decimal(0.0001);
 
 export class PurchaseService {
 
-    private parseDateOnlyStart(value: string) {
-        return new Date(`${value}T00:00:00.000`);
+    private parseDateOnlyStart(value: string, tzOffsetMinutes: number) {
+        const [year, month, day] = value.split('-').map(Number);
+        if (!year || !month || !day) return new Date(value);
+
+        const utcMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000);
+        return new Date(utcMs);
     }
 
-    private parseDateOnlyEnd(value: string) {
-        return new Date(`${value}T23:59:59.999`);
+    private parseDateOnlyEnd(value: string, tzOffsetMinutes: number) {
+        const [year, month, day] = value.split('-').map(Number);
+        if (!year || !month || !day) return new Date(value);
+
+        const utcMs = Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000) - 1;
+        return new Date(utcMs);
     }
 
     async create(businessId: number, userId: number, data: CreatePurchaseInterface) {
@@ -466,6 +474,16 @@ export class PurchaseService {
             const skip = (page - 1) * limit;
             const search = query.search ? String(query.search).trim() : undefined;
 
+            // Timezone offset (minutes) for correct date-only filtering.
+            // If not provided, we fall back to server timezone (keeps previous behavior).
+            const tzOffsetMinutes = (() => {
+                if (query.tzOffset === null || query.tzOffset === undefined) {
+                    return new Date().getTimezoneOffset();
+                }
+                const parsed = Number(query.tzOffset);
+                return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+            })();
+
             // 1. Construcción Dinámica del WHERE
             const whereClause: any = {
                 businessId,
@@ -481,8 +499,8 @@ export class PurchaseService {
             // Filtro por Fechas
             if (query.fromDate && query.toDate) {
                 whereClause.createdAt = { // Ojo: Usamos createdAt según tu schema
-                    gte: this.parseDateOnlyStart(query.fromDate),
-                    lte: this.parseDateOnlyEnd(query.toDate)
+                    gte: this.parseDateOnlyStart(query.fromDate, tzOffsetMinutes),
+                    lte: this.parseDateOnlyEnd(query.toDate, tzOffsetMinutes)
                 };
             }
 

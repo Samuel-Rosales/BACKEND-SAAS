@@ -8,12 +8,13 @@ export class PurchaseReportController {
         const { businessId } = req.user;
     const fromDate = req.query.fromDate as string | undefined;
     const toDate = req.query.toDate as string | undefined;
+    const tzOffset = req.query.tzOffset as string | undefined;
 
         if (!businessId) {
             return res.status(400).json({ message: 'Falta el header x-business-id' });
         }
         try {
-            const purchaseMetrics = await purchaseStats.getDetailedPurchaseReport(businessId, { fromDate, toDate });
+            const purchaseMetrics = await purchaseStats.getDetailedPurchaseReport(businessId, { fromDate, toDate, tzOffset });
             if (purchaseMetrics.status !== 200) {
                 return res.status(purchaseMetrics.status).json({ error: purchaseMetrics.message });
             }

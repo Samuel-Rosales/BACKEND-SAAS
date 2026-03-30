@@ -67,4 +67,9 @@ export interface FindPurchasesQuery {
     paymentStatus?: string; // Filtro: PENDING, PAID, PARTIAL
     fromDate?: string;
     toDate?: string;
+    /**
+     * Client timezone offset in minutes (Date.getTimezoneOffset()).
+     * Used to correctly interpret yyyy-MM-dd ranges.
+     */
+    tzOffset?: number | string;
 }

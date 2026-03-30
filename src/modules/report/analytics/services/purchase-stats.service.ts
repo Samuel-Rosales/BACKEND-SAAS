@@ -5,14 +5,39 @@ import { differenceInCalendarDays, endOfMonth, startOfMonth, subDays, subMonths 
 type DateRangeQuery = {
     fromDate?: string;
     toDate?: string;
+    /** Client timezone offset in minutes (Date.getTimezoneOffset()). */
+    tzOffset?: number | string;
 };
 
-const parseDateOnlyStart = (value: string) => new Date(`${value}T00:00:00.000`);
-const parseDateOnlyEnd = (value: string) => new Date(`${value}T23:59:59.999`);
+const parseDateOnlyStart = (value: string, tzOffsetMinutes: number) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return new Date(value);
+
+    const utcMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000);
+    return new Date(utcMs);
+};
+
+const parseDateOnlyEnd = (value: string, tzOffsetMinutes: number) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return new Date(value);
+
+    const utcMs = Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000) - 1;
+    return new Date(utcMs);
+};
 
 export class PurchaseStatsService {
     async getDetailedPurchaseReport(businessId: number, range?: DateRangeQuery) {
         const now = new Date();
+
+        // Timezone offset (minutes) for correct date-only filtering.
+        // If not provided, we fall back to server timezone (keeps previous behavior).
+        const tzOffsetMinutes = (() => {
+            if (!range || range.tzOffset === null || range.tzOffset === undefined) {
+                return new Date().getTimezoneOffset();
+            }
+            const parsed = Number(range.tzOffset);
+            return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+        })();
 
         let currentStart = startOfMonth(now);
         let currentEnd = endOfMonth(now);
@@ -22,18 +47,18 @@ export class PurchaseStatsService {
 
         // Si se envía rango, usamos ese período y comparamos con el período anterior equivalente
         if (range?.fromDate && range?.toDate) {
-            currentStart = parseDateOnlyStart(range.fromDate);
-            currentEnd = parseDateOnlyEnd(range.toDate);
+            currentStart = parseDateOnlyStart(range.fromDate, tzOffsetMinutes);
+            currentEnd = parseDateOnlyEnd(range.toDate, tzOffsetMinutes);
 
             const spanDays = Math.max(1, differenceInCalendarDays(currentEnd, currentStart) + 1);
             prevEnd = subDays(currentStart, 1);
             prevStart = subDays(currentStart, spanDays);
         } else if (range?.fromDate && !range?.toDate) {
-            currentStart = parseDateOnlyStart(range.fromDate);
+            currentStart = parseDateOnlyStart(range.fromDate, tzOffsetMinutes);
             currentEnd = now;
         } else if (!range?.fromDate && range?.toDate) {
-            currentStart = startOfMonth(parseDateOnlyStart(range.toDate));
-            currentEnd = parseDateOnlyEnd(range.toDate);
+            currentStart = startOfMonth(parseDateOnlyStart(range.toDate, tzOffsetMinutes));
+            currentEnd = parseDateOnlyEnd(range.toDate, tzOffsetMinutes);
         }
 
         try {
