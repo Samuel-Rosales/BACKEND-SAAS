@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { MemberController } from './member.controller';
 import { MemberValidator } from './member.validator';
-import { handleValidationErrors, authMiddleware } from '@/middlewares';
+import { handleValidationErrors, authMiddleware, requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
 const controller = new MemberController();
@@ -13,17 +13,19 @@ router.use(authMiddleware);
 // POST: Agregar empleado
 router.post(
   '/', 
+  requireBusinessPermission('MEMBERS_MANAGE'),
   validator.validateAdd, 
   handleValidationErrors, 
   controller.addMember
 );
 
 // GET: Ver lista de empleados
-router.get('/', controller.findAll);
+router.get('/', requireBusinessPermission('MEMBERS_VIEW'), controller.findAll);
 
 // GET One
 router.get(
     '/:id', 
+  requireBusinessPermission('MEMBERS_VIEW'),
     validator.validateId,
     handleValidationErrors,
     controller.findOne
@@ -32,6 +34,7 @@ router.get(
 // PATCH: Cambiar rol o estado
 router.patch(
   '/:id', 
+  requireBusinessPermission('MEMBERS_MANAGE'),
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
@@ -40,6 +43,7 @@ router.patch(
 // DELETE: Desvincular empleado
 router.delete(
   '/:id', 
+  requireBusinessPermission('MEMBERS_MANAGE'),
   validator.validateId, 
   handleValidationErrors, 
   controller.remove

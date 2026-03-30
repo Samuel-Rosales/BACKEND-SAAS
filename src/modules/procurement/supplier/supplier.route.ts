@@ -3,6 +3,7 @@ import { SupplierController } from './supplier.controller';
 import { SupplierValidator } from './supplier.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware'; // Ajusta la ruta a tu proyecto
 import { authMiddleware } from '@/middlewares/auth.middleware'; // Ajusta la ruta a tu proyecto
+import { requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
 const controller = new SupplierController();
@@ -13,15 +14,17 @@ router.use(authMiddleware);
 
 router.post(
   '/', 
+  requireBusinessPermission('SUPPLIERS_WRITE'),
   validator.validateCreate, 
   handleValidationErrors, 
   controller.create
 );
 
-router.get('/', controller.findAll);
+router.get('/', requireBusinessPermission('SUPPLIERS_READ'), controller.findAll);
 
 router.get(
     '/:id', 
+  requireBusinessPermission('SUPPLIERS_READ'),
     validator.validateId,
     handleValidationErrors,
     controller.findOne
@@ -29,6 +32,7 @@ router.get(
 
 router.patch(
   '/:id', 
+  requireBusinessPermission('SUPPLIERS_WRITE'),
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
@@ -36,6 +40,7 @@ router.patch(
 
 router.delete(
   '/:id', 
+  requireBusinessPermission('SUPPLIERS_WRITE'),
   validator.validateId, 
   handleValidationErrors, 
   controller.remove

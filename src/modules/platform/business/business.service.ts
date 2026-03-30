@@ -1,7 +1,8 @@
 import { prisma } from '@/configs';
 import { CreateBusinessInterface, UpdateBusinessInterface, UpdateExchangeConfigInterface } from './interfaces';
 import { PlanType, SubStatus, ExchangeRateStrategy } from '@prisma/client'; // Importamos Enums de Prisma
-import { BusinessError, resolveBusinessExchangeRate } from '@/utils';
+import { BusinessError, resolveBusinessExchangeRate, canAccessBusinessPermission, getRolePermissions } from '@/utils';
+import { BusinessPermissionCode } from '@/data/aim/role-permissions.data';
 
 export class BusinessService {
 
@@ -157,7 +158,7 @@ export class BusinessService {
               include: {
                   members: { 
                       where: { userId: userId }, 
-                      select: { role: { select: { name: true } } } 
+                    select: { role: { select: { name: true, code: true } } } 
                   }
                   // ❌ Eliminamos exchangeRates de aquí.
                   // No podemos confiar en una simple relación de base de datos 
@@ -185,9 +186,12 @@ export class BusinessService {
           }
 
           // 3. Formateamos la respuesta
+            const memberRoleCode = business.members[0]?.role?.code || null;
           const formattedBusiness = {
               ...business,
               memberRole: business.members[0]?.role?.name || 'Miembro',
+              memberRoleCode,
+              memberPermissions: memberRoleCode ? getRolePermissions(memberRoleCode) : [],
               
               // Inyectamos la tasa correcta calculada
               // Lo enviamos como un objeto único o array según lo espere tu frontend
@@ -218,7 +222,7 @@ export class BusinessService {
   // 4. ACTUALIZAR DATOS
   async updateGeneralInfo(businessId: number, userId: number, data: UpdateBusinessInterface) {
     try {
-      const access = await this.verifyAccess(businessId, userId, { roleCodes: ['OWNER', 'ADMIN'] });
+      const access = await this.verifyAccess(businessId, userId, { permission: 'BUSINESS_SETTINGS_EDIT' });
       if (access.status !== 200) return access;
 
       // Sanitización: Solo permitimos campos cosméticos aquí
@@ -248,7 +252,7 @@ export class BusinessService {
   async updatePolicies(businessId: number, userId: number, data: { enableGlobalCredit?: boolean, defaultCreditLimit?: number }) {
     try {
       // Seguridad Estricta: Solo OWNER debería cambiar políticas financieras globales
-      const access = await this.verifyAccess(businessId, userId, { roleCodes: ['OWNER'] });
+      const access = await this.verifyAccess(businessId, userId, { permission: 'BUSINESS_POLICIES_EDIT' });
       if (access.status !== 200) return access;
 
       // VALIDACIÓN DE NEGOCIO (Lo que te faltaba)
@@ -285,7 +289,7 @@ export class BusinessService {
     try {
       // A. Verificación de seguridad (Solo dueños o admins deberían tocar dinero)
       // Reutilizamos tu método privado verifyAccess
-      const accessCheck = await this.verifyAccess(businessId, userId, { roleCodes: ['OWNER', 'ADMIN'] });
+      const accessCheck = await this.verifyAccess(businessId, userId, { permission: 'BUSINESS_EXCHANGE_RATE_EDIT' });
       if (accessCheck.status !== 200) return accessCheck;
 
       return await prisma.$transaction(async (tx) => {
@@ -426,13 +430,14 @@ export class BusinessService {
   private async verifyAccess(
     businessId: number,
     userId: number,
-    options?: { roleCodes?: string[] }
+    options?: { roleCodes?: string[]; permission?: BusinessPermissionCode }
   ) {
     try {
       const member = await prisma.businessMember.findFirst({
         where: { businessId, userId, isActive: true },
         include: {
-          role: { select: { code: true, name: true } }
+          role: { select: { code: true, name: true } },
+          user: { select: { isSuperAdmin: true } }
         }
       });
 
@@ -442,6 +447,22 @@ export class BusinessService {
           status: 403,
           data: null
         };
+      }
+
+      if (options?.permission) {
+        const allowedByPermission = canAccessBusinessPermission(
+          member.role.code,
+          options.permission,
+          member.user.isSuperAdmin
+        );
+
+        if (!allowedByPermission) {
+          return {
+            message: 'No tienes permisos para realizar esta acción en esta empresa.',
+            status: 403,
+            data: null
+          };
+        }
       }
 
       if (options?.roleCodes?.length) {

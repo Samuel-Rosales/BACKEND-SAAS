@@ -3,6 +3,7 @@ import { StockLotController } from './stock-lot.controller';
 import { StockLotValidator } from './stock-lot.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
 import { authMiddleware } from '@/middlewares/auth.middleware';
+import { requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
 const controller = new StockLotController();
@@ -13,15 +14,17 @@ router.use(authMiddleware);
 
 router.post(
   '/', 
+  requireBusinessPermission('INVENTORY_WRITE'),
   validator.validateCreate, 
   handleValidationErrors, 
   controller.create
 );
 
-router.get('/', controller.findAll);
+router.get('/', requireBusinessPermission('INVENTORY_READ'), controller.findAll);
 
 router.get(
     '/:id', 
+  requireBusinessPermission('INVENTORY_READ'),
     validator.validateId,
     handleValidationErrors,
     controller.findOne
@@ -29,6 +32,7 @@ router.get(
 
 router.get(
     '/product/:productId',
+  requireBusinessPermission('INVENTORY_READ'),
     validator.validateProductId,
     handleValidationErrors,
     controller.findByProduct
@@ -36,6 +40,7 @@ router.get(
 
 router.patch(
   '/:id', 
+  requireBusinessPermission('INVENTORY_WRITE'),
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
@@ -43,6 +48,7 @@ router.patch(
 
 router.delete(
   '/:id', 
+  requireBusinessPermission('INVENTORY_WRITE'),
   validator.validateId, 
   handleValidationErrors,
   controller.remove
