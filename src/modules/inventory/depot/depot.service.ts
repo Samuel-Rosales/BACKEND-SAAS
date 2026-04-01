@@ -82,7 +82,7 @@ export class DepotService {
 
             if (depots.length === 0) {
                 return {
-                    message: 'No hay depósitos disponibles',
+                    message: 'No tienes depósitos creados aún',
                     status: 404,
                     data: []
                 };
