@@ -6,7 +6,7 @@ async function main() {
   try {
     const result = await pool.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename");
     for (const row of result.rows) {
-      console.log(row.tablename);
+      //console.log(row.tablename);
     }
   } finally {
     await pool.end();

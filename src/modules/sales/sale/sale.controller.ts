@@ -148,7 +148,7 @@ export class SaleController {
             const { businessId } = req.user;
 
             const saleId = Number(req.params.id);
-            console.log('Received addPayment request for businessId:', businessId, 'with body:', req.body);
+            //console.log('Received addPayment request for businessId:', businessId, 'with body:', req.body);
 
             if (!businessId) {
                 return res.status(400).json({
@@ -241,7 +241,7 @@ export class SaleController {
         try {
             const { businessId, membershipId } = req.user;
             const saleId = Number(req.params.id);
-            console.log('Received cancel request for businessId:', businessId, 'saleId:', saleId, 'with body:', req.body);
+            //console.log('Received cancel request for businessId:', businessId, 'saleId:', saleId, 'with body:', req.body);
             const reason = req.body.reason as string;
 
             if (!businessId) {

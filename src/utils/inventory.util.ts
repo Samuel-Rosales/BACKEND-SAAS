@@ -53,7 +53,7 @@ export async function updateRecursiveRecipeCosts(tx: PrismaTx = prisma, productI
         // Comparamos con un Decimal(0.001)
         if (difference.gt(new Decimal(0.001))) {
             
-            console.log(`[COSTOS] Actualizando ${parentProduct.name}: ${currentCost} -> ${newTotalCost}`);
+            //console.log(`[COSTOS] Actualizando ${parentProduct.name}: ${currentCost} -> ${newTotalCost}`);
 
             // NOTA: Para tu utilidad de precio de venta, convertimos a Number
             // porque esa función matemática simple trabaja con JS nativo.

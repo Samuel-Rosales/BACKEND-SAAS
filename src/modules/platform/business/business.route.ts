@@ -35,7 +35,7 @@ router.get(
 // 2. Obtener configuración completa (Para el formulario React)
 router.get(
     '/:id/settings',
-  requireBusinessPermission('BUSINESS_SETTINGS_VIEW'),
+    requireBusinessPermission('BUSINESS_SETTINGS_VIEW'),
     validator.validateId,
     handleValidationErrors,
     controller.getSettings

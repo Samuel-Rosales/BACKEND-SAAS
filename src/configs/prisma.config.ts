@@ -26,7 +26,7 @@ export const connectDB = async () => {
   try {
     // Verificamos conexión inicial
     const client = await pool.connect();
-    console.log('🚀 Database connected with Driver Adapter (Prisma 7)');
+    //console.log('🚀 Database connected with Driver Adapter (Prisma 7)');
     client.release(); // ¡No olvides liberar el cliente al pool!
   } catch (error) {
     console.error('❌ Database connection failed:', error);

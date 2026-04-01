@@ -343,7 +343,7 @@ export class ExchangeRateService {
 
     async syncBCVRate() {
         try {
-            console.log('🔄 Iniciando sincronización de tasa BCV...');
+            //console.log('🔄 Iniciando sincronización de tasa BCV...');
 
             const response = await axios.get(this.BCV_API_URL);
             
@@ -360,7 +360,7 @@ export class ExchangeRateService {
                 orderBy: { createdAt: 'desc' }
             });
             
-            console.log('Última tasa en DB:', lastRate ? `${lastRate.source} (${lastRate.rate})` : 'Ninguna');
+            //console.log('Última tasa en DB:', lastRate ? `${lastRate.source} (${lastRate.rate})` : 'Ninguna');
 
             // =================================================================
             // LÓGICA DE COMPARACIÓN DE FECHAS (YYYY-MM-DD)
@@ -372,18 +372,18 @@ export class ExchangeRateService {
                 // B. Convertimos fecha DB a string corto "YYYY-MM-DD"
                 const dbDate = new Date(lastRate.createdAt).toISOString().split('T')[0];
 
-                console.log(`🔎 Comparando fechas: API[${apiDate}] vs DB[${dbDate}]`);
+                //console.log(`🔎 Comparando fechas: API[${apiDate}] vs DB[${dbDate}]`);
 
                 // C. La Condición Maestra:
                 // Si es el MISMO día Y el MISMO precio... no hacemos nada.
                 if (apiDate === dbDate && new Decimal(lastRate.rate).equals(rateValue)) {
-                    console.log('ℹ️ La tasa BCV es idéntica a la última registrada hoy. Omitiendo.');
+                    //console.log('ℹ️ La tasa BCV es idéntica a la última registrada hoy. Omitiendo.');
                     return lastRate;
                 }
             }
 
             // 3. Guardar en Base de Datos
-            console.log('✨ Detectado cambio o nueva fecha. Guardando...');
+            //console.log('✨ Detectado cambio o nueva fecha. Guardando...');
             
             const newRate = await prisma.exchangeRate.create({
                 data: {
@@ -400,7 +400,7 @@ export class ExchangeRateService {
                 throw new Error('Error al guardar en Prisma.');
             }
 
-            console.log('✅ Nueva Tasa Guardada:', newRate.rate);
+            //console.log('✅ Nueva Tasa Guardada:', newRate.rate);
             return newRate;
 
         } catch (error) {

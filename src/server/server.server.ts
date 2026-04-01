@@ -121,7 +121,7 @@ export class Server {
         this.app.use(this.paths.admin, AdminRoute);
 
         this.app.use((req, res) => {
-            console.log(`[404 ERROR] Se intentó acceder a: ${req.originalUrl}`);
+            //console.log(`[404 ERROR] Se intentó acceder a: ${req.originalUrl}`);
             res.status(404).json({
                 error: 'Not Found',
                 requestedPath: req.originalUrl,
@@ -140,11 +140,11 @@ export class Server {
 
         this.app.listen(this.apiPort, () => {
 
-            console.log(`🚀 Server running at ${this.apiUrl}`);
+            //console.log(`🚀 Server running at ${this.apiUrl}`);
 
             // Log opcional para ver las rutas activas al iniciar
 
-            console.log(`Endpoints disponibles en ${this.prefix}/...`);
+            //console.log(`Endpoints disponibles en ${this.prefix}/...`);
 
         })
     }

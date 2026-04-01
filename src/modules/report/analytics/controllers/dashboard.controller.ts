@@ -19,7 +19,7 @@ export class DashboardController {
         if (!businessId) {
             return res.status(400).json({ message: 'Falta el header x-business-id' });
         }
-        console.log('Business ID recibido en el controlador:', businessId);
+        //console.log('Business ID recibido en el controlador:', businessId);
         try {
 
             const [inventory, sales, clients, credit] = await Promise.all([

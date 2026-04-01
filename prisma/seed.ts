@@ -44,7 +44,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("🌱 Seeding database...");
+  //console.log("🌱 Seeding database...");
 
   // Platform
   await prisma.businessCategory.createMany({ data: businessCategories, skipDuplicates: true });
@@ -91,7 +91,7 @@ async function main() {
   await prisma.creditNote.createMany({ data: creditNotes as any, skipDuplicates: true });
   await prisma.creditNoteItem.createMany({ data: creditNoteItems as any, skipDuplicates: true });
 
-  console.log("✅ Seed completed.");
+  //console.log("✅ Seed completed.");
 }
 
 main()

@@ -393,7 +393,7 @@ export class PurchaseService {
 
                     if (costDiff.gt(costTolerance)) {
 
-                        console.log(`[PRECIO] Actualizando costo ${product.name}: ${currentMasterCost} -> ${unitCostByPresentation}`);
+                        //console.log(`[PRECIO] Actualizando costo ${product.name}: ${currentMasterCost} -> ${unitCostByPresentation}`);
 
                         // 1. Actualizar el Producto Simple/Ingrediente
                         await tx.product.update({

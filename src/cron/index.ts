@@ -8,9 +8,9 @@ export const initCronJobs = () => {
 
     // Tarea 1: Tasa de Cambio (8:00 AM)
     cron.schedule('0 8 * * *', () => {
-        console.log('💵 Ejecutando actualización de tasa...');
+        //console.log('💵 Ejecutando actualización de tasa...');
         updateRateDaily();
     }, { timezone: timeZone });
 
-    console.log('✅ Cron Jobs Inicializados correctamente');
+    //console.log('✅ Cron Jobs Inicializados correctamente');
 };

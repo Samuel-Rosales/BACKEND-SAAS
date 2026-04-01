@@ -180,7 +180,7 @@ export class SaleService {
 
                 // discountAmount * weight ---> .mul()
                 const lineDiscount = discountAmount.mul(weight);
-                console.log(`Producto ${item.product.name}: lineGrossAmount=${item.lineGrossAmount.toFixed(2)}, weight=${weight.toFixed(4)}, lineDiscount=${lineDiscount.toFixed(2)}`);
+                //console.log(`Producto ${item.product.name}: lineGrossAmount=${item.lineGrossAmount.toFixed(2)}, weight=${weight.toFixed(4)}, lineDiscount=${lineDiscount.toFixed(2)}`);
                 // Base Imponible de la línea (Subtotal Neto)
                 // item.lineGrossAmount - lineDiscount ---> .sub()
                 const lineNetAmount = item.lineGrossAmount.sub(lineDiscount);

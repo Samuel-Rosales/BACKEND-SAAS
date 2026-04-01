@@ -54,6 +54,8 @@ export class BusinessController {
         if (!userId) {
             return res.status(400).json({ message: 'User ID is required' });
         }
+
+        console.log('BusinessController getSettings - userId:', userId, 'businessId:', id);
         
         const { status, data, message } = await this.service.findOneForSettings(+id, userId);
         
