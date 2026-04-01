@@ -136,7 +136,7 @@ export class MemberService {
 
             if (onlyEmployees.length === 0) {
                 return {
-                    message: `No hay miembros registrados`,
+                    message: `No hay empleados registrados`,
                     status: 404,
                     data: null
                 };
