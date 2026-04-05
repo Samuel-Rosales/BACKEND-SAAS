@@ -1,25 +1,80 @@
 import { prisma } from '@/configs';
 import { Decimal } from '@prisma/client/runtime/client';
-import { startOfMonth, endOfMonth, subMonths, getDaysInMonth, getDate } from 'date-fns';
 
 type DateRangeQuery = {
     fromDate?: string;
     toDate?: string;
+    /** Client timezone offset in minutes (Date.getTimezoneOffset()). */
+    tzOffset?: number | string;
 };
 
-const parseDateOnlyStart = (value: string) => new Date(`${value}T00:00:00.000`);
-const parseDateOnlyEnd = (value: string) => new Date(`${value}T23:59:59.999`);
+const parseDateOnlyStart = (value: string, tzOffsetMinutes: number) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return new Date(value);
+
+    const utcMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000);
+    return new Date(utcMs);
+};
+
+const parseDateOnlyEnd = (value: string, tzOffsetMinutes: number) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return new Date(value);
+
+    // End of the local day = start of next local day - 1ms
+    const utcMs = Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000) - 1;
+    return new Date(utcMs);
+};
+
+const getLocalMonthRangeUtc = (baseDateUtc: Date, tzOffsetMinutes: number, monthDelta = 0) => {
+    // Represent "local" time using UTC getters by shifting by tzOffset.
+    const local = new Date(baseDateUtc.getTime() - (tzOffsetMinutes * 60_000));
+    const year = local.getUTCFullYear();
+    const monthIndex = local.getUTCMonth() + monthDelta;
+
+    const startUtcMs = Date.UTC(year, monthIndex, 1, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000);
+    const endUtcMs = Date.UTC(year, monthIndex + 1, 1, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000) - 1;
+
+    const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+    const localTodayDayOfMonth = local.getUTCDate();
+
+    return {
+        start: new Date(startUtcMs),
+        end: new Date(endUtcMs),
+        daysInMonth,
+        localTodayDayOfMonth
+    };
+};
+
+const getLocalDayOfMonth = (dateUtc: Date, tzOffsetMinutes: number) => {
+    const local = new Date(dateUtc.getTime() - (tzOffsetMinutes * 60_000));
+    return local.getUTCDate();
+};
+
+
 
 export class SalesStatsService {
 
-    async getSalesDashboardMetrics(businessId: number) {
+    async getSalesDashboardMetrics(businessId: number, tzOffset?: number | string) {
         const now = new Date();
-        
-        // 1. Definir rangos de tiempo (Mes Actual vs Mes Anterior)
-        const currentStart = startOfMonth(now);
-        const currentEnd = endOfMonth(now);
-        const previousStart = startOfMonth(subMonths(now, 1));
-        const previousEnd = endOfMonth(subMonths(now, 1));
+
+        // Timezone offset (minutes) for correct month bucketing.
+        // If not provided, we fall back to server timezone (keeps previous behavior).
+        const tzOffsetMinutes = (() => {
+            if (tzOffset === null || tzOffset === undefined) {
+                return new Date().getTimezoneOffset();
+            }
+            const parsed = Number(tzOffset);
+            return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+        })();
+
+        // 1. Definir rangos de tiempo (Mes Actual vs Mes Anterior) en timezone del cliente
+        const currentRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, 0);
+        const previousRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, -1);
+
+        const currentStart = currentRange.start;
+        const currentEnd = currentRange.end;
+        const previousStart = previousRange.start;
+        const previousEnd = previousRange.end;
 
         try {
             // 2. Ejecutar consultas en Paralelo (Promise.all)
@@ -72,22 +127,24 @@ export class SalesStatsService {
 
             // 4. Generar el Array para el Gráfico (Sparkline)
             // El reto: La DB devuelve ventas sueltas, el gráfico necesita un array de 30/31 puntos (uno por día)
-            const daysInCurrentMonth = getDaysInMonth(now);
+            const daysInCurrentMonth = currentRange.daysInMonth;
             
             // Creamos un array lleno de ceros: [0, 0, 0, ... 30 veces]
             const chartData = new Array(daysInCurrentMonth).fill(0);
 
             // Rellenamos con las ventas reales
             dailyMovements.forEach(sale => {
-                const dayOfMonth = getDate(sale.createdAt); // Devuelve 1, 2, ... 31
+                const dayOfMonth = getLocalDayOfMonth(sale.createdAt, tzOffsetMinutes); // 1..31 en TZ del cliente
                 // Sumamos al índice correspondiente (dayOfMonth - 1 porque los arrays empiezan en 0)
                 // Usamos += porque puede haber varias ventas el mismo día
-                chartData[dayOfMonth - 1] += Number(sale.totalAmount);
+                if (dayOfMonth >= 1 && dayOfMonth <= daysInCurrentMonth) {
+                    chartData[dayOfMonth - 1] += Number(sale.totalAmount);
+                }
             });
 
             // Si estamos a mitad de mes (ej. día 15), es mejor cortar el gráfico hasta hoy
             // para que no se vea una línea plana de ceros hasta el día 31.
-            const today = getDate(now);
+            const today = currentRange.localTodayDayOfMonth;
             const trend = chartData.slice(0, today); 
 
             return {
@@ -116,18 +173,31 @@ export class SalesStatsService {
     async getDetailedReport(businessId: number, range?: DateRangeQuery) {
         const now = new Date();
 
-        let currentStart = startOfMonth(now);
-        let currentEnd = endOfMonth(now);
+        // Timezone offset (minutes) for correct date-only filtering.
+        // If not provided, we fall back to server timezone (keeps previous behavior).
+        const tzOffsetMinutes = (() => {
+            if (!range || range.tzOffset === null || range.tzOffset === undefined) {
+                return new Date().getTimezoneOffset();
+            }
+            const parsed = Number(range.tzOffset);
+            return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+        })();
+
+        const defaultMonthRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, 0);
+        let currentStart = defaultMonthRange.start;
+        let currentEnd = defaultMonthRange.end;
 
         if (range?.fromDate && range?.toDate) {
-            currentStart = parseDateOnlyStart(range.fromDate);
-            currentEnd = parseDateOnlyEnd(range.toDate);
+            currentStart = parseDateOnlyStart(range.fromDate, tzOffsetMinutes);
+            currentEnd = parseDateOnlyEnd(range.toDate, tzOffsetMinutes);
         } else if (range?.fromDate && !range?.toDate) {
-            currentStart = parseDateOnlyStart(range.fromDate);
+            currentStart = parseDateOnlyStart(range.fromDate, tzOffsetMinutes);
             currentEnd = now;
         } else if (!range?.fromDate && range?.toDate) {
-            currentStart = startOfMonth(parseDateOnlyStart(range.toDate));
-            currentEnd = parseDateOnlyEnd(range.toDate);
+            const base = parseDateOnlyStart(range.toDate, tzOffsetMinutes);
+            const monthRange = getLocalMonthRangeUtc(base, tzOffsetMinutes, 0);
+            currentStart = monthRange.start;
+            currentEnd = parseDateOnlyEnd(range.toDate, tzOffsetMinutes);
         }
 
         try {

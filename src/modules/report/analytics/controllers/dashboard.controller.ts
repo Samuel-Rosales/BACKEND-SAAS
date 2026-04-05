@@ -15,6 +15,7 @@ export class DashboardController {
 
     getDashboardOverview = async (req: Request, res: Response) => {
         const { businessId } = req.user;
+        const tzOffset = req.query.tzOffset === undefined ? undefined : Number(req.query.tzOffset);
 
         if (!businessId) {
             return res.status(400).json({ message: 'Falta el header x-business-id' });
@@ -24,7 +25,7 @@ export class DashboardController {
 
             const [inventory, sales, clients, credit] = await Promise.all([
                 inventoryStats.getDashboardKPIs(businessId),
-                salesStats.getSalesDashboardMetrics(businessId),
+                salesStats.getSalesDashboardMetrics(businessId, tzOffset),
                 clientStats.getClientDashboardMetrics(businessId),
                 creditStats.getCreditDashboardMetrics(businessId)
             ]);

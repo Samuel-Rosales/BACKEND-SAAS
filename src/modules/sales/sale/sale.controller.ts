@@ -59,7 +59,7 @@ export class SaleController {
                 limit: req.query.limit ? Number(req.query.limit) : undefined,
                 fromDate: req.query.fromDate as string,
                 toDate: req.query.toDate as string,
-                tzOffset: req.query.tzOffset ? Number(req.query.tzOffset) : undefined,
+                tzOffset: req.query.tzOffset === undefined ? undefined : Number(req.query.tzOffset),
                 clientId: req.query.clientId ? Number(req.query.clientId) : undefined,
                 paymentStatus: req.query.paymentStatus as string,
                 search: req.query.search as string,
