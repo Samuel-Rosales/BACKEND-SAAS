@@ -1,6 +1,6 @@
 import { prisma } from '@/configs';
 import { Decimal } from '@prisma/client/runtime/client';
-import { differenceInCalendarDays, endOfMonth, startOfMonth, subDays, subMonths } from 'date-fns';
+import { subDays } from 'date-fns';
 
 type DateRangeQuery = {
     fromDate?: string;
@@ -25,6 +25,21 @@ const parseDateOnlyEnd = (value: string, tzOffsetMinutes: number) => {
     return new Date(utcMs);
 };
 
+const getLocalMonthRangeUtc = (baseDateUtc: Date, tzOffsetMinutes: number, monthDelta = 0) => {
+    // Represent "local" time using UTC getters by shifting by tzOffset.
+    const local = new Date(baseDateUtc.getTime() - (tzOffsetMinutes * 60_000));
+    const year = local.getUTCFullYear();
+    const monthIndex = local.getUTCMonth() + monthDelta;
+
+    const startUtcMs = Date.UTC(year, monthIndex, 1, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000);
+    const endUtcMs = Date.UTC(year, monthIndex + 1, 1, 0, 0, 0, 0) + (tzOffsetMinutes * 60_000) - 1;
+
+    return {
+        start: new Date(startUtcMs),
+        end: new Date(endUtcMs)
+    };
+};
+
 export class PurchaseStatsService {
     async getDetailedPurchaseReport(businessId: number, range?: DateRangeQuery) {
         const now = new Date();
@@ -39,25 +54,31 @@ export class PurchaseStatsService {
             return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
         })();
 
-        let currentStart = startOfMonth(now);
-        let currentEnd = endOfMonth(now);
+        const defaultMonthRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, 0);
+        let currentStart = defaultMonthRange.start;
+        let currentEnd = defaultMonthRange.end;
 
-        let prevStart = startOfMonth(subMonths(now, 1));
-        let prevEnd = endOfMonth(subMonths(now, 1));
+        let prevStart = getLocalMonthRangeUtc(now, tzOffsetMinutes, -1).start;
+        let prevEnd = getLocalMonthRangeUtc(now, tzOffsetMinutes, -1).end;
 
         // Si se envía rango, usamos ese período y comparamos con el período anterior equivalente
         if (range?.fromDate && range?.toDate) {
             currentStart = parseDateOnlyStart(range.fromDate, tzOffsetMinutes);
             currentEnd = parseDateOnlyEnd(range.toDate, tzOffsetMinutes);
 
-            const spanDays = Math.max(1, differenceInCalendarDays(currentEnd, currentStart) + 1);
+            const spanDays = Math.max(
+                1,
+                Math.floor((currentEnd.getTime() - currentStart.getTime()) / 86_400_000) + 1
+            );
             prevEnd = subDays(currentStart, 1);
             prevStart = subDays(currentStart, spanDays);
         } else if (range?.fromDate && !range?.toDate) {
             currentStart = parseDateOnlyStart(range.fromDate, tzOffsetMinutes);
             currentEnd = now;
         } else if (!range?.fromDate && range?.toDate) {
-            currentStart = startOfMonth(parseDateOnlyStart(range.toDate, tzOffsetMinutes));
+            const base = parseDateOnlyStart(range.toDate, tzOffsetMinutes);
+            const monthRange = getLocalMonthRangeUtc(base, tzOffsetMinutes, 0);
+            currentStart = monthRange.start;
             currentEnd = parseDateOnlyEnd(range.toDate, tzOffsetMinutes);
         }
 
