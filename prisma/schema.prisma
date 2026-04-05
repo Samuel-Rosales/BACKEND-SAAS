@@ -27,6 +27,10 @@ model User {
   // Relaciones
   memberships     BusinessMember[] // Un usuario puede trabajar en varios negocios
   createdProducts Product[] // Auditoría: qué productos creó/editó
+
+  // Plataforma - Pagos de Suscripción
+  createdSubscriptionPayments  SubscriptionPayment[] @relation("SubscriptionPaymentCreatedBy")
+  reviewedSubscriptionPayments SubscriptionPayment[] @relation("SubscriptionPaymentReviewedBy")
 }
 
 model UserContact {
@@ -110,6 +114,7 @@ model Business {
 
   // Relaciones
   subscription   Subscription?
+  subscriptionPayments SubscriptionPayment[]
   members        BusinessMember[]
   categories     Category[]
   products       Product[]
@@ -140,6 +145,44 @@ model Subscription {
   lastPaymentRef String
 
   business Business @relation(fields: [businessId], references: [id])
+
+  payments SubscriptionPayment[]
+}
+
+model SubscriptionPayment {
+  id             Int      @id @default(autoincrement())
+
+  businessId     Int
+  subscriptionId Int
+
+  // Quién registró el pago (usuario del negocio)
+  createdById    Int
+
+  // Revisión (solo admin/super-admin)
+  reviewedById   Int?
+  reviewedAt     DateTime?
+  reviewNote     String?
+
+  planType       PlanType
+  monthsPurchased Int
+
+  amount         Decimal  @db.Decimal(15, 2)
+  currency       Currency
+
+  // Referencia bancaria / comprobante
+  reference      String
+  proofUrl       String?
+
+  status         SubscriptionPaymentStatus @default(UNDER_REVIEW)
+  createdAt      DateTime  @default(now())
+
+  business       Business     @relation(fields: [businessId], references: [id])
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  createdBy      User         @relation("SubscriptionPaymentCreatedBy", fields: [createdById], references: [id])
+  reviewedBy     User?        @relation("SubscriptionPaymentReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([businessId, status, createdAt])
+  @@unique([businessId, reference])
 }
 
 model ExchangeRate {
@@ -716,6 +759,12 @@ enum SubStatus {
   INACTIVE
   PAST_DUE
   CANCELLED
+}
+
+enum SubscriptionPaymentStatus {
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
 }
 
 enum MovementType {

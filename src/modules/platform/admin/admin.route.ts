@@ -33,4 +33,16 @@ router.patch('/businesses/:id/subscription', adminController.updateBusinessSubsc
  */
 router.get('/stats', adminController.getStats.bind(adminController));
 
+/**
+ * GET /api/v1/admin/subscription-payments
+ * Listar pagos de suscripción (opcional: ?status=UNDER_REVIEW)
+ */
+router.get('/subscription-payments', adminController.listSubscriptionPayments.bind(adminController));
+
+/**
+ * PATCH /api/v1/admin/subscription-payments/:id/review
+ * Revisar un pago: APPROVED | REJECTED
+ */
+router.patch('/subscription-payments/:id/review', adminController.reviewSubscriptionPayment.bind(adminController));
+
 export default router;

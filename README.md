@@ -210,6 +210,7 @@ Rutas montadas en el servidor (ver `src/server/server.server.ts`):
 
 - `/api/v1/platform/business-category`
 - `/api/v1/platform/subscription`
+- `/api/v1/platform/subscription-payment`
 - `/api/v1/platform/business`
 
 ### Inventory
@@ -242,6 +243,10 @@ Rutas montadas en el servidor (ver `src/server/server.server.ts`):
 - `/api/v1/sales/client`
 - `/api/v1/sales/sale`
 - `/api/v1/sales/credit-note`
+
+### Admin
+
+- `/api/v1/admin`
 
 ---
 

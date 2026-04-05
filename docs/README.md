@@ -18,6 +18,7 @@ Documentación completa de la API REST del sistema SaaS.
 - [Negocios (Business)](./modules/platform/business.md)
 - [Categorías de Negocio (Business Category)](./modules/platform/business-category.md)
 - [Suscripciones (Subscription)](./modules/platform/subscription.md)
+- [Pagos de Suscripción (Subscription Payment)](./modules/platform/subscription-payment.md)
 
 ### Módulo Inventory
 - [Categorías de Productos (Category)](./modules/inventory/category.md)

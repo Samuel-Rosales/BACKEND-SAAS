@@ -159,7 +159,10 @@ export class BusinessService {
                   members: { 
                       where: { userId: userId }, 
                     select: { role: { select: { name: true, code: true } } } 
-                  }
+                  },
+                  subscription: { select: { status: true, planType: true, endDate: true } },
+                  businessCategory: { select: { name: true } },
+                  subscriptionPayments: {},
                   // ❌ Eliminamos exchangeRates de aquí.
                   // No podemos confiar en una simple relación de base de datos 
                   // para una lógica de negocio condicional.
