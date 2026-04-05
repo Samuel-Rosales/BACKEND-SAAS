@@ -142,11 +142,11 @@ export class Server {
 
         this.app.listen(this.apiPort, () => {
 
-            //console.log(`🚀 Server running at ${this.apiUrl}`);
+            console.log(`🚀 Server running at ${this.apiUrl}`);
 
             // Log opcional para ver las rutas activas al iniciar
 
-            //console.log(`Endpoints disponibles en ${this.prefix}/...`);
+            console.log(`Endpoints disponibles en ${this.prefix}/...`);
 
         })
     }
