@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { SubStatus, SubscriptionPaymentStatus } from '@prisma/client';
+import { PlanType, SubStatus, SubscriptionPaymentStatus } from '@prisma/client';
 import { addMonths } from 'date-fns';
 
 export class AdminService {
@@ -8,12 +8,41 @@ export class AdminService {
      * Listar todos los negocios del sistema (solo para administradores)
      * Incluye información de suscripción, categoría y miembros
      */
-    async findAllBusinesses(page: number = 1, limit: number = 50) {
+    async findAllBusinesses(
+        page: number = 1,
+        limit: number = 50,
+        status?: string,
+        planType?: string
+    ) {
         try {
             const skip = (page - 1) * limit;
 
+            const normalizedStatus = (() => {
+                if (!status) return undefined;
+                const upper = String(status).toUpperCase();
+                const allowed = Object.values(SubStatus);
+                return allowed.includes(upper as SubStatus) ? (upper as SubStatus) : undefined;
+            })();
+
+            const normalizedPlanType = (() => {
+                if (!planType) return undefined;
+                const upper = String(planType).toUpperCase();
+                const allowed = Object.values(PlanType);
+                return allowed.includes(upper as PlanType) ? (upper as PlanType) : undefined;
+            })();
+
+            const subscriptionWhere = {
+                ...(normalizedStatus ? { status: normalizedStatus } : {}),
+                ...(normalizedPlanType ? { planType: normalizedPlanType } : {}),
+            };
+
+            const whereClause = Object.keys(subscriptionWhere).length > 0
+                ? { subscription: { is: subscriptionWhere } }
+                : undefined;
+
             const [businesses, total] = await Promise.all([
                 prisma.business.findMany({
+                    where: whereClause,
                     skip,
                     take: limit,
                     include: {
@@ -56,7 +85,7 @@ export class AdminService {
                         createdAt: 'desc'
                     }
                 }),
-                prisma.business.count()
+                prisma.business.count({ where: whereClause })
             ]);
 
             return {
