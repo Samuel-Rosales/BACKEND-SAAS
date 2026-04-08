@@ -13,8 +13,10 @@ export class AdminController {
         try {
             const page = parseInt(req.query.page as string) || 1;
             const limit = parseInt(req.query.limit as string) || 50;
+            const status = req.query.status as string | undefined;
+            const planType = req.query.planType as string | undefined;
 
-            const result = await adminService.findAllBusinesses(page, limit);
+            const result = await adminService.findAllBusinesses(page, limit, status, planType);
             return res.status(result.status).json(result);
 
         } catch (error) {
