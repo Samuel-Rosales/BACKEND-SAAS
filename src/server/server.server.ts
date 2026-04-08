@@ -67,10 +67,13 @@ export class Server {
     }
 
     private middlewares() {
+        // CORS: the frontend runs on a different origin (Astro dev server).
+        // Avoid the invalid combination of `origin: "*"` with `credentials: true`.
         this.app.use(cors({
-            origin: "*",
-            methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-            credentials: true
+            origin: true, // reflect the request origin
+            methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization', 'x-business-id'],
+            credentials: false,
         }));
         this.app.use(express.json());
         this.app.use(express.static("src/public"));
