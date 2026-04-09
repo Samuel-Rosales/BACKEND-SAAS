@@ -3,6 +3,7 @@ import { AdminController } from './admin.controller';
 import { authMiddleware, requireSuperAdmin } from '@/middlewares';
 import { BusinessAdminRoute } from './platform/business/business.admin.route';
 import { SubscriptionPaymentAdminRoute } from './platform/subscription-payment/subscription-payment.admin.route';
+import { UserAdminRoute } from './aim/user/user.admin.route';
 
 const router = Router();
 const adminController = new AdminController();
@@ -13,6 +14,9 @@ router.use(requireSuperAdmin)
 
 // --- Businesses (Super Admin) ---
 router.use('/business', requireSuperAdmin, BusinessAdminRoute);
+
+// --- Users (Super Admin) ---
+router.use('/users', UserAdminRoute);
 
 /**
  * GET /api/v1/admin/stats

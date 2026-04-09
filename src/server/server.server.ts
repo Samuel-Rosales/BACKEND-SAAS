@@ -83,8 +83,10 @@ export class Server {
             purchaseReports: `${this.prefix}/report/purchases`,
 
             // MÓDULO ADMIN
+            admin: `${this.prefix}/admin`,
             adminBusiness: `${this.prefix}/admin/business`,
-            adminSubscriptionPayments: `${this.prefix}/admin/subscription-payments`
+            adminSubscriptionPayments: `${this.prefix}/admin/subscription-payments`,
+            adminUsers: `${this.prefix}/admin/users`
         };
 
         this.dbConnection();
