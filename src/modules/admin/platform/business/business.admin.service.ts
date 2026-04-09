@@ -1,0 +1,198 @@
+import { prisma } from '@/configs';
+import { PlanType, SubStatus } from '@prisma/client';
+
+export class BusinessAdminService {
+  /**
+   * GET /api/v1/admin/businesses
+   */
+  async findAll(page: number = 1, limit: number = 50, status?: string, planType?: string) {
+    try {
+      const skip = (page - 1) * limit;
+
+      const normalizedStatus = (() => {
+        if (!status) return undefined;
+        const upper = String(status).toUpperCase();
+        const allowed = Object.values(SubStatus);
+        return allowed.includes(upper as SubStatus) ? (upper as SubStatus) : undefined;
+      })();
+
+      const normalizedPlanType = (() => {
+        if (!planType) return undefined;
+        const upper = String(planType).toUpperCase();
+        const allowed = Object.values(PlanType);
+        return allowed.includes(upper as PlanType) ? (upper as PlanType) : undefined;
+      })();
+
+      const subscriptionWhere = {
+        ...(normalizedStatus ? { status: normalizedStatus } : {}),
+        ...(normalizedPlanType ? { planType: normalizedPlanType } : {}),
+      };
+
+      const whereClause = Object.keys(subscriptionWhere).length > 0 ? { subscription: { is: subscriptionWhere } } : undefined;
+
+      const [businesses, total] = await Promise.all([
+        prisma.business.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
+          include: {
+            subscription: {
+              select: {
+                id: true,
+                planType: true,
+                status: true,
+                startDate: true,
+                endDate: true,
+                lastPaymentRef: true,
+              },
+            },
+            businessCategory: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            members: {
+              where: { isActive: true },
+              select: {
+                id: true,
+                userId: true,
+                role: {
+                  select: {
+                    name: true,
+                    code: true,
+                  },
+                },
+              },
+            },
+            _count: {
+              select: {
+                members: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        }),
+        prisma.business.count({ where: whereClause }),
+      ]);
+
+      return {
+        message: 'Negocios obtenidos exitosamente',
+        status: 200,
+        data: {
+          businesses,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
+        },
+      };
+    } catch (error) {
+      console.error('BusinessAdminService.findAll error:', error);
+      return {
+        message: 'Error al obtener los negocios',
+        status: 500,
+        data: null,
+      };
+    }
+  }
+
+  /**
+   * PATCH /api/v1/admin/businesses/:id/status
+   */
+  async toggleBusinessStatus(businessId: number, status: SubStatus) {
+    try {
+      const business = await prisma.business.findUnique({
+        where: { id: businessId },
+        include: { subscription: true },
+      });
+
+      if (!business || !business.subscription) {
+        return {
+          message: 'Negocio o suscripción no encontrada',
+          status: 404,
+          data: null,
+        };
+      }
+
+      await prisma.subscription.update({
+        where: { id: business.subscription.id },
+        data: { status },
+      });
+
+      const updatedBusiness = await prisma.business.findUnique({
+        where: { id: businessId },
+        include: {
+          subscription: true,
+          businessCategory: true,
+        },
+      });
+
+      return {
+        message: `Negocio ${status === 'ACTIVE' ? 'activado' : 'desactivado'} exitosamente`,
+        status: 200,
+        data: updatedBusiness,
+      };
+    } catch (error) {
+      console.error('BusinessAdminService.toggleBusinessStatus error:', error);
+      return {
+        message: 'Error al cambiar el estado del negocio',
+        status: 500,
+        data: null,
+      };
+    }
+  }
+
+  /**
+   * PATCH /api/v1/admin/businesses/:id/subscription
+   */
+  async updateBusinessSubscription(
+    businessId: number,
+    data: {
+      planType?: string;
+      status?: SubStatus;
+      endDate?: Date;
+    },
+  ) {
+    try {
+      const business = await prisma.business.findUnique({
+        where: { id: businessId },
+        include: { subscription: true },
+      });
+
+      if (!business || !business.subscription) {
+        return {
+          message: 'Negocio o suscripción no encontrada',
+          status: 404,
+          data: null,
+        };
+      }
+
+      const updatedSubscription = await prisma.subscription.update({
+        where: { id: business.subscription.id },
+        data: {
+          planType: data.planType as any,
+          status: data.status,
+          endDate: data.endDate,
+        },
+      });
+
+      return {
+        message: 'Suscripción actualizada exitosamente',
+        status: 200,
+        data: updatedSubscription,
+      };
+    } catch (error) {
+      console.error('BusinessAdminService.updateBusinessSubscription error:', error);
+      return {
+        message: 'Error al actualizar la suscripción',
+        status: 500,
+        data: null,
+      };
+    }
+  }
+}

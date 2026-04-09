@@ -4,15 +4,24 @@ import morgan from 'morgan';
 import { stream, connectDB } from '../configs';
 
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } from '../modules/aim';
-import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, AdminRoute, SubscriptionPaymentRoute } from '../modules/platform';
+
+import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPaymentRoute } from '../modules/platform';
+
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
+
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute } from '../modules/finance';
+
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
+
 import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
+
 import { DashboardRoute } from '@/modules/report/analytics/routes/dashboard.routes';
-import { initCronJobs } from '@/cron';
 import { SalesReportRoute } from '@/modules/report/analytics/routes/salesReport.route';
 import { PurchaseReportRoute } from '@/modules/report/analytics/routes/purchase-report.route';
+
+import { AdminRoute } from '@/modules/admin';
+import { initCronJobs } from '@/cron';
+
 export class Server {
 
     public app: express.Application;
@@ -27,15 +36,21 @@ export class Server {
         this.apiUrl = process.env.API_URL || `http://localhost:${this.apiPort}`;
         this.prefix = '/api/v1';
         this.paths = {
+
+            // MÓDULO AIM
             users: `${this.prefix}/aim/user`,
             roles: `${this.prefix}/aim/role`,
             auth: `${this.prefix}/aim/auth`,
             businessMembers: `${this.prefix}/aim/business-member`,
             contacts: `${this.prefix}/aim/contact`,
+
+            // MÓDULO PLATFORM
             businessCategories: `${this.prefix}/platform/business-category`,
             subscriptions: `${this.prefix}/platform/subscription`,
             subscriptionPayments: `${this.prefix}/platform/subscription-payment`,
             businesses: `${this.prefix}/platform/business`,
+
+            // MÓDULO INVENTORY
             categories: `${this.prefix}/inventory/category`,
             depots: `${this.prefix}/inventory/depot`,
             products: `${this.prefix}/inventory/product`,
@@ -43,22 +58,33 @@ export class Server {
             measurementUnits: `${this.prefix}/inventory/measurement-unit`,
             stockLot: `${this.prefix}/inventory/stock-lot`,
             stockMovement: `${this.prefix}/inventory/stock-movement`,
+
+            // MÓDULO FINANCE
             exchangeRates: `${this.prefix}/finance/exchange-rate`,
             paymentMethods: `${this.prefix}/finance/payment-method`,
             cashRegisters: `${this.prefix}/finance/cash-register`,
             cashCounts: `${this.prefix}/finance/cash-count`,
             taxes: `${this.prefix}/finance/tax`,
+
+            // MÓDULO PROCUREMENT
             suppliers: `${this.prefix}/procurement/supplier`,
             purchases: `${this.prefix}/procurement/purchase`,
             purchasePayments: `${this.prefix}/procurement/purchase-payment`,
             purchaseItems: `${this.prefix}/procurement/purchase-item`,
+
+            // MÓDULO SALES
             clients: `${this.prefix}/sales/client`,
             sales: `${this.prefix}/sales/sale`,
             creditNotes: `${this.prefix}/sales/credit-note`,
+
+            // MÓDULO REPORTS
             dashboardReports: `${this.prefix}/report/dashboard`,
             salesReports: `${this.prefix}/report/sales`,
             purchaseReports: `${this.prefix}/report/purchases`,
-            admin: `${this.prefix}/admin`
+
+            // MÓDULO ADMIN
+            adminBusiness: `${this.prefix}/admin/business`,
+            adminSubscriptionPayments: `${this.prefix}/admin/subscription-payments`
         };
 
         this.dbConnection();
