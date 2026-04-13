@@ -59,7 +59,7 @@ export class BusinessCategoryService {
             if (categories.length === 0) {
                 return {
                     message: 'No hay categorías de negocio disponibles',
-                    status: 404,
+                    status: 200,
                     data: []
                 };
             }

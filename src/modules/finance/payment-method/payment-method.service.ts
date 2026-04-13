@@ -69,7 +69,7 @@ export class PaymentMethodService {
             if (paymentMethods.length === 0) {
                 return {
                     message: 'No hay métodos de pago registrados',
-                    status: 404,
+                    status: 200,
                     data: []
                 };
             }
@@ -214,7 +214,8 @@ export class PaymentMethodService {
                     _count: {
                         select: {
                             salePayments: true,
-                            purchasePayments: true
+                            purchasePayments: true,
+                            creditNotePayments: true
                         }
                     }
                 }
@@ -231,7 +232,8 @@ export class PaymentMethodService {
             // Verificar si hay pagos asociados
             const totalPayments = 
                 paymentMethod._count.salePayments +
-                paymentMethod._count.purchasePayments;
+                paymentMethod._count.purchasePayments +
+                paymentMethod._count.creditNotePayments;
 
             if (totalPayments > 0) {
                 return {

@@ -3,7 +3,7 @@ import { PaymentMethodController } from './payment-method.controller';
 import { PaymentMethodValidator } from './payment-method.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
 import { authMiddleware } from '@/middlewares/auth.middleware';
-import { requireBusinessPermission } from '@/middlewares';
+import { requireBusinessPermission, requireSuperAdmin } from '@/middlewares';
 
 const router = Router();
 const controller = new PaymentMethodController();
@@ -14,7 +14,7 @@ router.use(authMiddleware);
 
 router.post(
   '/', 
-  requireBusinessPermission('FINANCE_WRITE'),
+  requireSuperAdmin,
   validator.validateCreate, 
   handleValidationErrors, 
   controller.create
@@ -34,7 +34,7 @@ router.get(
 
 router.patch(
   '/:id', 
-  requireBusinessPermission('FINANCE_WRITE'),
+  requireSuperAdmin,
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
@@ -42,7 +42,7 @@ router.patch(
 
 router.delete(
   '/:id', 
-  requireBusinessPermission('FINANCE_WRITE'),
+  requireSuperAdmin,
   validator.validateId, 
   handleValidationErrors,
   controller.remove

@@ -2,25 +2,26 @@ import { Router } from 'express';
 import { BusinessCategoryController } from './business-category.controller';
 import { BusinessCategoryValidator } from './business-category.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
-// import { authMiddleware } from '@/middlewares/auth.middleware'; // Opcional: Proteger rutas
+import { authMiddleware, requireSuperAdmin } from '@/middlewares';
 
 const router = Router();
 const controller = new BusinessCategoryController();
 const validator = new BusinessCategoryValidator();
 
-// router.use(authMiddleware); // Descomentar para exigir login
-
 router.post(
   '/', 
+  authMiddleware,
+  requireSuperAdmin,
   validator.validateCreate, 
   handleValidationErrors, 
   controller.create
 );
 
-router.get('/', controller.findAll);
+router.get('/', authMiddleware, controller.findAll);
 
 router.get(
     '/:id', 
+  authMiddleware,
     validator.validateId,
     handleValidationErrors,
     controller.findOne
@@ -28,6 +29,8 @@ router.get(
 
 router.patch(
   '/:id', 
+  authMiddleware,
+  requireSuperAdmin,
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
@@ -35,6 +38,8 @@ router.patch(
 
 router.delete(
   '/:id', 
+  authMiddleware,
+  requireSuperAdmin,
   validator.validateId, 
   handleValidationErrors,
   controller.remove

@@ -28,6 +28,13 @@ export class PaymentMethodValidator {
     public validateUpdate: ValidationChain[] = [
 
         param('id').isInt().toInt(),
+
+        body('currency')
+        .optional()
+        .isString().withMessage('La moneda debe ser una cadena de texto')
+        .isIn(['USD', 'VES'])
+        .isLength({ min: 3, max: 3 }).withMessage('La moneda debe tener 3 caracteres')
+        .trim(),
         
         body('type')
         .optional()
