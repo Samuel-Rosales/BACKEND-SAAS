@@ -28,7 +28,8 @@ export class MeasurementUnitService {
                 data: {
                     name: data.name,
                     symbol: data.symbol,
-                    type: data.type
+                    type: data.type,
+                    isActive: data.isActive !== undefined ? data.isActive : true,
                 }
             });
 
@@ -52,9 +53,31 @@ export class MeasurementUnitService {
                 orderBy: { name: 'asc'}
             });
 
+            if (units.length === 0) {
+                return { status: 200, message: 'No hay unidades de medida registradas', data: [] };
+            }
+
             return { status: 200, message: 'Unidades obtenidas exitosamente', data: units };
         } catch (error) {
             console.error('Error al listar unidades:', error);
+            return { status: 500, message: 'Error interno al listar unidades', data: null };
+        }
+    }
+
+    // Admin: listar todas (incluye inactivas)
+    async findAllAdmin() {
+        try {
+            const units = await prisma.measurementUnit.findMany({
+                orderBy: { name: 'asc' },
+            });
+
+            if (units.length === 0) {
+                return { status: 200, message: 'No hay unidades de medida registradas', data: [] };
+            }
+
+            return { status: 200, message: 'Unidades obtenidas exitosamente', data: units };
+        } catch (error) {
+            console.error('Error al listar unidades (admin):', error);
             return { status: 500, message: 'Error interno al listar unidades', data: null };
         }
     }
@@ -72,6 +95,22 @@ export class MeasurementUnitService {
         } catch (error) {
 
             console.error('Error al obtener unidad de medida:', error);
+            return { status: 500, message: 'Error interno al obtener unidad de medida', data: null };
+        }
+    }
+
+    // Admin: obtener una (incluye inactivas)
+    async findOneAdmin(id: number) {
+        try {
+            const unit = await prisma.measurementUnit.findUnique({ where: { id } });
+
+            if (!unit) {
+                return { status: 404, message: 'Unidad de medida no encontrada', data: null };
+            }
+
+            return { status: 200, message: 'Unidad de medida encontrada', data: unit };
+        } catch (error) {
+            console.error('Error al obtener unidad de medida (admin):', error);
             return { status: 500, message: 'Error interno al obtener unidad de medida', data: null };
         }
     }
@@ -146,8 +185,8 @@ export class MeasurementUnitService {
             // 3. Validación: ¿Se está usando? (Integridad Referencial)
             if (unit._count.products > 0) {
                 return {
-                    status: 409, // Conflict
-                    message: `No se puede eliminar: La unidad "${unit.name}" está asignada a ${unit._count.products} producto(s).`,
+                    status: 400,
+                    message: `No se puede eliminar la unidad "${unit.name}" porque está asignada a ${unit._count.products} producto(s). Se recomienda desactivarla.`,
                     data: null
                 };
             }

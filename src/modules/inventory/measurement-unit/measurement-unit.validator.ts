@@ -22,7 +22,16 @@ export class MeasurementUnitValidator {
             const exists = await prisma.measurementUnit.findFirst({ where: { symbol } });
             if (exists) throw new Error('Ya existe una unidad con ese símbolo');
             return true;
-        })
+        }),
+
+        body('type')
+        .notEmpty().withMessage('El tipo es obligatorio')
+        .isIn(['MASS', 'VOLUME', 'UNIT']).withMessage('El tipo debe ser: MASS, VOLUME o UNIT'),
+
+        body('isActive')
+        .optional()
+        .isBoolean().withMessage('isActive debe ser un valor booleano')
+        .toBoolean(),
     ];
 
     public validateUpdate: ValidationChain[] = [
@@ -50,7 +59,16 @@ export class MeasurementUnitValidator {
             const exists = await prisma.measurementUnit.findFirst({ where: { symbol } });
             if (exists && exists.id !== id) throw new Error('Símbolo ya en uso por otra unidad');
             return true;
-        })
+        }),
+
+        body('type')
+        .optional()
+        .isIn(['MASS', 'VOLUME', 'UNIT']).withMessage('El tipo debe ser: MASS, VOLUME o UNIT'),
+
+        body('isActive')
+        .optional()
+        .isBoolean().withMessage('isActive debe ser un valor booleano')
+        .toBoolean(),
     ];
 
     public validateId: ValidationChain[] = [

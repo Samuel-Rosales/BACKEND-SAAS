@@ -6,6 +6,7 @@ import { SubscriptionPaymentAdminRoute } from './platform/subscription-payment/s
 import { UserAdminRoute } from './aim/user/user.admin.route';
 import { PaymentMethodAdminRoute } from './finance/payment-method/payment-method.admin.route';
 import { TaxAdminRoute } from './finance/tax/tax.admin.route';
+import { MeasurementUnitAdminRoute } from './inventory/measurement-unit/measurement-unit.admin.route';
 
 const router = Router();
 const adminController = new AdminController();
@@ -34,5 +35,8 @@ router.use('/payment-methods', PaymentMethodAdminRoute);
 
 // --- Taxes (Super Admin) ---
 router.use('/taxes', TaxAdminRoute);
+
+// --- Measurement Units (Super Admin) ---
+router.use('/measurement-units', MeasurementUnitAdminRoute);
 
 export default router;
