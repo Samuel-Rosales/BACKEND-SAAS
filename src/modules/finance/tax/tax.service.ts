@@ -49,7 +49,7 @@ export class TaxService {
       if (taxes.length === 0) {
         return {
           message: 'No hay impuestos registrados',
-          status: 404,
+          status: 200,
           data: [],
         };
       }
@@ -179,6 +179,7 @@ export class TaxService {
           _count: {
             select: {
               products: true,
+              purchases: true,
             },
           },
         },
@@ -192,9 +193,11 @@ export class TaxService {
         };
       }
 
-      if (tax._count.products > 0) {
+      const totalRelations = (tax._count.products ?? 0) + (tax._count.purchases ?? 0);
+
+      if (totalRelations > 0) {
         return {
-          message: `No se puede eliminar el impuesto porque tiene ${tax._count.products} producto(s) asociado(s). Se recomienda desactivarlo.`,
+          message: `No se puede eliminar el impuesto porque tiene ${totalRelations} registro(s) asociado(s). Se recomienda desactivarlo.`,
           status: 400,
           data: null,
         };

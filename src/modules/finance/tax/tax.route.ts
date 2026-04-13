@@ -3,7 +3,7 @@ import { TaxController } from './tax.controller';
 import { TaxValidator } from './tax.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
 import { authMiddleware } from '@/middlewares/auth.middleware';
-import { requireBusinessPermission } from '@/middlewares';
+import { requireBusinessPermission, requireSuperAdmin } from '@/middlewares';
 
 const router = Router();
 const controller = new TaxController();
@@ -12,7 +12,7 @@ const validator = new TaxValidator();
 // Todas las rutas requieren autenticación
 router.use(authMiddleware);
 
-router.post('/', requireBusinessPermission('FINANCE_WRITE'), validator.validateCreate, handleValidationErrors, controller.create);
+router.post('/', requireSuperAdmin, validator.validateCreate, handleValidationErrors, controller.create);
 
 router.get('/', requireBusinessPermission('FINANCE_READ'), controller.findAll);
 
@@ -20,9 +20,9 @@ router.get('/active', requireBusinessPermission('FINANCE_READ'), controller.find
 
 router.get('/:id', requireBusinessPermission('FINANCE_READ'), validator.validateId, handleValidationErrors, controller.findOne);
 
-router.patch('/:id', requireBusinessPermission('FINANCE_WRITE'), validator.validateUpdate, handleValidationErrors, controller.update);
+router.patch('/:id', requireSuperAdmin, validator.validateUpdate, handleValidationErrors, controller.update);
 
-router.delete('/:id', requireBusinessPermission('FINANCE_WRITE'), validator.validateId, handleValidationErrors, controller.remove);
+router.delete('/:id', requireSuperAdmin, validator.validateId, handleValidationErrors, controller.remove);
 
 export const TaxRoute = router;
 

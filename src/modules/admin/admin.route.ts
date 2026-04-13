@@ -5,6 +5,7 @@ import { BusinessAdminRoute } from './platform/business/business.admin.route';
 import { SubscriptionPaymentAdminRoute } from './platform/subscription-payment/subscription-payment.admin.route';
 import { UserAdminRoute } from './aim/user/user.admin.route';
 import { PaymentMethodAdminRoute } from './finance/payment-method/payment-method.admin.route';
+import { TaxAdminRoute } from './finance/tax/tax.admin.route';
 
 const router = Router();
 const adminController = new AdminController();
@@ -30,5 +31,8 @@ router.use('/subscription-payments', SubscriptionPaymentAdminRoute);
 
 // --- Payment Methods (Super Admin) ---
 router.use('/payment-methods', PaymentMethodAdminRoute);
+
+// --- Taxes (Super Admin) ---
+router.use('/taxes', TaxAdminRoute);
 
 export default router;
