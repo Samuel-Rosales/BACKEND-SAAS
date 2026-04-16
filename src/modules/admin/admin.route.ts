@@ -8,6 +8,7 @@ import { UserAdminRoute } from './aim/user/user.admin.route';
 import { PaymentMethodAdminRoute } from './finance/payment-method/payment-method.admin.route';
 import { TaxAdminRoute } from './finance/tax/tax.admin.route';
 import { MeasurementUnitAdminRoute } from './inventory/measurement-unit/measurement-unit.admin.route';
+import { AdminReportsRoute } from './reports/admin-reports.route';
 
 const router = Router();
 const adminController = new AdminController();
@@ -27,6 +28,9 @@ router.use('/users', UserAdminRoute);
  * Estadísticas del sistema
  */
 router.get('/stats', adminController.getStats.bind(adminController));
+
+// --- Reports (Super Admin) ---
+router.use('/reports', AdminReportsRoute);
 
 // --- Subscription Payments (Super Admin) ---
 router.use('/subscription-payments', SubscriptionPaymentAdminRoute);
