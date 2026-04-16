@@ -1,5 +1,6 @@
 import { body, param, ValidationChain } from 'express-validator';
 import { Currency, PlanType } from '@prisma/client';
+import { prisma } from '@/configs';
 
 export class SubscriptionPaymentValidator {
   public validateId: ValidationChain[] = [
@@ -8,12 +9,31 @@ export class SubscriptionPaymentValidator {
 
   public validateCreate: ValidationChain[] = [
     body('planType')
-      .notEmpty().withMessage('El planType es obligatorio')
+      .optional()
       .isIn(Object.values(PlanType)).withMessage('planType inválido'),
 
+    body('planId')
+      .optional()
+      .isInt().withMessage('planId debe ser un número entero')
+      .toInt()
+      .custom(async (planId) => {
+        const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+        if (!plan || !plan.isActive) {
+          throw new Error('planId inválido');
+        }
+        return true;
+      }),
+
+    body().custom((_, { req }) => {
+      if (!req.body.planId && !req.body.planType) {
+        throw new Error('Debe enviar planId o planType');
+      }
+      return true;
+    }),
     body('monthsPurchased')
       .notEmpty().withMessage('monthsPurchased es obligatorio')
-      .isInt({ min: 1, max: 12 }).withMessage('monthsPurchased debe estar entre 1 y 12')
+      .isInt().withMessage('monthsPurchased debe ser un entero')
+      .isIn([1, 3, 6, 12]).withMessage('monthsPurchased debe ser uno de: 1, 3, 6, 12')
       .toInt(),
 
     body('amount')

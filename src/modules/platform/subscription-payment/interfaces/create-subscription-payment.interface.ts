@@ -1,7 +1,9 @@
 import { Currency, PlanType } from '@prisma/client';
 
 export interface CreateSubscriptionPaymentInterface {
-  planType: PlanType;
+  // Compatibilidad: se acepta planType (legacy) o planId (nuevo catálogo)
+  planType?: PlanType;
+  planId?: number;
   monthsPurchased: number;
   amount: number;
   currency: Currency;

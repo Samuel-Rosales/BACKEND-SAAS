@@ -19,7 +19,27 @@ export class SubscriptionValidator {
         }),
 
         body('planType')
+        .optional()
         .isIn(Object.values(PlanType)).withMessage(`El tipo de plan debe ser uno de: ${Object.values(PlanType).join(', ')}`),
+
+        body('planId')
+        .optional()
+        .isInt().withMessage('planId debe ser un número entero')
+        .toInt()
+        .custom(async (planId) => {
+            const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+            if (!plan || !plan.isActive) {
+                throw new Error('planId inválido');
+            }
+            return true;
+        }),
+
+        body().custom((_, { req }) => {
+            if (!req.body.planId && !req.body.planType) {
+                throw new Error('Debe enviar planId o planType');
+            }
+            return true;
+        }),
 
         body('status')
         .isIn(Object.values(SubStatus)).withMessage(`El estado debe ser uno de: ${Object.values(SubStatus).join(', ')}`),
@@ -68,6 +88,18 @@ export class SubscriptionValidator {
         body('planType')
         .optional()
         .isIn(Object.values(PlanType)).withMessage(`El tipo de plan debe ser uno de: ${Object.values(PlanType).join(', ')}`),
+
+        body('planId')
+        .optional()
+        .isInt().withMessage('planId debe ser un número entero')
+        .toInt()
+        .custom(async (planId) => {
+            const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+            if (!plan || !plan.isActive) {
+                throw new Error('planId inválido');
+            }
+            return true;
+        }),
 
         body('status')
         .optional()

@@ -2,6 +2,33 @@ import { prisma } from '@/configs';
 import { PlanType, SubStatus } from '@prisma/client';
 
 export class BusinessAdminService {
+
+  private async ensurePlanByCode(code: string) {
+    const existing = await prisma.subscriptionPlan.findUnique({ where: { code } });
+    if (existing) return existing;
+
+    const created = await prisma.subscriptionPlan.create({
+      data: {
+        code,
+        name: code,
+        priceMonthly: 0 as any,
+        isActive: true,
+      },
+    });
+
+    const monthsOptions = [1, 3, 6, 12];
+    await prisma.subscriptionPlanPrice.createMany({
+      data: monthsOptions.map((months) => ({
+        planId: created.id,
+        months,
+        price: (Number(created.priceMonthly) * months) as any,
+        isActive: true,
+      })),
+      skipDuplicates: true,
+    });
+
+    return created;
+  }
   /**
    * GET /api/v1/admin/businesses
    */
@@ -39,6 +66,7 @@ export class BusinessAdminService {
             subscription: {
               select: {
                 id: true,
+                planId: true,
                 planType: true,
                 status: true,
                 startDate: true,
@@ -174,11 +202,28 @@ export class BusinessAdminService {
 
       const updatedSubscription = await prisma.subscription.update({
         where: { id: business.subscription.id },
-        data: {
-          planType: data.planType as any,
-          status: data.status,
-          endDate: data.endDate,
-        },
+        data: await (async () => {
+          if (!data.planType) {
+            return {
+              status: data.status,
+              endDate: data.endDate,
+            };
+          }
+
+          const upper = String(data.planType).toUpperCase();
+          const allowed = Object.values(PlanType);
+          if (!allowed.includes(upper as PlanType)) {
+            throw new Error('INVALID_PLAN_TYPE');
+          }
+
+          const plan = await this.ensurePlanByCode(upper);
+          return {
+            planType: upper as any,
+            planId: plan.id,
+            status: data.status,
+            endDate: data.endDate,
+          };
+        })(),
       });
 
       return {
@@ -187,6 +232,13 @@ export class BusinessAdminService {
         data: updatedSubscription,
       };
     } catch (error) {
+      if (error instanceof Error && error.message === 'INVALID_PLAN_TYPE') {
+        return {
+          message: 'Plan inválido',
+          status: 400,
+          data: null,
+        };
+      }
       console.error('BusinessAdminService.updateBusinessSubscription error:', error);
       return {
         message: 'Error al actualizar la suscripción',

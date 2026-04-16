@@ -1,8 +1,41 @@
 import { prisma } from '@/configs';
-import { SubStatus, SubscriptionPaymentStatus } from '@prisma/client';
+import { PlanType, SubStatus, SubscriptionPaymentStatus } from '@prisma/client';
 import { addMonths } from 'date-fns';
 
 export class SubscriptionPaymentAdminService {
+
+  private async ensurePlanByCode(tx: any, code: string) {
+    const existing = await tx.subscriptionPlan.findUnique({ where: { code } });
+    if (existing) return existing;
+
+    const created = await tx.subscriptionPlan.create({
+      data: {
+        code,
+        name: code,
+        priceMonthly: 0 as any,
+        isActive: true,
+      },
+    });
+
+    const monthsOptions = [1, 3, 6, 12];
+    await tx.subscriptionPlanPrice.createMany({
+      data: monthsOptions.map((months: number) => ({
+        planId: created.id,
+        months,
+        price: (Number(created.priceMonthly) * months) as any,
+        isActive: true,
+      })),
+      skipDuplicates: true,
+    });
+
+    return created;
+  }
+
+  private normalizePlanType(code: string): PlanType | null {
+    const upper = String(code).toUpperCase();
+    const allowed = Object.values(PlanType);
+    return allowed.includes(upper as PlanType) ? (upper as PlanType) : null;
+  }
 
     /**
    * (Admin) Listar pagos de suscripción con paginación
@@ -30,7 +63,8 @@ export class SubscriptionPaymentAdminService {
           orderBy: { createdAt: 'desc' },
           include: {
             business: { select: { id: true, name: true } },
-            subscription: { select: { id: true, planType: true, status: true, endDate: true } },
+            subscription: { select: { id: true, planId: true, planType: true, status: true, endDate: true } },
+            plan: true,
             createdBy: { select: { id: true, name: true, ci: true } },
             reviewedBy: { select: { id: true, name: true, ci: true } },
           },
@@ -100,6 +134,21 @@ export class SubscriptionPaymentAdminService {
           };
         }
 
+        const resolvedPlanId = await (async () => {
+          if (payment.planId) return payment.planId;
+          const plan = await this.ensurePlanByCode(tx, String(payment.planType));
+          return plan.id;
+        })();
+
+        const normalizedPlanType = this.normalizePlanType(String(payment.planType));
+        if (!normalizedPlanType) {
+          return {
+            message: 'Plan inválido',
+            status: 400,
+            data: null,
+          };
+        }
+
         const updatedPayment = await tx.subscriptionPayment.update({
           where: { id: paymentId },
           data: {
@@ -107,6 +156,8 @@ export class SubscriptionPaymentAdminService {
             reviewedAt: now,
             reviewedById: reviewerUserId,
             reviewNote: note ? String(note).slice(0, 500) : payment.reviewNote,
+            planId: resolvedPlanId,
+            planType: normalizedPlanType,
           },
         });
 
@@ -117,7 +168,8 @@ export class SubscriptionPaymentAdminService {
           const updatedSubscription = await tx.subscription.update({
             where: { id: payment.subscriptionId },
             data: {
-              planType: payment.planType,
+              planType: normalizedPlanType,
+              planId: resolvedPlanId,
               status: SubStatus.ACTIVE,
               endDate: newEndDate,
               lastPaymentRef: payment.reference,

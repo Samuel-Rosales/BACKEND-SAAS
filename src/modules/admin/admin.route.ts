@@ -3,6 +3,7 @@ import { AdminController } from './admin.controller';
 import { authMiddleware, requireSuperAdmin } from '@/middlewares';
 import { BusinessAdminRoute } from './platform/business/business.admin.route';
 import { SubscriptionPaymentAdminRoute } from './platform/subscription-payment/subscription-payment.admin.route';
+import { SubscriptionPlanAdminRoute } from './platform/subscription-plan/subscription-plan.admin.route';
 import { UserAdminRoute } from './aim/user/user.admin.route';
 import { PaymentMethodAdminRoute } from './finance/payment-method/payment-method.admin.route';
 import { TaxAdminRoute } from './finance/tax/tax.admin.route';
@@ -29,6 +30,9 @@ router.get('/stats', adminController.getStats.bind(adminController));
 
 // --- Subscription Payments (Super Admin) ---
 router.use('/subscription-payments', SubscriptionPaymentAdminRoute);
+
+// --- Subscription Plans (Super Admin) ---
+router.use('/subscription-plans', SubscriptionPlanAdminRoute);
 
 // --- Payment Methods (Super Admin) ---
 router.use('/payment-methods', PaymentMethodAdminRoute);

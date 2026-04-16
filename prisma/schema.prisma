@@ -135,10 +135,57 @@ model BusinessCategory {
   businesses Business[]
 }
 
+// ==========================================
+// PLANES DE SUSCRIPCIÓN (CATÁLOGO)
+// ==========================================
+
+model SubscriptionPlan {
+  id          Int     @id @default(autoincrement())
+  // Código estable para compatibilidad con el enum existente (TRIAL, BASIC, ...)
+  code        String  @unique
+  name        String
+  description String?
+
+  isActive Boolean @default(true)
+
+  // Metadatos de funcionalidades/límites. Se deja opcional para no forzar writes.
+  entitlements Json?
+
+  // Precio base mensual (1 moneda). Puede convivir con precios por duración.
+  priceMonthly Decimal @default(0) @db.Decimal(15, 2)
+
+  prices SubscriptionPlanPrice[]
+
+  subscriptions        Subscription[]
+  subscriptionPayments SubscriptionPayment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SubscriptionPlanPrice {
+  id     Int @id @default(autoincrement())
+  planId Int
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  // Duración en meses: 1, 3, 6, 12
+  months Int
+  price  Decimal @db.Decimal(15, 2)
+
+  isActive Boolean @default(true)
+
+  @@unique([planId, months])
+}
+
 model Subscription {
   id             Int       @id @default(autoincrement())
   businessId     Int       @unique // Relación 1 a 1 estricta
   planType       PlanType  @default(TRIAL) // Usamos Enum para evitar errores de texto
+
+  // Nuevo: relación a catálogo de planes. Se mantiene opcional por compatibilidad y migración gradual.
+  planId Int?
+  plan   SubscriptionPlan? @relation(fields: [planId], references: [id])
+
   status         SubStatus @default(ACTIVE)
   startDate      DateTime  @default(now())
   endDate        DateTime
@@ -164,6 +211,11 @@ model SubscriptionPayment {
   reviewNote     String?
 
   planType       PlanType
+
+  // Nuevo: relación a catálogo de planes. Se mantiene opcional por compatibilidad y migración gradual.
+  planId Int?
+  plan   SubscriptionPlan? @relation(fields: [planId], references: [id])
+
   monthsPurchased Int
 
   amount         Decimal  @db.Decimal(15, 2)

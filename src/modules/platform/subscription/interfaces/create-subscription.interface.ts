@@ -2,7 +2,9 @@ import { PlanType, SubStatus } from '@prisma/client';
 
 export interface CreateSubscriptionInterface {
   businessId: number;
-  planType: PlanType;
+  // Compatibilidad: se acepta planType (legacy) o planId (nuevo catálogo)
+  planType?: PlanType;
+  planId?: number;
   status: SubStatus;
   startDate: Date;
   endDate: Date;

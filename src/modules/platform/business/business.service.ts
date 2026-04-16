@@ -6,6 +6,33 @@ import { BusinessPermissionCode } from '@/data/aim/role-permissions.data';
 
 export class BusinessService {
 
+  private async ensurePlanByCode(tx: any, code: string) {
+    const existing = await tx.subscriptionPlan.findUnique({ where: { code } });
+    if (existing) return existing;
+
+    const created = await tx.subscriptionPlan.create({
+      data: {
+        code,
+        name: code,
+        priceMonthly: 0 as any,
+        isActive: true,
+      },
+    });
+
+    const monthsOptions = [1, 3, 6, 12];
+    await tx.subscriptionPlanPrice.createMany({
+      data: monthsOptions.map((months: number) => ({
+        planId: created.id,
+        months,
+        price: (Number(created.priceMonthly) * months) as any,
+        isActive: true,
+      })),
+      skipDuplicates: true,
+    });
+
+    return created;
+  }
+
   // 1. CREAR NEGOCIO + SUSCRIPCIÓN + MIEMBRO ADMIN
   async create(userId: number, data: CreateBusinessInterface) {
 
@@ -26,6 +53,7 @@ export class BusinessService {
         }
 
         // B. Crear el Negocio
+        const trialPlan = await this.ensurePlanByCode(tx, PlanType.TRIAL);
         const newBusiness = await tx.business.create({
           data: {
             name: data.name,
@@ -44,6 +72,7 @@ export class BusinessService {
             subscription: {
               create: {
                 planType: PlanType.TRIAL,
+                planId: trialPlan.id,
                 status: SubStatus.ACTIVE,
                 startDate: new Date(),
                 endDate: new Date(new Date().setDate(new Date().getDate() + 7)), // 7 días de prueba
