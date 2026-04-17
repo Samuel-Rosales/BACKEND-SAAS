@@ -5,7 +5,7 @@ import { stream, connectDB } from '../configs';
 
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } from '../modules/aim';
 
-import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPaymentRoute } from '../modules/platform';
+import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPaymentRoute, SubscriptionPlanRoute } from '../modules/platform';
 
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
 
@@ -48,6 +48,7 @@ export class Server {
             businessCategories: `${this.prefix}/platform/business-category`,
             subscriptions: `${this.prefix}/platform/subscription`,
             subscriptionPayments: `${this.prefix}/platform/subscription-payment`,
+            subscriptionPlans: `${this.prefix}/platform/subscription-plan`,
             businesses: `${this.prefix}/platform/business`,
 
             // MÓDULO INVENTORY
@@ -128,6 +129,7 @@ export class Server {
         this.app.use(this.paths.businessCategories, BusinessCategoryRoute);
         this.app.use(this.paths.subscriptions, SubscriptionRoute);
         this.app.use(this.paths.subscriptionPayments, SubscriptionPaymentRoute);
+        this.app.use(this.paths.subscriptionPlans, SubscriptionPlanRoute);
         this.app.use(this.paths.businesses, BusinessRoute);
         this.app.use(this.paths.categories, CategoryRoute);
         this.app.use(this.paths.depots, DepotRoute);

@@ -90,6 +90,44 @@ export class SubscriptionPlanService {
     }
   }
 
+  async findAllPublic() {
+    try {
+      const plans = await prisma.subscriptionPlan.findMany({
+        where: { isActive: true },
+        orderBy: [{ priceMonthly: 'asc' }, { code: 'asc' }],
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          description: true,
+          entitlements: true,
+          priceMonthly: true,
+          prices: {
+            where: { isActive: true },
+            orderBy: { months: 'asc' },
+            select: {
+              months: true,
+              price: true,
+            },
+          },
+        },
+      });
+
+      return {
+        message: 'Planes obtenidos exitosamente',
+        status: 200,
+        data: plans,
+      };
+    } catch (error) {
+      console.error('SubscriptionPlanService.findAllPublic error:', error);
+      return {
+        message: 'Error al obtener planes',
+        status: 500,
+        data: null,
+      };
+    }
+  }
+
   async findOneAdmin(id: number) {
     try {
       const plan = await prisma.subscriptionPlan.findUnique({
