@@ -40,11 +40,16 @@ export class StockMovementService {
                 // CASO A: ENTRADAS (IN, RETURN)
                 // =========================================================
                 if (data.type === 'ADJUSTMENT' && qtyInput.isPositive()) {
+
+                    const expirationDate = product.isPerishable
+                        ? data.expirationDate
+                        : new Date('2099-12-31');
                     
                     return await this.addStockLog(tx, businessId, {
                         ...data,
+                        expirationDate,
                         quantity: qtyAbs // Pasamos el Decimal positivo
-                    }, membershipId);
+                    }, membershipId, product.isPerishable);
 
                 }
                 // =========================================================
@@ -73,7 +78,7 @@ export class StockMovementService {
                         expirationDate: finalExpiration, 
                         unitCost: finalCost,
                         reason: `Transferencia desde ${depot.name}`
-                    }, membershipId);
+                    }, membershipId, product.isPerishable);
 
                     return inMove; 
                 }
@@ -260,11 +265,17 @@ export class StockMovementService {
         tx: Prisma.TransactionClient,
         businessId: number,
         data: CreateStockMovementInterface,
-        memberId: number
+        memberId: number,
+        requiresExpirationDate: boolean
     ) {
         // Validar datos obligatorios para lote
         if (!data.unitCost && data.type !== 'TRANSFER') throw new BusinessError("El costo unitario es obligatorio para entradas", 400);
-        if (!data.expirationDate) throw new BusinessError("La fecha de vencimiento es obligatoria para entradas", 400);
+
+        const expirationDate = data.expirationDate || new Date('2099-12-31');
+
+        if (requiresExpirationDate && !data.expirationDate) {
+            throw new BusinessError("La fecha de vencimiento es obligatoria para productos perecederos", 400);
+        }
 
         // Crear Lote
         const newLot = await tx.stockLot.create({
@@ -272,7 +283,7 @@ export class StockMovementService {
                 productId: data.productId,
                 depotId: data.depotId,
                 quantity: data.quantity,
-                expirationDate: data.expirationDate || new Date('2099-12-31'),
+                expirationDate,
                 lotCost: data.unitCost || 0
             }
         });
