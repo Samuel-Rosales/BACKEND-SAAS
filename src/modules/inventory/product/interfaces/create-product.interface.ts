@@ -25,6 +25,8 @@ export interface CreateProductInterface {
     profitMargin: number;
     salePrice: number;
     minStock?: number;
+    stockInitial?: number;
+    initialDepotId?: number;
 }
 
 export interface StockLotInterface {

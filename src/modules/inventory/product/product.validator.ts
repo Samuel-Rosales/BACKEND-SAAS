@@ -93,6 +93,35 @@ export class ProductValidator {
             .optional()
             .isInt({ min: 0 }).withMessage('El stock mínimo debe ser entero positivo')
             .toInt(),
+            
+        body('stockInitial')
+            .optional()
+            .isInt({ min: 0 }).withMessage('El stock inicial debe ser entero positivo')
+            .toInt()
+            .custom((stockInitial, { req }) => {
+                if (Number(stockInitial) > 0 && (!req.body.initialDepotId || Number(req.body.initialDepotId) <= 0)) {
+                    throw new Error('Si ingresas stock inicial, debes seleccionar un depósito inicial');
+                }
+                return true;
+            }),
+
+        body('initialDepotId')
+            .optional({ nullable: true })
+            .isInt({ min: 1 }).withMessage('El depósito inicial debe ser un ID válido')
+            .toInt()
+            .custom(async (initialDepotId, { req }) => {
+                if (!initialDepotId) return true;
+
+                const businessId = req.user?.businessId;
+                if (!businessId) return true;
+
+                const depot = await prisma.depot.findFirst({
+                    where: { id: initialDepotId, businessId, isActive: true }
+                });
+
+                if (!depot) throw new Error('El depósito inicial no existe o no pertenece a este negocio');
+                return true;
+            }),
 
         body('isPerishable')
             .optional()

@@ -87,15 +87,35 @@ export class ProductService {
 
     async create(businessId: number, userId: number, data: CreateProductInterface) {
         try {
+            const initialStock = Number(data.stockInitial || 0);
+            const hasInitialStock = initialStock > 0;
+
+            if (hasInitialStock && (!data.initialDepotId || data.initialDepotId <= 0)) {
+                return {
+                    message: 'Si ingresas stock inicial, debes seleccionar un depósito inicial',
+                    status: 400,
+                    data: null
+                };
+            }
+
             // =================================================================
             // FASE 1: VALIDACIONES BÁSICAS (Paralelizadas)
             // =================================================================
-            const [business, category, unit, tax, existingSku] = await Promise.all([
+            const [business, category, unit, tax, existingSku, initialDepot] = await Promise.all([
                 prisma.business.findUnique({ where: { id: businessId } }),
                 prisma.category.findFirst({ where: { id: data.categoryId, businessId } }),
                 prisma.measurementUnit.findUnique({ where: { id: data.unitId } }),
                 prisma.tax.findUnique({ where: { id: data.taxId } }),
-                data.sku ? prisma.product.findFirst({ where: { sku: data.sku, businessId } }) : null
+                data.sku ? prisma.product.findFirst({ where: { sku: data.sku, businessId } }) : null,
+                hasInitialStock
+                    ? prisma.depot.findFirst({
+                        where: {
+                            id: Number(data.initialDepotId),
+                            businessId,
+                            isActive: true
+                        }
+                    })
+                    : Promise.resolve(null)
             ]);
 
             if (!business) return { message: 'Negocio no encontrado', status: 404, data: null };
@@ -103,6 +123,9 @@ export class ProductService {
             if (!unit) return { message: 'Unidad inválida', status: 404, data: null };
             if (!tax) return { message: 'Impuesto inválido', status: 404, data: null };
             if (existingSku) return { message: `SKU "${data.sku}" ya existe`, status: 400, data: null };
+            if (hasInitialStock && !initialDepot) {
+                return { message: 'Depósito inicial inválido o no pertenece al negocio', status: 404, data: null };
+            }
 
             // Variable mutable para el costo final
             let finalCostPrice = data.costPrice;
@@ -157,52 +180,94 @@ export class ProductService {
             // =================================================================
             // FASE 2: CREACIÓN
             // =================================================================
-            const product = await prisma.product.create({
-                data: {
-                    businessId,
-                    updatedById: userId,
-                    name: data.name,
-                    sku: data.sku || null,
-                    description: data.description,
-                    imageUrl: data.imageUrl || null,
-                    imagePublicId: data.imagePublicId || null,
-                    categoryId: data.categoryId,
-                    unitId: data.unitId,
-                    taxId: data.taxId,
-                    type: data.type,
-                    isPerishable: data.isPerishable || false,
+            const productCreated = await prisma.$transaction(async (tx) => {
+                const product = await tx.product.create({
+                    data: {
+                        businessId,
+                        updatedById: userId,
+                        name: data.name,
+                        sku: data.sku || null,
+                        description: data.description,
+                        imageUrl: data.imageUrl || null,
+                        imagePublicId: data.imagePublicId || null,
+                        categoryId: data.categoryId,
+                        unitId: data.unitId,
+                        taxId: data.taxId,
+                        type: data.type,
+                        isPerishable: data.isPerishable || false,
 
-                    // USAMOS EL COSTO CALCULADO O EL MANUAL
-                    costPrice: finalCostPrice,
+                        // USAMOS EL COSTO CALCULADO O EL MANUAL
+                        costPrice: finalCostPrice,
 
-                    profitMargin: data.profitMargin,
-                    salePrice: data.salePrice,
-                    minStock: data.minStock || 0,
+                        profitMargin: data.profitMargin,
+                        salePrice: data.salePrice,
+                        minStock: data.minStock || 0,
 
-                    // Creación de relaciones
-                    components: data.type === ProductType.COMPOSITE && data.components
-                        ? {
-                            create: data.components.map(comp => ({
-                                childProductId: comp.childProductId,
-                                quantity: comp.quantity
-                            }))
-                        }
-                        : undefined
-                },
-                include: {
-                    unit: { select: { symbol: true } },
-                    components: {
-                        include: {
-                            child: { select: { id: true, name: true } }
+                        // Creación de relaciones
+                        components: data.type === ProductType.COMPOSITE && data.components
+                            ? {
+                                create: data.components.map(comp => ({
+                                    childProductId: comp.childProductId,
+                                    quantity: comp.quantity
+                                }))
+                            }
+                            : undefined
+                    },
+                    include: {
+                        unit: { select: { symbol: true } },
+                        components: {
+                            include: {
+                                child: { select: { id: true, name: true } }
+                            }
                         }
                     }
+                });
+
+                if (hasInitialStock) {
+                    const stockLot = await tx.stockLot.create({
+                        data: {
+                            productId: product.id,
+                            depotId: Number(data.initialDepotId),
+                            quantity: initialStock,
+                            expirationDate: new Date('2099-12-31'),
+                            lotCost: finalCostPrice
+                        }
+                    });
+
+                    await tx.stockLot.create({
+                        data: {
+                            productId: product.id,
+                            depotId: Number(data.initialDepotId),
+                            quantity: initialStock,
+                            expirationDate: new Date('2099-12-31'),
+                            lotCost: finalCostPrice
+                        }
+                    });
+
+                    await tx.stockMovement.create({
+                        data: {
+                            businessId,
+                            depotId: Number(data.initialDepotId),
+                            productId: product.id,
+                            quantity: initialStock,
+                            type: 'IN',
+                            reason: 'Stock inicial al crear producto',
+                            memberId: userId,
+                            historicalCost: finalCostPrice,
+                            stockLotId: stockLot.id
+                        }
+                    });
+
                 }
+
+                return product;
+
             });
 
             return {
                 message: 'Producto creado exitosamente',
                 status: 201,
-                data: product
+                data: productCreated
             };
 
         } catch (error) {
