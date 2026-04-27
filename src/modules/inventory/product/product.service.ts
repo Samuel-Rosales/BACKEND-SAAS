@@ -234,16 +234,6 @@ export class ProductService {
                         }
                     });
 
-                    await tx.stockLot.create({
-                        data: {
-                            productId: product.id,
-                            depotId: Number(data.initialDepotId),
-                            quantity: initialStock,
-                            expirationDate: new Date('2099-12-31'),
-                            lotCost: finalCostPrice
-                        }
-                    });
-
                     await tx.stockMovement.create({
                         data: {
                             businessId,
