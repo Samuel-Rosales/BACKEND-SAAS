@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { MemberService } from './member.service';
+import { MemberService } from '@/modules/aim/business-member/member.service';
 
 export class MemberController {
     private service = new MemberService();
