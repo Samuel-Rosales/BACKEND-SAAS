@@ -34,6 +34,9 @@ export class ClientService {
     try {
       const search = query?.search ? String(query.search).trim() : undefined;
       const isActiveParam = query?.isActive ? String(query.isActive).toLowerCase() : undefined;
+      const page = Number(query?.page) || 1;
+      const limit = Number(query?.limit) || 20;
+      const skip = (page - 1) * limit;
 
       const whereClause: any = { businessId };
 
@@ -54,23 +57,40 @@ export class ClientService {
       }
       
 
-      const clients = await prisma.client.findMany({
+      const [clients, total] = await Promise.all([
+        prisma.client.findMany({
         where: whereClause,
-        orderBy: { name: 'asc' }
-      });
+        orderBy: { name: 'asc' },
+        skip,
+        take: limit
+        }),
+        prisma.client.count({ where: whereClause })
+      ]);
 
       if (clients.length === 0) {
         return {
           status: 200,
           message: 'No hay clientes registrados aún',
-          data: []
+          data: [],
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+          }
         };
       }
 
       return {
         status: 200,
         message: 'Clientes obtenidos exitosamente',
-        data: clients
+        data: clients,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
       };
 
     } catch (error) {

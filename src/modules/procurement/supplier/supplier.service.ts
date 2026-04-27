@@ -30,9 +30,12 @@ export class SupplierService {
   }
 
   // 2. LISTAR (Tenant Scoped + Search + Status)
-  async findAll(businessId: number, query?: { search?: string, status?: string }) {
+  async findAll(businessId: number, query?: { page?: number, limit?: number, search?: string, status?: string }) {
     try {
       const search = query?.search ? String(query.search).trim() : undefined;
+      const page = Number(query?.page) || 1;
+      const limit = Number(query?.limit) || 20;
+      const skip = (page - 1) * limit;
 
       const whereClause: any = { businessId };
 
@@ -46,23 +49,40 @@ export class SupplierService {
         ];
       }
 
-      const suppliers = await prisma.supplier.findMany({
+      const [suppliers, total] = await Promise.all([
+        prisma.supplier.findMany({
         where:{...whereClause, isActive: true },
-        orderBy: { nameCompany: 'asc' }
-      });
+        orderBy: { nameCompany: 'asc' },
+        skip,
+        take: limit
+        }),
+        prisma.supplier.count({ where: { ...whereClause, isActive: true } })
+      ]);
 
       if (suppliers.length === 0) {
         return {
           status: 200,
           message: 'No hay proveedores registrados aún',
-          data: []
+          data: [],
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+          }
         };
       }
 
       return {
         status: 200,
         message: 'Proveedores obtenidos exitosamente',
-        data: suppliers
+        data: suppliers,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
       };
 
     } catch (error) {

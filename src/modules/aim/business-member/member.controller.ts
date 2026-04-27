@@ -33,11 +33,17 @@ export class MemberController {
             });
         }
 
-        const { status, message, data } = await this.service.findAll(businessId);
+        const query = {
+            page: req.query.page ? Number(req.query.page) : undefined,
+            limit: req.query.limit ? Number(req.query.limit) : undefined
+        };
+
+        const { status, message, data, pagination } = await this.service.findAll(businessId, query);
         
         return res.status(status).json({
             data,
-            message
+            message,
+            pagination
         });
     };
 

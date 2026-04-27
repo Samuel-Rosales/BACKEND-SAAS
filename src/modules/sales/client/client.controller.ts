@@ -35,11 +35,12 @@ export class ClientController {
             isActive: req.query.isActive ? String(req.query.isActive) : undefined
         };
 
-        const { status, data, message } = await this.service.findAll(businessId, query);
+        const { status, data, message, pagination } = await this.service.findAll(businessId, query);
 
         res.status(status).json({
             message,
-            data
+            data,
+            pagination
         });
     };
 

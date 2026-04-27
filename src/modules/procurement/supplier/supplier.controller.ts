@@ -29,15 +29,18 @@ export class SupplierController {
         }
 
         const query = {
+            page: req.query.page ? Number(req.query.page) : undefined,
+            limit: req.query.limit ? Number(req.query.limit) : undefined,
             search: req.query.search ? String(req.query.search) : undefined,
             status: req.query.status ? String(req.query.status) : undefined
         };
 
-        const { status, data, message } = await this.service.findAll(businessId, query);
+        const { status, data, message, pagination } = await this.service.findAll(businessId, query);
 
         res.status(status).json({
             message,
-            data
+            data,
+            pagination
         });
     };
 
