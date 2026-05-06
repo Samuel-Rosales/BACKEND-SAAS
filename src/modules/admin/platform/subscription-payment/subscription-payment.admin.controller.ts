@@ -35,7 +35,7 @@ export class SubscriptionPaymentAdminController {
    */
   async review(req: Request, res: Response) {
     try {
-      const id = parseInt(req.params.id);
+       const id = parseInt(req.params.id as string);
       const { status, note } = req.body;
 
       const valid = ['APPROVED', 'REJECTED'];

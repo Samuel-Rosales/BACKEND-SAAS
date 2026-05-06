@@ -78,7 +78,7 @@ findAll = async (req: Request, res: Response) => {
             });
         }
 
-        const {status, data, message} = await this.service.findOne(businessId, +id);
+        const {status, data, message} = await this.service.findOne(businessId, Number(id as string));
 
         res.status(status).json({ 
             message, 
@@ -135,7 +135,7 @@ findAll = async (req: Request, res: Response) => {
             });
         }
 
-        const {status, data, message} = await this.service.findByType(businessId, type);
+        const {status, data, message} = await this.service.findByType(businessId, type as string);
 
         res.status(status).json({ 
             message, 

@@ -36,8 +36,8 @@ export class BusinessAdminController {
   async toggleStatus(req: Request, res: Response) {
     try {
 
-      const businessId = parseInt(req.params.id);
-      const { status } = req.body;
+       const businessId = parseInt(req.params.id as string);
+       const { status } = req.body;
 
       const validStatuses = ['ACTIVE', 'INACTIVE', 'PAST_DUE', 'CANCELLED'];
 
@@ -68,8 +68,8 @@ export class BusinessAdminController {
    */
   async updateSubscription(req: Request, res: Response) {
     try {
-      const businessId = parseInt(req.params.id);
-      const { planType, status, endDate } = req.body;
+       const businessId = parseInt(req.params.id as string);
+       const { planType, status, endDate } = req.body;
 
       if (status) {
         const validStatuses = ['ACTIVE', 'INACTIVE', 'PAST_DUE', 'CANCELLED'];
