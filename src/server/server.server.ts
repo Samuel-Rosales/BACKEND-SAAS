@@ -18,6 +18,7 @@ import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
 import { DashboardRoute } from '@/modules/report/analytics/routes/dashboard.routes';
 import { SalesReportRoute } from '@/modules/report/analytics/routes/salesReport.route';
 import { PurchaseReportRoute } from '@/modules/report/analytics/routes/purchase-report.route';
+import { InventoryReportRoute } from '@/modules/report/analytics/routes/inventory-report.route';
 
 import { AdminRoute } from '@/modules/admin';
 import { initCronJobs } from '@/cron';
@@ -82,6 +83,7 @@ export class Server {
             dashboardReports: `${this.prefix}/report/dashboard`,
             salesReports: `${this.prefix}/report/sales`,
             purchaseReports: `${this.prefix}/report/purchases`,
+            inventoryReports: `${this.prefix}/report/inventory`,
 
             // MÓDULO ADMIN
             admin: `${this.prefix}/admin`,
@@ -153,6 +155,7 @@ export class Server {
         this.app.use(this.paths.dashboardReports, DashboardRoute);
         this.app.use(this.paths.salesReports, SalesReportRoute);
         this.app.use(this.paths.purchaseReports, PurchaseReportRoute);
+        this.app.use(this.paths.inventoryReports, InventoryReportRoute);
         this.app.use(this.paths.admin, AdminRoute);
 
         this.app.use((req, res) => {

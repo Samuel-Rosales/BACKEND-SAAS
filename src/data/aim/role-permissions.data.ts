@@ -48,6 +48,7 @@ export type BusinessPermissionCode =
   | "REPORTS_SALES_VIEW"
   | "REPORTS_PURCHASES_VIEW"
   | "REPORTS_FINANCE_VIEW"
+  | "REPORTS_INVENTORY_VIEW"
 
   // Coarse permissions kept for backward compatibility in existing services.
   | "INVENTORY_READ"
@@ -95,11 +96,11 @@ const ALL_PERMISSIONS: BusinessPermissionCode[] = [
   "CREDITS_PURCHASES_PAY",
   "CREDIT_NOTES_CREATE",
 
-  "REPORTS_SALES_VIEW",
-  "REPORTS_PURCHASES_VIEW",
-  "REPORTS_FINANCE_VIEW",
-
-  "INVENTORY_READ",
+"REPORTS_SALES_VIEW",
+    "REPORTS_PURCHASES_VIEW",
+    "REPORTS_FINANCE_VIEW",
+    "REPORTS_INVENTORY_VIEW",
+    "INVENTORY_READ",
   "INVENTORY_WRITE",
   "SALES_READ",
   "SALES_WRITE",
