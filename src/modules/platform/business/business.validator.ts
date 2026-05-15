@@ -6,7 +6,7 @@ export class BusinessValidator {
   
   // --- VALIDACIÓN DE ID (Reutilizable) ---
   public validateId: ValidationChain[] = [
-    param('id').isInt().toInt().withMessage('ID inválido')
+    param('id').isString().withMessage('ID inválido, debe ser un string hash')
   ];
 
   // --- CREAR NEGOCIO ---
@@ -39,7 +39,7 @@ export class BusinessValidator {
 
   // --- A. ACTUALIZAR GENERAL (Solo campos cosméticos) ---
   public validateUpdateGeneral: ValidationChain[] = [
-    param('id').isInt().toInt().withMessage('ID inválido'),
+    param('id').isString().withMessage('ID inválido, debe ser un string hash'),
     
     body('name')
       .optional()
@@ -71,7 +71,7 @@ export class BusinessValidator {
 
   // --- B. ACTUALIZAR POLÍTICAS (Reglas de Negocio) ---
   public validateUpdatePolicies: ValidationChain[] = [
-    param('id').isInt().toInt(),
+    param('id').isString(),
 
     body('enableGlobalCredit')
       .optional()
@@ -85,7 +85,7 @@ export class BusinessValidator {
 
   // --- C. ACTUALIZAR TASAS ---
   public validateUpdateExchangeRateConfig: ValidationChain[] = [
-    param('id').isInt().toInt(),
+    param('id').isString(),
 
     body('strategy')
       .notEmpty().withMessage('La estrategia es obligatoria')

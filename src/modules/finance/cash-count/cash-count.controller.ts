@@ -5,7 +5,7 @@ export class CashCountController {
     private service = new CashCountService();
 
     create = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -24,7 +24,7 @@ export class CashCountController {
 
     findByCashRegister = async (req: Request, res: Response) => {
         const { cashRegisterId } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -43,7 +43,7 @@ export class CashCountController {
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -62,7 +62,7 @@ export class CashCountController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -81,7 +81,7 @@ export class CashCountController {
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({

@@ -5,7 +5,7 @@ export class PurchaseItemController {
     private service = new PurchaseItemService();
 
     create = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -23,7 +23,7 @@ export class PurchaseItemController {
     };
 
     findAll = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -44,7 +44,7 @@ export class PurchaseItemController {
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -63,7 +63,7 @@ export class PurchaseItemController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -82,7 +82,7 @@ export class PurchaseItemController {
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({

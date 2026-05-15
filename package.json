@@ -5,15 +5,15 @@
   "main": "app.js",
   "scripts": {
     "dev": "nodemon --exec ts-node -r tsconfig-paths/register src/app.ts",
-    "build": "npx prisma generate && tsc && tsc-alias",
-    "start": "npx prisma migrate deploy && node dist/app.js",
+    "build": "pnpx prisma generate && tsc && tsc-alias",
+    "start": "pnpx prisma migrate deploy && node dist/app.js",
     "prisma:generate": "prisma generate",
-    "prisma:format": "npx prisma format",
-    "prisma:push": "npx prisma db push",
-    "prisma:studio": "npx prisma studio",
-    "prisma:seed": "npx prisma db seed",
-    "prisma:migrate": "npx prisma migrate",
-    "db:reset": "prisma migrate reset"
+    "prisma:format": "pnpx prisma format",
+    "prisma:push": "pnpx prisma db push",
+    "prisma:studio": "pnpx prisma studio",
+    "prisma:seed": "pnpx prisma db seed",
+    "prisma:migrate": "pnpx prisma migrate dev",
+    "db:reset": "pnpx prisma migrate reset"
   },
   "repository": {
     "type": "git",
@@ -39,6 +39,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-validator": "^7.3.1",
+    "hashids": "^2.3.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.1",
@@ -66,5 +67,12 @@
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "prisma",
+      "puppeteer"
+    ]
   }
 }

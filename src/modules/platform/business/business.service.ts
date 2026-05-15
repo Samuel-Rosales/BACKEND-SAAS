@@ -3,6 +3,7 @@ import { CreateBusinessInterface, UpdateBusinessInterface, UpdateExchangeConfigI
 import { PlanType, SubStatus, ExchangeRateStrategy } from '@prisma/client'; // Importamos Enums de Prisma
 import { BusinessError, resolveBusinessExchangeRate, canAccessBusinessPermission, getRolePermissions } from '@/utils';
 import { BusinessPermissionCode } from '@/data/aim/role-permissions.data';
+import { HashId } from '@/utils/hash-id';
 
 export class BusinessService {
 
@@ -149,9 +150,13 @@ export class BusinessService {
 
       const formattedBusinesses = businesses.map(business => {
         const memberRole = business.members[0]?.role?.name || 'Miembro';
+        const hashId = new HashId();
+        const hashedId = hashId.encode(business.id);
+        console.log(`Negocio ID: ${business.id} => Hashed ID: ${hashedId}`);
         return {
           ...business,
-          memberRole: memberRole
+          memberRole: memberRole,
+          id: hashedId
         };
       });
 

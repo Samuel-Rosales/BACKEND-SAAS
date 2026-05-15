@@ -29,12 +29,12 @@ export class StockMovementController {
             data 
         });
     };
-findAll = async (req: Request, res: Response) => {
+    findAll = async (req: Request, res: Response) => {
         
         // 1. SEGURIDAD: En GET, confiamos exclusivamente en el Token (req.user)
-        const businessId = Number(req.user?.businessId);
+        const businessId = req.user?.businessId;
 
-        if (!businessId || isNaN(businessId)) {
+        if (!businessId) {
             return res.status(401).json({
                 message: 'No autorizado: ID de negocio no identificado',
                 data: null
@@ -69,7 +69,7 @@ findAll = async (req: Request, res: Response) => {
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -88,7 +88,7 @@ findAll = async (req: Request, res: Response) => {
 
     findByProduct = async (req: Request, res: Response) => {
         const { productId } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -107,7 +107,7 @@ findAll = async (req: Request, res: Response) => {
 
     findByDepot = async (req: Request, res: Response) => {
         const { depotId } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -126,7 +126,7 @@ findAll = async (req: Request, res: Response) => {
 
     findByType = async (req: Request, res: Response) => {
         const { type } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -145,7 +145,7 @@ findAll = async (req: Request, res: Response) => {
 
     /*update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -164,7 +164,7 @@ findAll = async (req: Request, res: Response) => {
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({

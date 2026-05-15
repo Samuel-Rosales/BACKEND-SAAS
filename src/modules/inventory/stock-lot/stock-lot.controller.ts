@@ -5,7 +5,7 @@ export class StockLotController {
     private service = new StockLotService();
 
     create = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -23,7 +23,7 @@ export class StockLotController {
     };
 
     findAll = async (req: Request, res: Response) => {
-        const businessId = Number(req.user?.businessId);
+        const businessId = req.user?.businessId;
 
         // Mapeamos los Query Params del Frontend
         const query = {
@@ -39,7 +39,7 @@ export class StockLotController {
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -58,7 +58,7 @@ export class StockLotController {
 
     findByProduct = async (req: Request, res: Response) => {
         const { productId } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -77,7 +77,7 @@ export class StockLotController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -96,7 +96,7 @@ export class StockLotController {
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({

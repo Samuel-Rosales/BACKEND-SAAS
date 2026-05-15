@@ -5,8 +5,7 @@ export class DepotController {
     private service = new DepotService();
 
     create = async (req: Request, res: Response) => {
-        // businessId viene del header x-business-id (inyectado por authMiddleware)
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -24,7 +23,7 @@ export class DepotController {
     };
 
     findAll = async (req: Request, res: Response) => {
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -43,7 +42,7 @@ export class DepotController {
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -62,7 +61,7 @@ export class DepotController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -81,7 +80,7 @@ export class DepotController {
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({

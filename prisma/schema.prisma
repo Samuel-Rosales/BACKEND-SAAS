@@ -304,7 +304,8 @@ model Category {
   id         Int     @id @default(autoincrement())
   businessId Int
   name       String
-  isActive   Boolean @default(true)
+  description String? @default("")
+  isActive   Boolean  @default(true)
   //parentId   Int?     // Recomendado: Para subcategorías (Electrónica -> Celulares)
 
   business Business @relation(fields: [businessId], references: [id])

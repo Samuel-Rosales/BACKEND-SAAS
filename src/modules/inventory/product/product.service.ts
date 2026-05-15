@@ -655,6 +655,7 @@ export class ProductService {
     // 4. ACTUALIZAR
     async update(businessId: number, userId: number, id: number, data: UpdateProductInterface) {
         try {
+            console.log('Iniciando actualización de producto:', { businessId, userId, id, data });
             // 1. Verificar existencia
             const existingProduct = await prisma.product.findFirst({ where: { id, businessId } });
             if (!existingProduct) return { message: 'Producto no encontrado', status: 404, data: null };
@@ -782,6 +783,7 @@ export class ProductService {
                 where: { id },
                 data: {
                     ...rest,
+                    businessId,
                     updatedById: userId,
 
                     // Valores Financieros Calculados

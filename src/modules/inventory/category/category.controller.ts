@@ -5,8 +5,7 @@ export class CategoryController {
     private service = new CategoryService();
 
     create = async (req: Request, res: Response) => {
-        // businessId viene del header x-business-id (inyectado por authMiddleware)
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({
@@ -81,7 +80,7 @@ export class CategoryController {
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId || req.body.businessId;
+        const businessId = req.user?.businessId;
 
         if (!businessId) {
             return res.status(400).json({

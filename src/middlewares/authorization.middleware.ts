@@ -1,6 +1,7 @@
 import { prisma } from "@/configs";
 import { BusinessPermissionCode } from "@/data/aim/role-permissions.data";
 import { canAccessBusinessPermission } from "@/utils";
+import { HashId } from "@/utils/hash-id";
 import { NextFunction, Request, Response } from "express";
 
 const resolveBusinessId = (req: Request): number | null => {
@@ -9,9 +10,12 @@ const resolveBusinessId = (req: Request): number | null => {
   }
 
   const headerValue = req.headers["x-business-id"];
+  console.log(`Valor del header x-business-id en resolveBusinessId: ${headerValue}`);
   if (!headerValue) return null;
 
-  const businessId = Number(headerValue);
+  const hashId = new HashId();
+  const decoded = hashId.decode(String(headerValue));
+  const businessId = Number(decoded);
   return Number.isNaN(businessId) ? null : businessId;
 };
 
@@ -23,6 +27,8 @@ export const requireBusinessPermission = (permission: BusinessPermissionCode) =>
       }
 
       const businessId = resolveBusinessId(req);
+      console.log(`Resolved business ID: ${businessId}`);
+
       if (!businessId) {
         return res.status(400).json({ message: "Debes seleccionar una empresa (x-business-id)." });
       }

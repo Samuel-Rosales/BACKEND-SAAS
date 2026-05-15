@@ -192,7 +192,7 @@ export class ProductController {
     // 4. ACTUALIZAR
     async update(req: Request, res: Response) {
         try {
-            const { businessId, id: userId } = (req as any).user;
+            const { businessId, id: userId } = req.user;
             const id = Number(req.params.id);
 
             if (!businessId) {
