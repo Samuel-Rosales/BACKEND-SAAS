@@ -17,8 +17,8 @@
   "main": "app.js",
   "scripts": {
     "dev": "nodemon --exec ts-node -r tsconfig-paths/register src/app.ts",
-    "build": "pnpx prisma generate && tsc && tsc-alias",
-    "start": "pnpx prisma migrate deploy && node dist/app.js",
+    "build": "pnpm prisma generate && tsc && tsc-alias",
+    "start": "pnpm prisma migrate deploy && node dist/app.js",
     "prisma:generate": "prisma generate",
     "prisma:format": "pnpx prisma format",
     "prisma:push": "pnpx prisma db push",
