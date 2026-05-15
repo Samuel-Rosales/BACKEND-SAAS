@@ -1,6 +1,11 @@
 {
   "name": "backend-saas",
   "version": "1.0.2",
+  "packageManager": "pnpm@11.0.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=11.0.0"
+  },
   "description": "",
   "main": "app.js",
   "scripts": {
