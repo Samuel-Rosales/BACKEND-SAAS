@@ -27,7 +27,6 @@ export const requireBusinessPermission = (permission: BusinessPermissionCode) =>
       }
 
       const businessId = resolveBusinessId(req);
-      console.log(`Resolved business ID: ${businessId}`);
 
       if (!businessId) {
         return res.status(400).json({ message: "Debes seleccionar una empresa (x-business-id)." });

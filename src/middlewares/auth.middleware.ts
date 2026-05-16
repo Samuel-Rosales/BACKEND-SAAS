@@ -31,12 +31,10 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     req.user = user;
 
     const businessIdHeader = req.headers['x-business-id'];
-    console.log(`Valor del header x-business-id: ${businessIdHeader}`);
     
     if (businessIdHeader && typeof businessIdHeader === 'string') {
       const hashId = new HashId();
       const businessId = Number(hashId.decode(businessIdHeader));
-      console.log(`Decoded business ID from header: ${businessId}`);
 
       // Validamos que sea un número válido
       if (isNaN(businessId)) {
