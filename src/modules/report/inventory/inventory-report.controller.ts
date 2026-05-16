@@ -1,5 +1,5 @@
-import { InventoryReportService } from '../services/inventory-report.service';
 import { Request, Response } from 'express';
+import { InventoryReportService } from './inventory-report.service';
 
 const inventoryService = new InventoryReportService();
 

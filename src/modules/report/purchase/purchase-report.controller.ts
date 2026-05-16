@@ -1,4 +1,4 @@
-import { PurchaseStatsService } from '../services/purchase-stats.service';
+import { PurchaseStatsService } from './purchase-stats.service';
 import { Request, Response } from 'express';
 
 const purchaseStats = new PurchaseStatsService();

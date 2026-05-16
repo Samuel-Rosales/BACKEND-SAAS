@@ -1,8 +1,8 @@
 // import { SalesStatsService } ... etc
-import { InventoryStatsService } from '../services/inventory-stats.service';
-import { SalesStatsService } from '../services/sales-stats.service';
-import { ClientStatsService } from '../services/client-stats.service';
-import { CreditStatsService } from '../services/credit-stats.service';
+import { InventoryStatsService } from '../inventory/inventory-stats.service';
+import { SalesStatsService } from '../sales/sales-stats.service';
+import { ClientStatsService } from '../client/client-stats.service';
+import { CreditStatsService } from '../sales/credit-stats.service';
 import { Request, Response } from 'express';
 
 

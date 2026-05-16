@@ -215,9 +215,6 @@ export class InventoryReportService {
                     `
                 ]);
 
-                console.log('=== DEBUG getByCost ===');
-                console.log('globalTotals raw:', globalTotals);
-
             } catch (queryError) {
                 console.error('Error en queries de getByCost:', queryError);
                 globalTotals = { total_cost: '0', total_sale: '0', products_below_min: 0, total_stock: '0' };
@@ -243,9 +240,6 @@ export class InventoryReportService {
 
             const totalStockCost = parseFloat(String(globalTotals.total_cost || 0));
             const totalStockSale = parseFloat(String(globalTotals.total_sale || 0));
-
-            console.log('=== DEBUG getByCost final ===');
-            console.log('totalStockCost:', totalStockCost, 'totalStockSale:', totalStockSale);
 
             return {
                 status: 200,
@@ -367,10 +361,7 @@ export class InventoryReportService {
                         AND sl.quantity > 0
                     `
                 ]);
-
-                console.log('=== DEBUG getBySale ===');
-                console.log('globalTotals raw:', globalTotals);
-
+                
             } catch (queryError) {
                 console.error('Error en queries de getBySale:', queryError);
                 globalTotals = { total_cost: '0', total_sale: '0', products_below_min: 0, total_stock: '0' };
@@ -400,9 +391,6 @@ export class InventoryReportService {
 
             const totalStockCost = parseFloat(String(globalTotals.total_cost || 0));
             const totalStockSale = parseFloat(String(globalTotals.total_sale || 0));
-
-            console.log('=== DEBUG getBySale final ===');
-            console.log('totalStockCost:', totalStockCost, 'totalStockSale:', totalStockSale);
 
             return {
                 status: 200,

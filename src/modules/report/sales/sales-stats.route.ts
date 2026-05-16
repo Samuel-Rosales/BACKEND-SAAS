@@ -1,20 +1,20 @@
 import { Router } from 'express';
-import { PurchaseReportController } from '../controllers/purchase-report.controller';
+import { SalesReportController } from './sales-stats.controller';
 import { authMiddleware } from '@/middlewares/auth.middleware'; // Ajusta la ruta a tu proyecto
 import { requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
-const controller = new PurchaseReportController();
+const controller = new SalesReportController();
 
 // Aplicar autenticación a todas las rutas
 router.use(authMiddleware);
 
-// GET /api/report/purchases/overview
+// GET /api/report/sales/overview
 // Protegemos la ruta para asegurarnos de tener el usuario y el businessId
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_PURCHASES_VIEW'),
-    controller.PurchaseMetrics
+    requireBusinessPermission('REPORTS_SALES_VIEW'),
+    controller.SalesMetrics
 );
 
-export const PurchaseReportRoute = router;
+export const SalesReportRoute = router;

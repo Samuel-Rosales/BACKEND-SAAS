@@ -1,4 +1,4 @@
-import { SalesStatsService } from '../services/sales-stats.service';
+import { SalesStatsService } from './sales-stats.service';
 import { Request, Response } from 'express';
 
 const salesStats = new SalesStatsService();

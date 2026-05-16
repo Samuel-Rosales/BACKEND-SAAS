@@ -15,10 +15,10 @@ import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute }
 
 import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
 
-import { DashboardRoute } from '@/modules/report/analytics/routes/dashboard.routes';
-import { SalesReportRoute } from '@/modules/report/analytics/routes/salesReport.route';
-import { PurchaseReportRoute } from '@/modules/report/analytics/routes/purchase-report.route';
-import { InventoryReportRoute } from '@/modules/report/analytics/routes/inventory-report.route';
+import { DashboardRoute } from '@/modules/report/dashboard/dashboard.routes';
+import { SalesReportRoute } from '@/modules/report/sales/sales-stats.route';
+import { PurchaseReportRoute } from '@/modules/report/purchase/purchase-report.route';
+import { InventoryReportRoute } from '@/modules/report/inventory//inventory-report.route';
 
 import { AdminRoute } from '@/modules/admin';
 import { initCronJobs } from '@/cron';

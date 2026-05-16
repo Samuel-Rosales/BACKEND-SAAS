@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { InventoryReportController } from '../controllers/inventory-report.controller';
+import { InventoryReportController } from './inventory-report.controller';
 import { authMiddleware } from '@/middlewares/auth.middleware';
 import { requireBusinessPermission } from '@/middlewares';
 
