@@ -152,7 +152,7 @@ export class BusinessService {
         const memberRole = business.members[0]?.role?.name || 'Miembro';
         const hashId = new HashId();
         const hashedId = hashId.encode(business.id);
-        console.log(`Negocio ID: ${business.id} => Hashed ID: ${hashedId}`);
+        // console.log(`Negocio ID: ${business.id} => Hashed ID: ${hashedId}`);
         return {
           ...business,
           memberRole: memberRole,

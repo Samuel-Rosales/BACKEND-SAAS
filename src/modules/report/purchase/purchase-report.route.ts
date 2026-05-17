@@ -17,4 +17,10 @@ router.get(
     controller.PurchaseMetrics
 );
 
+router.get(
+    '/grouped-report',
+    requireBusinessPermission('REPORTS_PURCHASES_VIEW'),
+    controller.generateGroupedReportPDF
+);
+
 export const PurchaseReportRoute = router;

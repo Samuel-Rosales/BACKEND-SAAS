@@ -552,7 +552,7 @@ export class InventoryReportService {
                 };
             }
 
-            const products = await prisma.product.findMany({    
+            const products = await prisma.product.findMany({
                 where: {
                     businessId,
                     type: ProductType.SIMPLE,
@@ -562,6 +562,7 @@ export class InventoryReportService {
                     id: true,
                     name: true,
                     sku: true,
+                    minStock: true,
                     stockLots: {
                         select: {
                             quantity: true
@@ -576,7 +577,8 @@ export class InventoryReportService {
                     id: product.id,
                     name: product.name,
                     sku: product.sku,
-                    stock
+                    stock,
+                    minStock: product.minStock
                 };
             });
 
@@ -599,5 +601,45 @@ export class InventoryReportService {
                 message: 'Error interno generando PDF de control de stock'
             };
         }
+    }
+
+    /** 
+     * GET /products-by-category - Lista de productos agrupados por categoría (para PDF o exportación)
+     */
+    async getProductsByCategory(businessId: number) {
+        try {
+            const categories = await prisma.category.findMany({
+                where: { businessId, isActive: true },
+                include: {
+                    products: {
+                        where: { isActive: true },
+                        select: {
+                            id: true,
+                            name: true,
+                            sku: true,
+                            stockLots: {
+                                select: {
+                                    quantity: true
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            return {
+                status: 200,
+                message: 'Productos agrupados por categoría obtenidos',
+                data: categories
+            };
+
+        } catch (error) {
+            console.error('Error obteniendo productos por categoría:', error);
+            return {
+                status: 500,
+                message: 'Error interno obteniendo productos por categoría'
+            };
+        }
+
     }
 }
