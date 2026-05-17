@@ -48,7 +48,7 @@ const TableCell = ({ width, children, isHeader = false, align = 'center' }: Cell
 );
 
 // Definimos los anchos como constantes para NUNCA equivocarnos y que siempre sumen 100%
-const COL_WIDTHS = { code: '15%', desc: '35%', stock: '10%', ok: '10%', missing: '15%', extra: '15%' };
+const COL_WIDTHS = { code: '15%', desc: '45%', stock: '10%', ok: '10%', missing: '10%', extra: '10%' };
 
 // ==========================================
 // 3. COMPONENTE PRINCIPAL
