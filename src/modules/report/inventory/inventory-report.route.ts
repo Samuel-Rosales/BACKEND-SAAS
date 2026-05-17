@@ -32,4 +32,10 @@ router.get(
     controller.getByCategory
 );
 
+router.get(
+    '/control-stock-pdf',
+    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    controller.generateControlStockPDF
+);
+
 export const InventoryReportRoute = router;

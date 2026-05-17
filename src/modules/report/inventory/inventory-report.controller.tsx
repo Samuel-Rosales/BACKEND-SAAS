@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import { InventoryReportService } from './inventory-report.service';
+import { renderToStream } from '@react-pdf/renderer';
+import  InventoryReport  from '@/templates/InventoryReport';
+import { Readable } from 'stream';  
 
 const inventoryService = new InventoryReportService();
 
@@ -125,4 +128,58 @@ export class InventoryReportController {
             res.status(500).json({ error: 'Error interno al calcular reporte por categoría' });
         }
     };
+
+    generateControlStockPDF = async (req: Request, res: Response) => {
+        try {
+            const { businessId } = req.user;
+
+            if (!businessId) {
+                return res.status(400).json({ message: 'Falta el header x-business-id' });
+            }
+
+            const result = await inventoryService.generateControlStockPDF(businessId);
+
+            if(!result.data) {
+                return res.status(result.status).json({ error: result.message });
+            }
+
+            const pdfStream = await renderToStream(
+                <InventoryReport businessName={result.data.businessName} date={result.data.date} productsWithStock={result.data.productsWithStock} />
+            );
+
+            // 3. Configuramos los Headers HTTP obligatorios
+            // application/pdf le dice al navegador exactamente qué tipo de archivo está recibiendo
+            res.setHeader('Content-Type', 'application/pdf');
+            
+            // inline: lo abre en una pestaña del navegador
+            // attachment; filename=...: fuerza la descarga directa del archivo
+            res.setHeader('Content-Disposition', 'inline; filename="inventario.pdf"');
+
+            // 5. PROGRAMACIÓN DEFENSIVA (No omitas esto)
+            //Evita que el servidor colapse si el usuario cierra la pestaña
+            req.on('close', () => {
+                if (!res.writableFinished) {
+                    // Hacemos el Type Casting estricto a Readable
+                    (pdfStream as Readable).destroy();
+                    console.warn(`Descarga abortada por el cliente para businessId: ${businessId}`);
+                }
+            });
+
+            pdfStream.on('error', (err) => {
+                console.error('Error interno en el stream del PDF:', err);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Error al compilar el documento PDF' });
+                }
+            });
+
+            // 6. Ejecución del Stream. 
+            // IMPORTANTE: Aquí muere la función. NO pongas ningún res.json() después de esto.
+            pdfStream.pipe(res);
+
+        } catch (error) {
+            console.error('Error generando PDF de control de stock:', error);
+            return res.status(500).json({ error: 'Error interno al generar PDF de control de stock' });
+        }
+        
+    }
 }

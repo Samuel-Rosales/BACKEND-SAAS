@@ -1,5 +1,6 @@
 import { prisma } from '@/configs';
 import { ProductType, Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/client';
 
 interface PaginationParams {
     page?: number | string;
@@ -530,6 +531,72 @@ export class InventoryReportService {
                     productsBelowMin: 0,
                     totalStock: 0
                 }
+            };
+        }
+    }
+
+    /** 
+     * GET /control-stock-pdf - Generar PDF de control de stock
+     */
+    async generateControlStockPDF(businessId: number) {
+         try {
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { name: true }
+            });
+
+            if (!business) {
+                return {
+                    status: 404,
+                    message: 'Negocio no encontrado'
+                };
+            }
+
+            const products = await prisma.product.findMany({    
+                where: {
+                    businessId,
+                    type: ProductType.SIMPLE,
+                    isActive: true
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    stockLots: {
+                        select: {
+                            quantity: true
+                        }
+                    }
+                }
+            });
+
+            const productsWithStock = products.map(product => {
+                const stock = product.stockLots.reduce((sum, lot) => Decimal(sum).add(lot.quantity), Decimal(0));
+                return {
+                    id: product.id,
+                    name: product.name,
+                    sku: product.sku,
+                    stock
+                };
+            });
+
+            const currentDate = new Date().toLocaleDateString('es-VE');
+
+            return {
+                status: 200,
+                message: 'PDF de control de stock generado exitosamente',
+                data: { 
+                    businessName: business.name,
+                    date: currentDate,
+                    productsWithStock
+                }
+            };
+
+        } catch (error) {
+            console.error('Error generando PDF de control de stock:', error);
+            return {
+                status: 500,
+                message: 'Error interno generando PDF de control de stock'
             };
         }
     }

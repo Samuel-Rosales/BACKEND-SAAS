@@ -1,60 +1,99 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Decimal } from '@prisma/client/runtime/client';
 
-// 1. Definimos los estilos. Observa que es puro Flexbox.
+// 1. Estilos Base (Extremadamente limpios, sin repetición)
 const styles = StyleSheet.create({
   page: { padding: 30, fontSize: 10, fontFamily: 'Helvetica' },
-  headerContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  headerContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, borderBottomWidth: 1, borderBottomColor: '#000', paddingBottom: 10 },
   title: { fontSize: 16, fontWeight: 'bold' },
-  // Estilos de la tabla
-  table: { width: 'auto', borderStyle: 'solid', borderWidth: 1, borderRightWidth: 0, borderBottomWidth: 0 },
-  tableRow: { margin: 'auto', flexDirection: 'row' },
-  tableColHeader: { width: '20%', borderStyle: 'solid', borderBottomWidth: 1, borderRightWidth: 1, backgroundColor: '#d3d3d3', padding: 5 },
-  tableColDescHeader: { width: '40%', borderStyle: 'solid', borderBottomWidth: 1, borderRightWidth: 1, backgroundColor: '#d3d3d3', padding: 5 },
-  tableCol: { width: '20%', borderStyle: 'solid', borderBottomWidth: 1, borderRightWidth: 1, padding: 5 },
-  tableColDesc: { width: '40%', borderStyle: 'solid', borderBottomWidth: 1, borderRightWidth: 1, padding: 5 },
-  tableCellHeader: { margin: 'auto', fontWeight: 'bold' },
-  tableCell: { margin: 'auto' }
+  
+  // Contenedor principal de la tabla
+  table: { width: '100%', borderStyle: 'solid', borderWidth: 1, borderRightWidth: 0, borderBottomWidth: 0 },
+  tableRow: { flexDirection: 'row' },
+  
+  // Estilo base para CUALQUIER celda
+  cellBase: { 
+    borderStyle: 'solid', 
+    borderBottomWidth: 1, 
+    borderRightWidth: 1, 
+    padding: 5,
+    justifyContent: 'center', // Centra verticalmente
+    alignItems: 'center'      // Centra horizontalmente
+  },
+  // Modificador solo para las cabeceras
+  cellHeader: { backgroundColor: '#d3d3d3', fontWeight: 'bold', borderBottomWidth: 1, borderRightWidth: 1, padding: 5 },
+  
+  // Estilo para el cuadrito de verificación (checkbox manual)
+  checkbox: { width: 10, height: 10, borderStyle: 'solid', borderWidth: 1, borderColor: '#000' }
 });
-interface InventoryReportProps {
-  data: {
-    code: string;
-    description: string;
-    stock: number;
-  }[];
-  date: string;
+
+// ==========================================
+// 2. SUBCOMPONENTES (El secreto de la eficiencia)
+// ==========================================
+
+// Interfaz para nuestras celdas reutilizables
+interface CellProps {
+  width: string;
+  children?: React.ReactNode;
+  isHeader?: boolean;
+  align?: 'left' | 'center' | 'right'; // Para alinear descripciones a la izquierda y números al centro
 }
 
-// 2. El componente recibe la data de Prisma como Props
-const InventoryReport = ({ data: inventoryData, date }: InventoryReportProps) => (
+const TableCell = ({ width, children, isHeader = false, align = 'center' }: CellProps) => (
+  // USO DE ARREGLOS DE ESTILOS: Combinamos el base, el modificador (si es cabecera) y el ancho dinámico
+  <View style={[isHeader ? styles.cellHeader : styles.cellBase, { width, alignItems: align === 'left' ? 'flex-start' : 'center' }]}>
+    {typeof children === 'string' ? <Text>{children}</Text> : children}
+  </View>
+);
+
+// Definimos los anchos como constantes para NUNCA equivocarnos y que siempre sumen 100%
+const COL_WIDTHS = { code: '15%', desc: '35%', stock: '10%', ok: '10%', missing: '15%', extra: '15%' };
+
+// ==========================================
+// 3. COMPONENTE PRINCIPAL
+// ==========================================
+
+interface InventoryReportProps {
+  businessName: string;
+  date: string;
+  productsWithStock: { id: number; name: string; sku: string | null | undefined; stock: Decimal; }[];
+}
+
+const InventoryReport = ({ businessName, date, productsWithStock }: InventoryReportProps) => (
   <Document>
-    {/* size="A4" y orientation manejan el formato del papel estándar */}
     <Page size="A4" style={styles.page}>
       
-      {/* Encabezado: Título y Fecha */}
       <View style={styles.headerContainer}>
-        <Text style={styles.title}>ALVAREZ RAYSEB F.P</Text>
+        <Text style={styles.title}>{businessName}</Text>
         <Text>{date}</Text>
       </View>
 
-      {/* Tabla */}
       <View style={styles.table}>
-        {/* Fila de Cabeceras */}
+        {/* Fila de Cabeceras super limpia */}
         <View style={styles.tableRow}>
-          <View style={styles.tableColHeader}><Text style={styles.tableCellHeader}>Código</Text></View>
-          <View style={styles.tableColDescHeader}><Text style={styles.tableCellHeader}>Descripción</Text></View>
-          <View style={styles.tableColHeader}><Text style={styles.tableCellHeader}>Stock</Text></View>
-          <View style={styles.tableColHeader}><Text style={styles.tableCellHeader}>¿ok?</Text></View>
+          <TableCell width={COL_WIDTHS.code} isHeader>Código</TableCell>
+          <TableCell width={COL_WIDTHS.desc} isHeader align="left">Descripción</TableCell>
+          <TableCell width={COL_WIDTHS.stock} isHeader>Stock</TableCell>
+          <TableCell width={COL_WIDTHS.ok} isHeader>¿ok?</TableCell>
+          <TableCell width={COL_WIDTHS.missing} isHeader>Faltan</TableCell>
+          <TableCell width={COL_WIDTHS.extra} isHeader>Sobran</TableCell>
         </View>
 
-        {/* Filas Dinámicas mapeadas desde la base de datos */}
-        {inventoryData.map((item, index) => (
-          <View style={styles.tableRow} key={index}>
-            <View style={styles.tableCol}><Text style={styles.tableCell}>{item.code}</Text></View>
-            <View style={styles.tableColDesc}><Text style={styles.tableCell}>{item.description}</Text></View>
-            <View style={styles.tableCol}><Text style={styles.tableCell}>{item.stock}</Text></View>
-            {/* Columnas vacías para rellenar a mano, como en tu imagen */}
-            <View style={styles.tableCol}><Text style={styles.tableCell}> </Text></View>
+        {/* Filas Dinámicas mapeadas */}
+        {productsWithStock.map((item) => (
+          <View style={styles.tableRow} key={item.id}>
+            <TableCell width={COL_WIDTHS.code}>{item.sku || '-'}</TableCell>
+            <TableCell width={COL_WIDTHS.desc} align="left">{item.name}</TableCell>
+            <TableCell width={COL_WIDTHS.stock}>{item.stock.toString()}</TableCell>
+            
+            {/* Dibujamos el cuadrito en lugar de texto vacío */}
+            <TableCell width={COL_WIDTHS.ok}>
+                <View style={styles.checkbox} />
+            </TableCell>
+            
+            <TableCell width={COL_WIDTHS.missing}>{/* Vacío intencionalmente */}</TableCell>
+            <TableCell width={COL_WIDTHS.extra}>{/* Vacío intencionalmente */}</TableCell>
           </View>
         ))}
       </View>

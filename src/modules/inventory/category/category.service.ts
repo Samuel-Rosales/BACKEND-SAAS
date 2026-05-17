@@ -248,23 +248,23 @@ export class CategoryService {
                 // porque dejaríamos productos "huérfanos" o romperíamos la integridad.
 
                 // Si ya estaba archivada, avisamos
-                if (!category.isActive) {
-                    return {
-                        message: 'La categoría ya se encuentra archivada',
-                        status: 400,
-                        data: null
-                    };
-                }
+                // if (!category.isActive) {
+                //     return {
+                //         message: 'La categoría ya se encuentra archivada',
+                //         status: 400,
+                //         data: null
+                //     };
+                // }
 
                 // La desactivamos
-                await prisma.category.update({
-                    where: { id },
-                    data: { isActive: false }
-                });
+                // await prisma.category.update({
+                //     where: { id },
+                //     data: { isActive: false }
+                // });
 
                 return {
-                    message: `Categoría archivada correctamente. No se eliminó físicamente porque contiene ${totalProducts} producto(s).`,
-                    status: 200,
+                    message: `Esta categoría no se puede eliminar porque contiene ${totalProducts} producto(s).`,
+                    status: 400,
                     data: null
                 };
 
