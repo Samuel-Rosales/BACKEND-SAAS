@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { InventoryReportService } from './inventory-report.service';
 import { renderToStream } from '@react-pdf/renderer';
 import  InventoryReport  from '@/templates/InventoryReport';
+import InventoryValuedReport from '@/templates/InventoryValuedReport';
 import { Readable } from 'stream';  
 
 const inventoryService = new InventoryReportService();
@@ -181,5 +182,56 @@ export class InventoryReportController {
             return res.status(500).json({ error: 'Error interno al generar PDF de control de stock' });
         }
         
+    }
+
+    generateValuedStockPDF = async (req: Request, res: Response) => {
+        try {
+            const { businessId } = req.user;
+            const { search } = req.query;
+
+            if (!businessId) {
+                return res.status(400).json({ message: 'Falta el header x-business-id' });
+            }
+
+            const result = await inventoryService.generateValuedStockPDF(businessId, {
+                search: search as string | undefined
+            });
+
+            if (!result.data) {
+                return res.status(result.status).json({ error: result.message });
+            }
+
+            const pdfStream = await renderToStream(
+                <InventoryValuedReport
+                    businessName={result.data.businessName}
+                    date={result.data.date}
+                    search={result.data.search}
+                    categories={result.data.categories}
+                    grandTotals={result.data.grandTotals}
+                />
+            );
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'inline; filename="stock-valorizado.pdf"');
+
+            req.on('close', () => {
+                if (!res.writableFinished) {
+                    (pdfStream as Readable).destroy();
+                    console.warn(`Descarga abortada por el cliente para businessId: ${businessId}`);
+                }
+            });
+
+            pdfStream.on('error', (err) => {
+                console.error('Error interno en el stream del PDF de stock valorizado:', err);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Error al compilar el documento PDF' });
+                }
+            });
+
+            pdfStream.pipe(res);
+        } catch (error) {
+            console.error('Error generando PDF de stock valorizado:', error);
+            return res.status(500).json({ error: 'Error interno al generar PDF de stock valorizado' });
+        }
     }
 }

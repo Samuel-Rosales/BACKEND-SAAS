@@ -603,6 +603,133 @@ export class InventoryReportService {
         }
     }
 
+    /**
+     * GET /valued-stock-pdf - PDF de stock valorizado, agrupado por categoría
+     */
+    async generateValuedStockPDF(businessId: number, params: PaginationParams = {}) {
+        try {
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { name: true }
+            });
+
+            if (!business) {
+                return {
+                    status: 404,
+                    message: 'Negocio no encontrado'
+                };
+            }
+
+            const { search } = params;
+            const searchCondition = search
+                ? Prisma.sql`AND (p.name ILIKE ${'%' + search + '%'} OR p.sku ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})`
+                : Prisma.empty;
+
+            const products = await prisma.$queryRaw<any[]>`
+                SELECT
+                    p.id,
+                    p.name,
+                    p.sku,
+                    c.id as "categoryId",
+                    c.name as "categoryName",
+                    u.symbol as "unitSymbol",
+                    p."costPrice" as "costPrice",
+                    p."salePrice" as "salePrice",
+                    COALESCE(SUM(sl.quantity), 0)::numeric as "currentStock"
+                FROM "Product" p
+                INNER JOIN "Category" c ON p."categoryId" = c.id
+                INNER JOIN "MeasurementUnit" u ON p."unitId" = u.id
+                LEFT JOIN "StockLot" sl ON p.id = sl."productId" AND sl.quantity > 0
+                WHERE p."businessId" = ${businessId}
+                AND p."type" = ${ProductType.SIMPLE}
+                AND p."isActive" = true
+                ${searchCondition}
+                GROUP BY p.id, c.id, c.name, u.symbol
+                HAVING COALESCE(SUM(sl.quantity), 0) > 0
+                ORDER BY c.name ASC, p.name ASC
+            `;
+
+            const totals = await prisma.$queryRaw<[{ total_stock: string; total_cost: string; total_sale: string }]>`
+                SELECT
+                    COALESCE(SUM(sl.quantity), 0)::numeric as total_stock,
+                    COALESCE(SUM(sl.quantity * sl."lotCost"), 0)::numeric as total_cost,
+                    COALESCE(SUM(sl.quantity * p."salePrice"), 0)::numeric as total_sale
+                FROM "StockLot" sl
+                INNER JOIN "Product" p ON sl."productId" = p.id
+                INNER JOIN "Category" c ON p."categoryId" = c.id
+                WHERE p."businessId" = ${businessId}
+                AND p."type" = ${ProductType.SIMPLE}
+                AND p."isActive" = true
+                AND sl.quantity > 0
+                ${searchCondition}
+            `;
+
+            const categoriesMap = new Map<number, any>();
+
+            products.forEach((product: any) => {
+                const currentStock = Number(product.currentStock || 0);
+                const costPrice = Number(product.costPrice || 0);
+                const salePrice = Number(product.salePrice || 0);
+                const totalCost = currentStock * costPrice;
+                const totalSale = currentStock * salePrice;
+                const profitMargin = costPrice > 0 ? ((salePrice - costPrice) / costPrice) * 100 : 0;
+
+                if (!categoriesMap.has(Number(product.categoryId))) {
+                    categoriesMap.set(Number(product.categoryId), {
+                        categoryId: Number(product.categoryId),
+                        categoryName: product.categoryName,
+                        products: [],
+                        subtotalStock: 0,
+                        subtotalCost: 0,
+                        subtotalSale: 0
+                    });
+                }
+
+                const group = categoriesMap.get(Number(product.categoryId));
+                group.products.push({
+                    id: product.id,
+                    name: product.name,
+                    sku: product.sku,
+                    unitSymbol: product.unitSymbol,
+                    currentStock,
+                    costPrice,
+                    salePrice,
+                    profitMargin: Math.round(profitMargin * 100) / 100,
+                    totalCost,
+                    totalSale
+                });
+                group.subtotalStock += currentStock;
+                group.subtotalCost += totalCost;
+                group.subtotalSale += totalSale;
+            });
+
+            const categories = Array.from(categoriesMap.values());
+
+            return {
+                status: 200,
+                message: 'PDF de stock valorizado generado exitosamente',
+                data: {
+                    businessName: business.name,
+                    date: new Date().toLocaleDateString('es-VE'),
+                    search: search || '',
+                    categories,
+                    grandTotals: {
+                        totalProducts: products.length,
+                        totalStock: Number(totals[0]?.total_stock || 0),
+                        totalCost: Number(totals[0]?.total_cost || 0),
+                        totalSale: Number(totals[0]?.total_sale || 0)
+                    }
+                }
+            };
+        } catch (error) {
+            console.error('Error generando PDF de stock valorizado:', error);
+            return {
+                status: 500,
+                message: 'Error interno generando PDF de stock valorizado'
+            };
+        }
+    }
+
     /** 
      * GET /products-by-category - Lista de productos agrupados por categoría (para PDF o exportación)
      */

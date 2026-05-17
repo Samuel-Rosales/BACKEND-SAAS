@@ -38,4 +38,10 @@ router.get(
     controller.generateControlStockPDF
 );
 
+router.get(
+    '/valued-stock-pdf',
+    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    controller.generateValuedStockPDF
+);
+
 export const InventoryReportRoute = router;
