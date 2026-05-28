@@ -572,7 +572,7 @@ export class SaleService {
 
         if (!register) {
             throw new BusinessError(
-                '⚠️ No tienes una caja abierta. Debes realizar la Apertura de Caja antes de vender.',
+                'No tienes una caja abierta. Debes realizar la Apertura de Caja antes de vender.',
                 409 // Conflict
             );
         }
