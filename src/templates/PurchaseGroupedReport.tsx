@@ -21,6 +21,7 @@ type PurchaseGroupedReportGroup = {
 
 export interface PurchaseGroupedReportProps {
   businessName: string;
+  logoUrl?: string | null;
   dateRange: { from: string; to: string };
   groupByLabel: string;
   groups: PurchaseGroupedReportGroup[];
@@ -92,12 +93,12 @@ const styles = StyleSheet.create({
 
 const money = (value: number) => new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'USD' }).format(value || 0);
 
-const PurchaseGroupedReport = ({ businessName, dateRange, groupByLabel, groups, grandTotals }: PurchaseGroupedReportProps) => (
+const PurchaseGroupedReport = ({ businessName, logoUrl, dateRange, groupByLabel, groups, grandTotals }: PurchaseGroupedReportProps) => (
   <Document>
     <Page size="A4" style={styles.page}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Image src={logoPath} style={styles.logo} />
+          <Image src={logoUrl || logoPath} style={styles.logo} />
           <View style={styles.titleWrap}>
             <Text style={styles.title}>Reporte de Compras</Text>
             <Text style={styles.subtitle}>Agrupado por {groupByLabel}</Text>

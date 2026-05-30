@@ -28,6 +28,7 @@ type InventoryValuedGroup = {
 
 export interface InventoryValuedReportProps {
   businessName: string;
+  logoUrl?: string | null;
   date: string;
   search?: string;
   categories: InventoryValuedGroup[];
@@ -110,12 +111,12 @@ const styles = StyleSheet.create({
 
 const money = (value: number) => new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'USD' }).format(value || 0);
 
-const InventoryValuedReport = ({ businessName, date, search, categories, grandTotals }: InventoryValuedReportProps) => (
+const InventoryValuedReport = ({ businessName, logoUrl, date, search, categories, grandTotals }: InventoryValuedReportProps) => (
   <Document>
     <Page size="A4" style={styles.page}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Image style={styles.logo} src={logoPath} />
+          <Image style={styles.logo} src={logoUrl || logoPath} />
           <View style={styles.titleWrap}>
             <Text style={styles.title}>Stock Valorizado</Text>
             <Text style={styles.subtitle}>Solo productos con stock</Text>

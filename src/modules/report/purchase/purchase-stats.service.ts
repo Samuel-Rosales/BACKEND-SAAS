@@ -212,7 +212,7 @@ export class PurchaseStatsService {
         try {
             const business = await prisma.business.findUnique({
                 where: { id: businessId },
-                select: { name: true }
+                select: { name: true, logoUrl: true }
             });
 
             if (!business) {
@@ -306,6 +306,7 @@ export class PurchaseStatsService {
                 message: 'PDF de compras agrupado generado exitosamente',
                 data: {
                     businessName: business.name,
+                    logoUrl: business.logoUrl,
                     dateRange: {
                         from: format(currentStart, 'dd/MM/yyyy'),
                         to: format(currentEnd, 'dd/MM/yyyy'),

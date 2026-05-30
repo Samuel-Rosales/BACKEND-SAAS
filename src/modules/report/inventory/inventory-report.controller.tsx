@@ -145,7 +145,7 @@ export class InventoryReportController {
             }
 
             const pdfStream = await renderToStream(
-                <InventoryReport businessName={result.data.businessName} date={result.data.date} productsWithStock={result.data.productsWithStock} />
+                <InventoryReport businessName={result.data.businessName} logoUrl={result.data.logoUrl} date={result.data.date} productsWithStock={result.data.productsWithStock} />
             );
 
             // 3. Configuramos los Headers HTTP obligatorios
@@ -204,6 +204,7 @@ export class InventoryReportController {
             const pdfStream = await renderToStream(
                 <InventoryValuedReport
                     businessName={result.data.businessName}
+                    logoUrl={result.data.logoUrl}
                     date={result.data.date}
                     search={result.data.search}
                     categories={result.data.categories}

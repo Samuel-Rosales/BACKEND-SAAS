@@ -542,7 +542,7 @@ export class InventoryReportService {
          try {
             const business = await prisma.business.findUnique({
                 where: { id: businessId },
-                select: { name: true }
+                select: { name: true, logoUrl: true }
             });
 
             if (!business) {
@@ -589,6 +589,7 @@ export class InventoryReportService {
                 message: 'PDF de control de stock generado exitosamente',
                 data: { 
                     businessName: business.name,
+                    logoUrl: business.logoUrl,
                     date: currentDate,
                     productsWithStock
                 }
@@ -610,7 +611,7 @@ export class InventoryReportService {
         try {
             const business = await prisma.business.findUnique({
                 where: { id: businessId },
-                select: { name: true }
+                select: { name: true, logoUrl: true }
             });
 
             if (!business) {
@@ -710,6 +711,7 @@ export class InventoryReportService {
                 message: 'PDF de stock valorizado generado exitosamente',
                 data: {
                     businessName: business.name,
+                    logoUrl: business.logoUrl,
                     date: new Date().toLocaleDateString('es-VE'),
                     search: search || '',
                     categories,

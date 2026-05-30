@@ -79,17 +79,18 @@ const COL_WIDTHS = { code: '14%', desc: '35%', stock: '10%', min: '8%', ok: '11%
 
 interface InventoryReportProps {
   businessName: string;
+  logoUrl?: string | null;
   date: string;
   productsWithStock: { id: number; name: string; sku: string | null | undefined; stock: Decimal; minStock: number; }[];
 }
 
-const InventoryReport = ({ businessName, date, productsWithStock }: InventoryReportProps) => (
+const InventoryReport = ({ businessName, logoUrl, date, productsWithStock }: InventoryReportProps) => (
   <Document>
     <Page size="A4" style={styles.page}>
 
       <View style={styles.headerContainer}>
         <View style={styles.headerLeft}>
-          <Image style={styles.logo} src={logoPath} />
+          <Image style={styles.logo} src={logoUrl || logoPath} />
           <View style={styles.headerTitleWrap}>
             <Text style={styles.title}>Control de Stock</Text>
             <Text style={styles.subtitle}>Conteo Físico de Inventario</Text>

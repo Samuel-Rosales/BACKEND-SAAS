@@ -61,6 +61,7 @@ export class PurchaseReportController {
             const pdfStream = await renderToStream(
                 React.createElement(PurchaseGroupedReport, {
                     businessName: report.data.businessName,
+                    logoUrl: report.data.logoUrl,
                     dateRange: report.data.dateRange,
                     groupByLabel: report.data.groupByLabel,
                     groups: report.data.groups,
