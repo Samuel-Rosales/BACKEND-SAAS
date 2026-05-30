@@ -61,10 +61,15 @@ export class CashRegisterService {
     }
 
     // 2. LISTAR CAJAS (Histórico)
-    async findAll(businessId: number, filterDate?: string, filterStatus?: 'OPEN' | 'CLOSED' | 'ALL') {
+    async findAll(businessId: number, filterDate?: string, filterStatus?: 'OPEN' | 'CLOSED' | 'ALL', memberId?: number) {
         try {
             // Build where clause based on filters
             const whereClause: any = { businessId };
+
+            // Apply member filter if provided (for cashier mode or admin filtering)
+            if (memberId) {
+                whereClause.memberId = memberId;
+            }
 
             // Apply status filter if provided and not 'ALL'
             if (filterStatus && filterStatus !== 'ALL') {

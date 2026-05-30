@@ -33,6 +33,7 @@ export class CashRegisterController {
 
     findAll = async (req: Request, res: Response) => {
         const businessId = req.user.businessId;
+        const roleCode = req.user.roleCode;
 
         if (!businessId) {
             return res.status(400).json({
@@ -44,8 +45,15 @@ export class CashRegisterController {
         // Extract query parameters for filtering
         const filterDate = req.query.date as string | undefined;
         const filterStatus = req.query.status as 'OPEN' | 'CLOSED' | 'ALL' | undefined;
+        const filterMemberId = req.query.memberId as string | undefined;
 
-        const { status, data, message } = await this.service.findAll(businessId, filterDate, filterStatus);
+        // Cashiers can only see their own registers
+        const isCashier = roleCode === 'CASHIER';
+        const memberId = isCashier
+            ? req.user.membershipId
+            : (filterMemberId ? Number(filterMemberId) : undefined);
+
+        const { status, data, message } = await this.service.findAll(businessId, filterDate, filterStatus, memberId);
 
         res.status(status).json({
             message,
