@@ -22,6 +22,9 @@ router.post(
 
 router.get('/my-businesses', controller.findAllByUser);
 
+// --- CLOUDINARY ---
+router.get('/cloudinary/signature', controller.getCloudinarySignature);
+
 // --- LECTURA DE DATOS ---
 
 // 1. Obtener datos básicos (Header / Dashboard)

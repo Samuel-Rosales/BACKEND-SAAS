@@ -98,6 +98,10 @@ export class BusinessService {
           memberRole: newBusiness.members[0]?.role?.name || 'Miembro'
         };
 
+        // Codificar ID interno a hashId para uso externo
+        const hashId = new HashId();
+        (formattedBusiness as any).id = hashId.encode(newBusiness.id);
+
         return {
           message: 'Negocio creado exitosamente',
           status: 201,
