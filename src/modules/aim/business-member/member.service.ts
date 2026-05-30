@@ -165,8 +165,13 @@ export class MemberService {
         }
 
         try {
-            const deletedMember = await prisma.businessMember.delete({ where: { id: memberId } });
-            return { message: 'Miembro eliminado exitosamente', status: 200, data: deletedMember };
+            // Soft-delete: desactivar en lugar de eliminar físicamente
+            // así se mantiene el historial de transacciones en CashRegister
+            const deactivatedMember = await prisma.businessMember.update({
+                where: { id: memberId },
+                data: { isActive: false }
+            });
+            return { message: 'Miembro eliminado exitosamente', status: 200, data: deactivatedMember };
         } catch (error) {
             console.error('Error al eliminar el miembro:', error);
             return { message: 'Error al eliminar el miembro', status: 500, data: null };
