@@ -4,6 +4,7 @@ import { PlanType, SubStatus, ExchangeRateStrategy } from '@prisma/client'; // I
 import { BusinessError, resolveBusinessExchangeRate, canAccessBusinessPermission, getRolePermissions } from '@/utils';
 import { BusinessPermissionCode } from '@/data/aim/role-permissions.data';
 import { HashId } from '@/utils/hash-id';
+import { v2 as cloudinary } from 'cloudinary';
 
 export class BusinessService {
 
@@ -266,6 +267,13 @@ export class BusinessService {
       const access = await this.verifyAccess(businessId, userId, { permission: 'BUSINESS_SETTINGS_EDIT' });
       if (access.status !== 200) return access;
 
+      // Obtener logo actual antes de actualizar
+      const currentBusiness = await prisma.business.findUnique({
+        where: { id: businessId },
+        select: { logoUrl: true }
+      });
+      const oldLogoUrl = currentBusiness?.logoUrl;
+
       // Sanitización: Solo permitimos campos cosméticos aquí
       const allowedData = {
         name: data.name,
@@ -279,6 +287,13 @@ export class BusinessService {
         data: allowedData
       });
 
+      // Eliminar logo anterior si se subió uno nuevo y es diferente
+      if (data.logoUrl && oldLogoUrl && data.logoUrl !== oldLogoUrl) {
+        this.deleteOldLogo(oldLogoUrl).catch(err => {
+          console.error('Error al eliminar logo anterior:', err);
+        });
+      }
+
       return {
         message: 'Información general actualizada',
         status: 200,
@@ -287,6 +302,46 @@ export class BusinessService {
     } catch (error) {
        // ... manejo de error estándar
        return { status: 500, message: 'Error interno', data: null };
+    }
+  }
+
+  private async deleteOldLogo(logoUrl: string): Promise<void> {
+    try {
+      // Solo eliminar si es una URL de Cloudinary
+      if (!logoUrl.includes('cloudinary.com')) return;
+
+      // Configurar Cloudinary con las credenciales del entorno
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      });
+
+      // Extraer public_id de la URL de Cloudinary
+      // Formato: https://res.cloudinary.com/{cloud}/image/upload/v{version}/{public_id}.{ext}
+      const urlParts = logoUrl.split('/');
+      const uploadIndex = urlParts.findIndex(part => part === 'upload');
+      if (uploadIndex === -1) return;
+
+      // Partes después de 'upload' contienen la información
+      // Formato: v{version}/{public_id}.{ext}
+      const afterUpload = urlParts.slice(uploadIndex + 1);
+      
+      // El public_id es todo lo que viene después de la versión (empezando en v1234567890)
+      // hasta la extensión
+      const pathAfterUpload = afterUpload.join('/');
+      
+      // Buscar el public_id - empieza después de v{version}
+      const versionMatch = pathAfterUpload.match(/v\d+\/(.+?)$/);
+      if (!versionMatch) return;
+      
+      const publicId = versionMatch[1];
+      if (!publicId) return;
+
+      await cloudinary.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+      console.log('Logo anterior eliminado:', publicId);
+    } catch (error) {
+      console.error('Error al eliminar logo de Cloudinary:', error);
     }
   }
 
