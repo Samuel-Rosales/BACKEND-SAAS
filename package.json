@@ -2,13 +2,6 @@
   "name": "backend-saas",
   "version": "1.0.2",
   "packageManager": "pnpm@11.1.2+sha512.415a1cc25974731e75455c1468371be74c5aa5fb7621b50d4056d222451609f11412f23fd602e6169f1e060466641f798597e1be961a10688836a67b16569499",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/engines",
-      "prisma",
-      "puppeteer"
-    ]
-  },
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=11.0.0"
@@ -16,7 +9,7 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "dev": "nodemon --exec ts-node -r tsconfig-paths/register src/app.ts",
+    "dev": "pnpm prisma generate && pnpm prisma migrate dev && nodemon --exec ts-node -r tsconfig-paths/register src/app.ts",
     "build": "pnpm prisma generate && tsc && tsc-alias",
     "start": "pnpm prisma migrate deploy && node dist/app.js",
     "prisma:generate": "prisma generate",
@@ -25,7 +18,8 @@
     "prisma:studio": "pnpx prisma studio",
     "prisma:seed": "pnpx prisma db seed",
     "prisma:migrate": "pnpx prisma migrate dev",
-    "db:reset": "pnpx prisma migrate reset"
+    "db:reset": "pnpx prisma migrate reset",
+    "db:reset:seed": "pnpx prisma migrate reset --skip-generate && pnpm prisma db seed"
   },
   "repository": {
     "type": "git",
