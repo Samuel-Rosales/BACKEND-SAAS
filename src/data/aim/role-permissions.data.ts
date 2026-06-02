@@ -248,6 +248,9 @@ export const ROLE_PERMISSIONS: Record<RoleCode, BusinessPermissionCode[]> = {
   ],
 
   CASHIER: [
+    "BUSINESS_SETTINGS_VIEW",
+    "CATEGORIES_READ",
+
     "CLIENTS_READ",
     "CLIENTS_WRITE",
     "PRODUCTS_READ",
