@@ -164,6 +164,60 @@ export class SubscriptionPaymentService {
     }
   }
 
+  async findAllMyPaginated(businessId: number, page: number = 1, limit: number = 20) {
+    try {
+      const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+      const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 100) : 20;
+      const skip = (safePage - 1) * safeLimit;
+
+      const [payments, total] = await Promise.all([
+        prisma.subscriptionPayment.findMany({
+          where: { businessId },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: safeLimit,
+          include: {
+            business: { select: { id: true, name: true } },
+            subscription: {
+              select: {
+                id: true,
+                planId: true,
+                planType: true,
+                status: true,
+                startDate: true,
+                endDate: true,
+              },
+            },
+            plan: { select: { id: true, code: true, name: true } },
+            reviewedBy: { select: { id: true, name: true, ci: true } },
+          },
+        }),
+        prisma.subscriptionPayment.count({ where: { businessId } }),
+      ]);
+
+      return {
+        status: 200,
+        message: 'Pagos obtenidos exitosamente',
+        data: {
+          payments,
+          pagination: {
+            total,
+            page: safePage,
+            limit: safeLimit,
+            totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+          },
+        },
+      };
+    } catch (error) {
+      console.error('SubscriptionPaymentService.findAllMyPaginated error:', error);
+      return {
+        status: 500,
+        message: 'Error interno al obtener pagos',
+        data: null,
+      };
+    }
+  }
+
   async findOneMy(businessId: number, id: number) {
     try {
       const payment = await prisma.subscriptionPayment.findFirst({

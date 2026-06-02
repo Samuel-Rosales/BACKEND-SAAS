@@ -13,6 +13,7 @@ router.use(authMiddleware);
 
 router.post('/', validator.validateCreate, handleValidationErrors, controller.create);
 router.get('/my', controller.findAllMy);
+router.get('/my/paginated', controller.findAllMyPaginated);
 router.get('/my/:id', validator.validateId, handleValidationErrors, controller.findOneMy);
 
 export const SubscriptionPaymentRoute = router;

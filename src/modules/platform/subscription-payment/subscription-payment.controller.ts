@@ -43,6 +43,23 @@ export class SubscriptionPaymentController {
     return res.status(result.status).json(result);
   };
 
+  findAllMyPaginated = async (req: Request, res: Response) => {
+    const businessId = req.user?.businessId;
+    const page = Number(req.query.page ?? 1);
+    const limit = Number(req.query.limit ?? 20);
+
+    if (!businessId) {
+      return res.status(400).json({
+        status: 400,
+        message: 'Falta el header x-business-id',
+        data: null,
+      });
+    }
+
+    const result = await this.service.findAllMyPaginated(businessId, page, limit);
+    return res.status(result.status).json(result);
+  };
+
   findOneMy = async (req: Request, res: Response) => {
     const businessId = req.user?.businessId;
     const id = Number(req.params.id);
