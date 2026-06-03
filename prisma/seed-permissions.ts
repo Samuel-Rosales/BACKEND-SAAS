@@ -41,6 +41,8 @@ export const permissions: { code: string; name: string; module: PermissionModule
   { code: "FINANCE_READ", name: "Ver finanzas", module: "FINANCE" },
   { code: "FINANCE_WRITE", name: "Gestionar finanzas", module: "FINANCE" },
   { code: "REPORTS_VIEW", name: "Ver reportes", module: "REPORTS" },
+  { code: "TABLES_READ", name: "Ver mesas", module: "RESTAURANT" },
+  { code: "TABLES_WRITE", name: "Gestionar mesas", module: "RESTAURANT" },
 ];
 
 export const rolePermissions: Record<string, string[]> = {
@@ -85,6 +87,8 @@ export const rolePermissions: Record<string, string[]> = {
     "FINANCE_READ",
     "FINANCE_WRITE",
     "REPORTS_VIEW",
+    "TABLES_READ",
+    "TABLES_WRITE",
   ],
   OPERATOR: [
     "CLIENTS_READ",
@@ -102,6 +106,8 @@ export const rolePermissions: Record<string, string[]> = {
     "REPORTS_SALES_VIEW",
     "FINANCE_READ",
     "FINANCE_WRITE",
+    "TABLES_READ",
+    "TABLES_WRITE",
   ],
   AUDITOR: [
     "BUSINESS_SETTINGS_VIEW",
@@ -122,6 +128,7 @@ export const rolePermissions: Record<string, string[]> = {
     "PROCUREMENT_READ",
     "FINANCE_READ",
     "REPORTS_VIEW",
+    "TABLES_READ",
   ],
   MANAGER: [
     "BUSINESS_SETTINGS_VIEW",
@@ -163,6 +170,8 @@ export const rolePermissions: Record<string, string[]> = {
     "FINANCE_READ",
     "FINANCE_WRITE",
     "REPORTS_VIEW",
+    "TABLES_READ",
+    "TABLES_WRITE",
   ],
   CASHIER: [
     "BUSINESS_SETTINGS_VIEW",
@@ -182,6 +191,8 @@ export const rolePermissions: Record<string, string[]> = {
     "REPORTS_SALES_VIEW",
     "FINANCE_READ",
     "FINANCE_WRITE",
+    "TABLES_READ",
+    "TABLES_WRITE",
   ],
   SELLER: [
     "CLIENTS_READ",
@@ -192,6 +203,8 @@ export const rolePermissions: Record<string, string[]> = {
     "CREDITS_SALES_COLLECT",
     "REPORTS_SALES_VIEW",
     "REPORTS_VIEW",
+    "TABLES_READ",
+    "TABLES_WRITE",
   ],
   BUYER: [
     "SUPPLIERS_READ",
