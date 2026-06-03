@@ -85,6 +85,47 @@ export class RoleService {
         }
     }
 
+    // 2.1 LISTAR TODOS (INCLUYENDO OWNER)
+    async findAllWithOwner() {
+        try {
+
+            const roles = await prisma.role.findMany({
+                orderBy: { id: 'asc' }
+            });
+
+            if (roles.length === 0) {
+                return {
+                    message: 'No hay roles disponibles',
+                    status: 404,
+                    data: []
+                };
+            }
+
+            const rolesWithPermissions = await Promise.all(
+                roles.map(async (role) => ({
+                    ...role,
+                    permissions: await permissionService.getRolePermissions(role.code)
+                }))
+            );
+
+            return {
+                message: 'Roles obtenidos exitosamente',
+                status: 200,
+                data: rolesWithPermissions
+            };
+
+        } catch (error) {
+
+            console.error('Error al obtener los roles:', error);
+
+            return {
+                message: 'Error al obtener los roles',
+                status: 500,
+                data: null
+            };
+        }
+    }
+
     // 3. BUSCAR UNO
     async findOne(id: number) {
         try {
@@ -132,9 +173,11 @@ export class RoleService {
                 where: { id }
             });
 
+            const { permissions, ...roleData } = data;
+
             const updatedRole = await prisma.role.update({
                 where: { id },
-                data: data
+                data: roleData
             });
 
             if (!updatedRole) {
@@ -149,6 +192,10 @@ export class RoleService {
                 permissionCache.invalidate(previousRole.code);
             }
 
+            if (permissions) {
+                await permissionService.syncRolePermissions(id, permissions);
+            }
+
             return {
                 message: 'Rol actualizado exitosamente',
                 status: 200,
@@ -158,7 +205,7 @@ export class RoleService {
         } catch (error) {
 
             console.error('Error al actualizar el rol:', error);
-            
+
             return {
                 message: 'Error al actualizar el rol',
                 status: 500,

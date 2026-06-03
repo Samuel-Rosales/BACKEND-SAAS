@@ -1,6 +1,7 @@
 import { prisma } from '@/configs';
 import { permissionCache } from '@/utils/permission-cache';
 import type { BusinessPermissionCode } from '@/data/aim/role-permissions.data';
+import type { PermissionModule } from '@prisma/client';
 
 export class PermissionService {
   async getRolePermissions(roleCode: string): Promise<BusinessPermissionCode[]> {
@@ -63,6 +64,41 @@ export class PermissionService {
 
     if (role?.code) {
       permissionCache.invalidate(role.code);
+    }
+  }
+
+  async findAll() {
+    try {
+      const permissions = await prisma.permission.findMany({
+        orderBy: [{ module: 'asc' }, { code: 'asc' }]
+      });
+
+      const groupedByModule = permissions.reduce((acc, permission) => {
+        const module = permission.module as PermissionModule;
+        if (!acc[module]) {
+          acc[module] = [];
+        }
+        acc[module].push({
+          id: permission.id,
+          code: permission.code,
+          name: permission.name,
+          description: permission.description
+        });
+        return acc;
+      }, {} as Record<PermissionModule, Array<{ id: number; code: string; name: string; description: string | null }>>);
+
+      return {
+        message: 'Permisos obtenidos exitosamente',
+        status: 200,
+        data: groupedByModule
+      };
+    } catch (error) {
+      console.error('Error al obtener los permisos:', error);
+      return {
+        message: 'Error al obtener los permisos',
+        status: 500,
+        data: null
+      };
     }
   }
 }

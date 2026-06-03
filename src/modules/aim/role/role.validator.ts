@@ -28,9 +28,9 @@ export class RoleValidator {
     public validateUpdate: ValidationChain[] = [
 
         param('id').isInt().toInt(),
-        
+
         body('name').optional().trim().isLength({ min: 3 }),
-        
+
         body('code')
         .optional()
         .trim()
@@ -43,11 +43,15 @@ export class RoleValidator {
             const exist = await prisma.role.findFirst({
                 where: { code: code, NOT: { id: id } }
             });
-            
+
             if (exist) throw new Error(`El código ${code} ya está en uso.`);
 
             return true;
         }),
+
+        body('permissions')
+        .optional()
+        .isArray().withMessage('permissions debe ser un array'),
     ];
 
     public validateId: ValidationChain[] = [
