@@ -233,7 +233,9 @@ export class BusinessService {
               ...business,
               memberRole: business.members[0]?.role?.name || 'Miembro',
               memberRoleCode,
-              memberPermissions: memberRoleCode ? getRolePermissions(memberRoleCode) : [],
+              memberPermissions: memberRoleCode
+                  ? await getRolePermissions(memberRoleCode)
+                  : [],
               
               // Inyectamos la tasa correcta calculada
               // Lo enviamos como un objeto único o array según lo espere tu frontend
@@ -546,7 +548,7 @@ export class BusinessService {
       }
 
       if (options?.permission) {
-        const allowedByPermission = canAccessBusinessPermission(
+        const allowedByPermission = await canAccessBusinessPermission(
           member.role.code,
           options.permission,
           member.user.isSuperAdmin

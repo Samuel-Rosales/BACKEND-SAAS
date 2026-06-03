@@ -4,7 +4,6 @@
 // AIM (autenticación y miembros)
 import { users } from "./aim/user.data";
 import { roles } from "./aim/role.data";
-import { ROLE_PERMISSIONS } from "./aim/role-permissions.data";
 import { userContacts } from "./aim/contact.data";
 import { businessMembers } from "./aim/business-member.data";
 
@@ -49,7 +48,7 @@ import { purchaseInstallments } from "./procurement/purchase-installment.data";
 
 // Export agrupado por módulos (opcional)
 export const seedData = {
-	aim: { users, roles, rolePermissions: ROLE_PERMISSIONS, userContacts, businessMembers },
+	aim: { users, roles, userContacts, businessMembers },
 	platform: { businessCategories, businesses, subscriptions },
 	finance: { exchangeRates, paymentMethods, cashRegisters, cashCounts },
 	inventory: {
@@ -85,7 +84,6 @@ export const seedData = {
 export {
 	users,
 	roles,
-	ROLE_PERMISSIONS,
 	userContacts,
 	businessMembers,
 	businessCategories,

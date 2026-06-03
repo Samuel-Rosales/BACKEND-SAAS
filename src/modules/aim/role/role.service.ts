@@ -1,6 +1,7 @@
 import { prisma } from '@/configs';
 import { CreateRoleDto, UpdateRoleDto } from './interfaces';
-import { getRolePermissions } from '@/utils';
+import { permissionService } from '@/modules/aim/permission/permission.service';
+import { permissionCache } from '@/utils/permission-cache';
 
 export class RoleService {
 
@@ -59,13 +60,17 @@ export class RoleService {
                 };
             }
 
+            const rolesWithPermissions = await Promise.all(
+                roles.map(async (role) => ({
+                    ...role,
+                    permissions: await permissionService.getRolePermissions(role.code)
+                }))
+            );
+
             return {
                 message: 'Roles obtenidos exitosamente',
                 status: 200,
-                data: roles.map((role) => ({
-                    ...role,
-                    permissions: getRolePermissions(role.code)
-                }))
+                data: rolesWithPermissions
             };
 
         } catch (error) {
@@ -95,12 +100,14 @@ export class RoleService {
                 };
             }
 
+            const permissions = await permissionService.getRolePermissions(role.code);
+
             return {
                 message: 'Rol obtenido exitosamente',
                 status: 200,
                 data: {
                     ...role,
-                    permissions: getRolePermissions(role.code)
+                    permissions
                 }
             };
 
@@ -121,6 +128,10 @@ export class RoleService {
 
         try {
 
+            const previousRole = await prisma.role.findUnique({
+                where: { id }
+            });
+
             const updatedRole = await prisma.role.update({
                 where: { id },
                 data: data
@@ -132,6 +143,10 @@ export class RoleService {
                     status: 400,
                     data: null
                 };
+            }
+
+            if (previousRole?.code && previousRole.code !== updatedRole.code) {
+                permissionCache.invalidate(previousRole.code);
             }
 
             return {
