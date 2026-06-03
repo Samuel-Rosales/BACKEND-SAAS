@@ -28,6 +28,7 @@ enum PermissionModule {
   REPORTS
   FINANCE
   INVENTORY
+  RESTAURANT
 }
 
 model User {
@@ -163,6 +164,7 @@ model Business {
   depots         Depot[]
   stockMovements StockMovement[]
   cashRegisters  CashRegister[]
+  restaurantTables RestaurantTable[]
 }
 
 model BusinessCategory {
@@ -819,6 +821,22 @@ model CashCount {
   exchangeRate ExchangeRate @relation(fields: [exchangeRateId], references: [id])
 }
 
+model RestaurantTable {
+  id         Int         @id @default(autoincrement())
+  businessId Int
+  name       String      // "Mesa 1", "Mesa 2", "Terraza 3"
+  capacity   Int?        // Personas que caben
+  status     TableStatus @default(AVAILABLE)
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  business   Business    @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, status])
+  @@index([businessId, isActive])
+}
+
 model PaymentMethod {
   id       Int         @id @default(autoincrement())
   name     String // Ej: "Zelle Banesco", "Caja Chica", "Punto de Venta"
@@ -942,6 +960,13 @@ enum Currency {
   USD
   VES
   EUR
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  MAINTENANCE
 }
 
 enum UnitType {
