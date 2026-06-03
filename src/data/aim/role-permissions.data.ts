@@ -62,4 +62,7 @@ export type BusinessPermissionCode =
   | "REPORTS_VIEW"
 
   | "TABLES_READ"
-  | "TABLES_WRITE";
+  | "TABLES_WRITE"
+
+  | "ORDERS_READ"
+  | "ORDERS_WRITE";
