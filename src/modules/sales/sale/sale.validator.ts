@@ -53,11 +53,12 @@ export class SaleValidator {
       .isIn(['CASH', 'CREDIT']).withMessage('Condición debe ser CASH o CREDIT'),
 
     // Validamos estructura de cuotas si es crédito
-    body('installments')
+body('installments')
       .if(body('condition').equals('CREDIT'))
-      .isArray({ min: 1 }).withMessage('Venta a crédito requiere cuotas')
+      .optional()
+      .isArray().withMessage('Installments debe ser un array')
       .custom((value) => {
-         // Validación básica de estructura interna
+         if (!value || value.length === 0) return true;
          const isValid = value.every((i: any) => i.amount > 0 && i.dueDate);
          if (!isValid) throw new Error('Estructura de cuotas inválida');
          return true;

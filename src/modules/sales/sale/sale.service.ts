@@ -327,26 +327,26 @@ export class SaleService {
             }
             // B. Caso CRÉDITO (CREDIT)
             else if (data.condition === Conditions.CREDIT) {
-                if (!data.installments || data.installments.length === 0) {
-                    throw new BusinessError('Venta a crédito requiere plan de cuotas', 400);
-                }
-
-                // Sumatoria de Cuotas (Uso correcto de REDUCE con Decimal)
-                const totalInstallments = data.installments.reduce(
-                    (acc, curr) => acc.add(new Decimal(curr.amount)),
-                    new Decimal(0) // Valor inicial debe ser new Decimal(0)
-                );
-
-                // Verificación de cuadre: |TotalCuotas - Deuda| > 0.05
-                // 1. Restamos
-                const diff = totalInstallments.sub(remainingBalance);
-
-                // 2. Valor Absoluto (.abs) y Comparación (.gt)
-                if (diff.abs().gt(0.01)) {
-                    throw new BusinessError(
-                        `La suma de cuotas ($${totalInstallments.toString()}) no coincide con la deuda ($${remainingBalance.toString()})`,
-                        400
+                // Si el pago cubre todo, no tiene sentido hacer venta a crédito
+                if (remainingBalance.lte(0.01)) {
+                    throw new BusinessError('No puedes generar una venta a credito si ya lo estan cancelando por completo.', 400);
+                } else if (!data.installments || data.installments.length === 0) {
+                    throw new BusinessError('No puedes generar una venta a credito si ya lo estan cancelando por completo.', 400);
+                } else {
+                    // Validar que las cuotas coincidan con la deuda pendiente
+                    const totalInstallments = data.installments.reduce(
+                        (acc, curr) => acc.add(new Decimal(curr.amount)),
+                        new Decimal(0)
                     );
+
+                    const diff = totalInstallments.sub(remainingBalance);
+
+                    if (diff.abs().gt(0.01)) {
+                        throw new BusinessError(
+                            `La suma de cuotas ($${totalInstallments.toString()}) no coincide con la deuda ($${remainingBalance.toString()})`,
+                            400
+                        );
+                    }
                 }
             }
 
