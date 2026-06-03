@@ -17,10 +17,20 @@ export class RoleController {
     findAll = async (req: Request, res: Response) => {
 
         const {status, data, message} = await this.service.findAll();
-        
-        res.status(status).json({ 
-            message, 
-            data 
+
+        res.status(status).json({
+            message,
+            data
+        });
+    };
+
+    findAllWithOwner = async (req: Request, res: Response) => {
+
+        const {status, data, message} = await this.service.findAllWithOwner();
+
+        res.status(status).json({
+            message,
+            data
         });
     };
 
