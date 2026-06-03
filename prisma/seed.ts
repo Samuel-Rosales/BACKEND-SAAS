@@ -37,6 +37,7 @@ import {
   purchaseItems,
   purchasePayments,
 } from "../src/data/index.data";
+import { seedPermissions } from "./seed-permissions";
 
 // Set up Prisma 7 adapter for PostgreSQL via pg
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -54,6 +55,7 @@ async function main() {
   // AIM
   await prisma.user.createMany({ data: users as any, skipDuplicates: true });
   await prisma.role.createMany({ data: roles as any, skipDuplicates: true });
+  await seedPermissions(prisma);
   await prisma.businessMember.createMany({ data: businessMembers as any, skipDuplicates: true });
   await prisma.userContact.createMany({ data: userContacts as any, skipDuplicates: true });
 

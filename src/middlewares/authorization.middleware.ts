@@ -45,7 +45,11 @@ export const requireBusinessPermission = (permission: BusinessPermissionCode) =>
 
       const isSuperAdmin = Boolean(req.user?.isSuperAdmin);
       const roleCode = membership?.role?.code || "";
-      const allowed = canAccessBusinessPermission(roleCode, permission, isSuperAdmin);
+      const allowed = await canAccessBusinessPermission(
+        roleCode,
+        permission,
+        isSuperAdmin,
+      );
 
       if (!allowed) {
         return res.status(403).json({ message: "No tienes permisos para esta acción." });

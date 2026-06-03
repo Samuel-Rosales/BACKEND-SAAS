@@ -11,6 +11,25 @@ datasource db {
 // USUARIOS Y SEGURIDAD (RBAC)
 // ==========================================
 
+enum PermissionModule {
+  BUSINESS
+  MEMBERS
+  CLIENTS
+  SUPPLIERS
+  PRODUCTS
+  CATEGORIES
+  PRESENTATIONS
+  DEPOSITS
+  STOCK
+  CASH_REGISTER
+  CREDITS
+  SALES
+  PROCUREMENT
+  REPORTS
+  FINANCE
+  INVENTORY
+}
+
 model User {
   id       Int    @id @default(autoincrement())
   ci       String @unique // Cédula de identidad
@@ -51,6 +70,25 @@ model Role {
   name    String           @unique // Ej: "Administrador", "Cajero"
   code    String           @unique // Ej: "ADMIN", "CASHIER" (para uso interno en código)
   members BusinessMember[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  code        String           @unique
+  name        String
+  description String?
+  module      PermissionModule
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
 }
 
 // Tabla pivote: Relaciona Usuario <-> Negocio con un Rol específico
