@@ -3,7 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { stream, connectDB } from '../configs';
 
-import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute } from '../modules/aim';
+import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute, PermissionRoute } from '../modules/aim';
 
 import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPaymentRoute, SubscriptionPlanRoute } from '../modules/platform';
 
@@ -41,6 +41,7 @@ export class Server {
             // MÓDULO AIM
             users: `${this.prefix}/aim/user`,
             roles: `${this.prefix}/aim/role`,
+            permissions: `${this.prefix}/aim/permission`,
             auth: `${this.prefix}/aim/auth`,
             businessMembers: `${this.prefix}/aim/business-member`,
             contacts: `${this.prefix}/aim/contact`,
@@ -125,6 +126,7 @@ export class Server {
 
         this.app.use(this.paths.users, UserRoute);
         this.app.use(this.paths.roles, RoleRoute);
+        this.app.use(this.paths.permissions, PermissionRoute);
         this.app.use(this.paths.auth, AuthRoute);
         this.app.use(this.paths.businessMembers, BusinessMemberRoute);
         this.app.use(this.paths.contacts, ContactRoute);
