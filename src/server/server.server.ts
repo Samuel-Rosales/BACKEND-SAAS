@@ -15,6 +15,8 @@ import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute }
 
 import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
 
+import { TableRoute } from '@/modules/restaurant';
+
 import { DashboardRoute } from '@/modules/report/dashboard/dashboard.routes';
 import { SalesReportRoute } from '@/modules/report/sales/sales-stats.route';
 import { PurchaseReportRoute } from '@/modules/report/purchase/purchase-report.route';
@@ -78,6 +80,9 @@ export class Server {
             clients: `${this.prefix}/sales/client`,
             sales: `${this.prefix}/sales/sale`,
             creditNotes: `${this.prefix}/sales/credit-note`,
+
+            // MÓDULO RESTAURANT
+            tables: `${this.prefix}/restaurant/table`,
 
             // MÓDULO REPORTS
             dashboardReports: `${this.prefix}/report/dashboard`,
@@ -152,6 +157,7 @@ export class Server {
         this.app.use(this.paths.clients, ClientRoute);
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
+        this.app.use(this.paths.tables, TableRoute);
         this.app.use(this.paths.dashboardReports, DashboardRoute);
         this.app.use(this.paths.salesReports, SalesReportRoute);
         this.app.use(this.paths.purchaseReports, PurchaseReportRoute);
