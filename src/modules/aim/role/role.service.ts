@@ -132,9 +132,11 @@ export class RoleService {
                 where: { id }
             });
 
+            const { permissions, ...roleData } = data;
+
             const updatedRole = await prisma.role.update({
                 where: { id },
-                data: data
+                data: roleData
             });
 
             if (!updatedRole) {
@@ -149,6 +151,10 @@ export class RoleService {
                 permissionCache.invalidate(previousRole.code);
             }
 
+            if (permissions) {
+                await permissionService.syncRolePermissions(id, permissions);
+            }
+
             return {
                 message: 'Rol actualizado exitosamente',
                 status: 200,
@@ -158,7 +164,7 @@ export class RoleService {
         } catch (error) {
 
             console.error('Error al actualizar el rol:', error);
-            
+
             return {
                 message: 'Error al actualizar el rol',
                 status: 500,
