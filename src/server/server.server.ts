@@ -15,7 +15,7 @@ import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute }
 
 import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
 
-import { TableRoute } from '@/modules/restaurant';
+import { TableRoute, OrderRoute } from '@/modules/restaurant';
 
 import { DashboardRoute } from '@/modules/report/dashboard/dashboard.routes';
 import { SalesReportRoute } from '@/modules/report/sales/sales-stats.route';
@@ -84,6 +84,7 @@ export class Server {
 
             // MÓDULO RESTAURANT
             tables: `${this.prefix}/restaurant/table`,
+            orders: `${this.prefix}/restaurant/order`,
 
             // MÓDULO REPORTS
             dashboardReports: `${this.prefix}/report/dashboard`,
@@ -160,6 +161,7 @@ export class Server {
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
         this.app.use(this.paths.tables, TableRoute);
+        this.app.use(this.paths.orders, OrderRoute);
         this.app.use(this.paths.dashboardReports, DashboardRoute);
         this.app.use(this.paths.salesReports, SalesReportRoute);
         this.app.use(this.paths.purchaseReports, PurchaseReportRoute);

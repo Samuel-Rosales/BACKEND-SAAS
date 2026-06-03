@@ -165,6 +165,7 @@ model Business {
   stockMovements StockMovement[]
   cashRegisters  CashRegister[]
   restaurantTables RestaurantTable[]
+  orders           Order[]
 }
 
 model BusinessCategory {
@@ -401,6 +402,7 @@ model Product {
   stockMovements  StockMovement[]
   presentations   ProductPresentation[]
   creditNotes     CreditNoteItem[]
+  orderItems      OrderItem[]
 
   // --- RELACIONES DE RECETAS / COMBOS (La Magia) ---
   // 1. Si este producto es un PLATO (Composite), aquí están sus ingredientes:
@@ -513,6 +515,7 @@ model Client {
 
   business Business @relation(fields: [businessId], references: [id])
   sales    Sale[]
+  orders   Order[]
 }
 
 model Sale {
@@ -832,9 +835,48 @@ model RestaurantTable {
   updatedAt  DateTime    @updatedAt
 
   business   Business    @relation(fields: [businessId], references: [id])
+  orders     Order[]
 
   @@index([businessId, status])
   @@index([businessId, isActive])
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  businessId  Int
+  tableId     Int?
+  clientId    Int
+  orderNumber Int
+  status      OrderStatus @default(PENDING)
+  isPaid      Boolean     @default(false)
+  notes       String?
+  subTotal    Decimal     @db.Decimal(15, 2)
+  taxAmount   Decimal     @db.Decimal(15, 2)
+  totalAmount Decimal     @db.Decimal(15, 2)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  completedAt DateTime?
+
+  business  Business        @relation(fields: [businessId], references: [id])
+  table     RestaurantTable? @relation(fields: [tableId], references: [id])
+  client    Client          @relation(fields: [clientId], references: [id])
+  items     OrderItem[]
+
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  quantity  Decimal @db.Decimal(18, 6)
+  unitPrice Decimal @db.Decimal(15, 2)
+  subTotal  Decimal @db.Decimal(15, 2)
+  notes     String?
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 }
 
 model PaymentMethod {
@@ -960,6 +1002,14 @@ enum Currency {
   USD
   VES
   EUR
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
 }
 
 enum TableStatus {
