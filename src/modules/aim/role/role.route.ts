@@ -20,8 +20,10 @@ router.post(
 
 router.get('/', controller.findAll);
 
+router.get('/all', controller.findAllWithOwner);
+
 router.get(
-    '/:id', 
+    '/:id',
     validator.validateId,
     handleValidationErrors,
     controller.findOne
