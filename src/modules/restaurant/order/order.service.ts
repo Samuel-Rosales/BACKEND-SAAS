@@ -74,13 +74,13 @@ export class OrderService {
                 const product = productMap.get(item.productId);
                 if (!product) throw new Error('Producto inválido');
 
-                const itemSubTotal = item.quantity * item.unitPrice;
+                const itemSubTotal = item.quantity * item.salePrice;
                 subTotal += itemSubTotal;
 
                 return {
                     productId: item.productId,
                     quantity: item.quantity,
-                    unitPrice: item.unitPrice,
+                    salePrice: item.salePrice,
                     subTotal: itemSubTotal,
                     notes: item.notes || null
                 };

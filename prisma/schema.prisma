@@ -872,7 +872,7 @@ model OrderItem {
   orderId   Int
   productId Int
   quantity  Decimal @db.Decimal(18, 6)
-  unitPrice Decimal @db.Decimal(15, 2)
+  salePrice Decimal @db.Decimal(15, 2)
   subTotal  Decimal @db.Decimal(15, 2)
   notes     String?
 
