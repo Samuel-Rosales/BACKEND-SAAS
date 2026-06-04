@@ -8,5 +8,6 @@ export const users = [
   { ci: "55667788", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "José Castillo" },
   { ci: "66778899", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Lucía Herrera" },
   { ci: "77889900", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Pedro Rivas" },
-  { ci: "88990011", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Marcos Peña" }
+  { ci: "88990011", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Marcos Peña" },
+  { ci: "00000001", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Super Admin", isSuperAdmin: true }
 ];
