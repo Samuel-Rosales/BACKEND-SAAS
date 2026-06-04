@@ -56,6 +56,15 @@ export class OrderService {
                     id: { in: data.items.map(item => item.productId) },
                     businessId,
                     isActive: true
+                },
+                include: {
+                    tax: {
+                        select: {
+                            id: true,
+                            name: true,
+                            rate: true,
+                        }
+                    }
                 }
             });
 
@@ -70,12 +79,16 @@ export class OrderService {
             const productMap = new Map(products.map(p => [p.id, p]));
 
             let subTotal = 0;
+            let taxAmount = 0;
             const itemsData = data.items.map(item => {
                 const product = productMap.get(item.productId);
                 if (!product) throw new Error('Producto inválido');
 
                 const itemSubTotal = item.quantity * item.salePrice;
+                const taxRate = Number(product.tax?.rate || 0);
+                const itemTax = itemSubTotal * taxRate;
                 subTotal += itemSubTotal;
+                taxAmount += itemTax;
 
                 return {
                     productId: item.productId,
@@ -86,7 +99,6 @@ export class OrderService {
                 };
             });
 
-            const taxAmount = 0;
             const totalAmount = subTotal + taxAmount;
 
             const lastOrder = await prisma.order.findFirst({
