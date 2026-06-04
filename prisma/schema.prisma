@@ -172,6 +172,7 @@ model BusinessCategory {
   id          Int    @id @default(autoincrement())
   name        String
   description String
+  isRestaurant Boolean @default(false)
 
   businesses Business[]
 }
