@@ -40,7 +40,7 @@ export class SubscriptionPaymentAdminService {
     /**
    * (Admin) Listar pagos de suscripción con paginación
    */
-  async listForAdmin(page: number = 1, limit: number = 50, status?: string) {
+  async listForAdmin(page: number = 1, limit: number = 50, status?: string, search?: string) {
     try {
       const skip = (page - 1) * limit;
 
@@ -51,8 +51,18 @@ export class SubscriptionPaymentAdminService {
         return allowed.includes(upper as any) ? (upper as any) : undefined;
       })();
 
+      const searchFilter = search?.trim()
+        ? {
+            OR: [
+              { reference: { contains: search.trim(), mode: 'insensitive' as const } },
+              { business: { name: { contains: search.trim(), mode: 'insensitive' as const } } },
+            ],
+          }
+        : undefined;
+
       const whereClause: any = {
         ...(statusFilter ? { status: statusFilter } : {}),
+        ...(searchFilter || {}),
       };
 
       const [payments, total] = await Promise.all([
