@@ -551,6 +551,27 @@ export class SaleService {
                 return sale;
             });
 
+            // Marcar pedidos de restaurante como pagados (post-transacción)
+            if (data.orderIds && data.orderIds.length > 0) {
+                for (const orderId of data.orderIds) {
+                    try {
+                        const order = await prisma.order.findFirst({
+                            where: { id: orderId, businessId }
+                        });
+
+                        if (order && !order.isPaid) {
+                            await prisma.order.update({
+                                where: { id: orderId },
+                                data: { isPaid: true }
+                            });
+                        }
+                    } catch (orderErr) {
+                        // Logging pero no revierte la venta
+                        console.error(`Error al marcar pedido ${orderId} como pagado:`, orderErr);
+                    }
+                }
+            }
+
             return { status: 201, message: 'Venta registrada exitosamente', data: result };
 
         } catch (error: any) {
