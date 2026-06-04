@@ -32,7 +32,7 @@ export class BusinessAdminService {
   /**
    * GET /api/v1/admin/businesses
    */
-  async findAll(page: number = 1, limit: number = 50, status?: string, planType?: string) {
+  async findAll(page: number = 1, limit: number = 50, status?: string, planType?: string, search?: string) {
     try {
       const skip = (page - 1) * limit;
 
@@ -55,7 +55,14 @@ export class BusinessAdminService {
         ...(normalizedPlanType ? { planType: normalizedPlanType } : {}),
       };
 
-      const whereClause = Object.keys(subscriptionWhere).length > 0 ? { subscription: { is: subscriptionWhere } } : undefined;
+      const searchFilter = search?.trim()
+        ? { name: { contains: search.trim(), mode: 'insensitive' as const } }
+        : undefined;
+
+      const whereClause: any = {
+        ...(Object.keys(subscriptionWhere).length > 0 ? { subscription: { is: subscriptionWhere } } : {}),
+        ...(searchFilter || {}),
+      };
 
       const [businesses, total] = await Promise.all([
         prisma.business.findMany({

@@ -14,8 +14,9 @@ export class BusinessAdminController {
       const limit = parseInt(req.query.limit as string) || 50;
       const status = req.query.status as string | undefined;
       const planType = req.query.planType as string | undefined;
+      const search = req.query.search as string | undefined;
 
-      const result = await businessAdminService.findAll(page, limit, status, planType);
+      const result = await businessAdminService.findAll(page, limit, status, planType, search);
 
       return res.status(result.status).json(result);
 
