@@ -13,8 +13,9 @@ export class SubscriptionPaymentAdminController {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const status = req.query.status as string | undefined;
+      const search = req.query.search as string | undefined;
 
-      const result = await subscriptionPaymentService.listForAdmin(page, limit, status);
+      const result = await subscriptionPaymentService.listForAdmin(page, limit, status, search);
 
       return res.status(result.status).json(result);
 
