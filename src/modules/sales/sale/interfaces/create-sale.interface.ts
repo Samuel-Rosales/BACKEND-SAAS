@@ -44,4 +44,5 @@ export interface CreateSaleInterface {
     totalAmount?: Decimal; // Monto total final (para validación)
     subTotal?: Decimal; // Monto subtotal (para validación)
     taxAmount?: Decimal; // Monto total de impuestos (para validación)
+    orderIds?: number[]; // IDs de pedidos de restaurante a marcar como pagados
 }
