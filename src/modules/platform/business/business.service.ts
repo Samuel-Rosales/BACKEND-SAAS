@@ -200,7 +200,7 @@ export class BusinessService {
                     select: { role: { select: { name: true, code: true } } } 
                   },
                   subscription: { select: { status: true, planType: true, endDate: true } },
-                  businessCategory: { select: { name: true } },
+                  businessCategory: { select: { name: true, isRestaurant: true } },
                   subscriptionPayments: {},
                   // ❌ Eliminamos exchangeRates de aquí.
                   // No podemos confiar en una simple relación de base de datos 
@@ -236,6 +236,7 @@ export class BusinessService {
               memberPermissions: memberRoleCode
                   ? await getRolePermissions(memberRoleCode)
                   : [],
+              isRestaurant: business.businessCategory.isRestaurant,
               
               // Inyectamos la tasa correcta calculada
               // Lo enviamos como un objeto único o array según lo espere tu frontend

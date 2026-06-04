@@ -10,7 +10,8 @@ export class BusinessCategoryService {
             const category = await prisma.businessCategory.create({
                 data: {
                     name: data.name,
-                    description: data.description
+                    description: data.description,
+                    isRestaurant: data.isRestaurant ?? false
                 }
             });
 

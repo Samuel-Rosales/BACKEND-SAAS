@@ -16,6 +16,10 @@ export class BusinessCategoryValidator {
         .notEmpty().withMessage('La descripción es obligatoria')
         .isString()
         .isLength({ min: 5, max: 500 }).withMessage('La descripción debe tener entre 5 y 500 caracteres'),
+
+        body('isRestaurant')
+        .optional()
+        .isBoolean().withMessage('isRestaurant debe ser un valor booleano'),
     ];
 
     public validateUpdate: ValidationChain[] = [
