@@ -369,7 +369,8 @@ export class OrderService {
     async cancel(businessId: number, id: number) {
         try {
             const order = await prisma.order.findFirst({
-                where: { id, businessId }
+                where: { id, businessId },
+                include: { items: true }
             });
 
             if (!order) {
@@ -404,21 +405,12 @@ export class OrderService {
                 };
             }
 
-            const updatedOrder = await prisma.order.update({
-                where: { id },
-                data: {
-                    status: 'CANCELLED',
-                    completedAt: new Date()
-                },
-                include: {
-                    table: { select: { id: true, name: true } },
-                    client: { select: { id: true, name: true } },
-                    items: {
-                        include: {
-                            product: { select: { id: true, name: true } }
-                        }
-                    }
-                }
+            await prisma.orderItem.deleteMany({
+                where: { orderId: id }
+            });
+
+            await prisma.order.delete({
+                where: { id }
             });
 
             if (order.tableId) {
@@ -431,7 +423,7 @@ export class OrderService {
             return {
                 message: 'Pedido cancelado exitosamente',
                 status: 200,
-                data: updatedOrder
+                data: null
             };
 
         } catch (error) {
