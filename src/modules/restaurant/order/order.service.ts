@@ -169,6 +169,10 @@ export class OrderService {
                 whereClause.tableId = query.tableId;
             }
 
+            whereClause.NOT = [
+                { status: 'DELIVERED', isPaid: true }
+            ];
+
             const orders = await prisma.order.findMany({
                 where: whereClause,
                 orderBy: { createdAt: 'desc' },
