@@ -30,6 +30,55 @@ export class BusinessAdminService {
     return created;
   }
   /**
+   * GET /api/v1/admin/businesses/:id
+   */
+  async findOne(businessId: number) {
+    try {
+      const business = await prisma.business.findUnique({
+        where: { id: businessId },
+        include: {
+          subscription: true,
+          businessCategory: true,
+          members: {
+            where: { 
+              role: { code: 'OWNER' } 
+            },
+            include: {
+              user: {
+                include: {
+                  contacts: true
+                }
+              },
+              role: true
+            }
+          }
+        }
+      });
+
+      if (!business) {
+        return {
+          message: 'Negocio no encontrado',
+          status: 404,
+          data: null,
+        };
+      }
+
+      return {
+        message: 'Detalles del negocio obtenidos exitosamente',
+        status: 200,
+        data: business,
+      };
+    } catch (error) {
+      console.error('BusinessAdminService.findOne error:', error);
+      return {
+        message: 'Error al obtener el detalle del negocio',
+        status: 500,
+        data: null,
+      };
+    }
+  }
+
+  /**
    * GET /api/v1/admin/businesses
    */
   async findAll(page: number = 1, limit: number = 50, status?: string, planType?: string, search?: string) {
