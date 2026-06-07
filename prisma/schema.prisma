@@ -284,6 +284,7 @@ model ExchangeRate {
   businessId  Int?
 
   rate        Decimal  @db.Decimal(10, 4) // Ej: 54.3000 (4 decimales para precisión)
+  date        DateTime? @db.Date  // Fecha a la que aplica esta tasa (sin hora)
   createdAt   DateTime @default(now()) // Histórico: permite ver cuánto valía el dólar hace 1 mes
   isActive    Boolean  @default(true)
 
