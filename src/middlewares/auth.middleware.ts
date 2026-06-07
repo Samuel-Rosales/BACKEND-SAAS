@@ -55,7 +55,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
           isActive: true,
         },
       });
-
+ 
       // Si NO hay membresía:
       // - Super admin: permitimos seleccionar el negocio, pero sin membershipId/roleId.
       // - Usuario normal: 403.
