@@ -369,29 +369,8 @@ export class ExchangeRateService {
                 // A. Convertimos fecha API a string corto "YYYY-MM-DD"
                 const apiDate = new Date(apiDateRaw).toISOString().split('T')[0];
 
-                if (!lastRate.date) {
-                    //console.warn('⚠️ La última tasa en DB no tiene fecha. Se recomienda corregir este registro para futuras comparaciones precisas.');
-                    // Sin fecha, no podemos comparar correctamente. Asumimos que es diferente para no omitir la actualización.
-                    return await prisma.exchangeRate.create({
-                        data: {
-                            rate: rateValue,
-                            source: 'API_BCV',
-                            date: new Date(apiDateRaw),
-                            isActive: true,
-                            businessId: null,
-                        },
-                        select: {
-                            id: true,
-                            businessId: true,
-                            rate: true,
-                            source: true,
-                            isActive: true,
-                            createdAt: true,
-                        },
-                    });
-                }
                 // B. Convertimos fecha DB a string corto "YYYY-MM-DD"
-                const dbDate = new Date(lastRate.date).toISOString().split('T')[0];
+                const dbDate = new Date(lastRate.createdAt).toISOString().split('T')[0];
 
                 //console.log(`🔎 Comparando fechas: API[${apiDate}] vs DB[${dbDate}]`);
 
@@ -411,7 +390,7 @@ export class ExchangeRateService {
                     rate: rateValue,
                     // Asegúrate de importar tu Enum o usar el string directo
                     source: 'API_BCV', // O ExchangeRateStrategy.API_BCV
-                    date: new Date(apiDateRaw),
+                    createdAt: new Date(apiDateRaw),
                     isActive: true,
                     businessId: null, // Si es global
                 }

@@ -13,8 +13,6 @@ export async function resolveBusinessExchangeRate(
     // Por defecto usa la instancia global, pero permite recibir una transacción
     tx: PrismaTx = prisma 
 ) {
-    const dateToday = new Date();
-
     // 1. Buscamos la configuración del negocio
     const business = await tx.business.findUnique({
         where: { id: businessId },
@@ -40,10 +38,7 @@ export async function resolveBusinessExchangeRate(
         where: {
             businessId: targetBusinessId,
             source: targetSource,
-            isActive: true,
-            date: {
-                lte: dateToday // La tasa debe ser válida para hoy o antes
-            }
+            isActive: true
         },
         orderBy: { createdAt: 'desc' } // La más reciente (LIFO)
     });
