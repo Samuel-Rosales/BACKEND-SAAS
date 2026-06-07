@@ -19,10 +19,12 @@ export interface CreateSaleItemDto {
 
 export interface CreateSalePaymentDto {
     paymentMethodId: number;
+    amount: number;
+    reference: string;
     exchangeRateId: number;
-    amount: Decimal; // Monto nominal (ej: 100 Bs)
-    reference?: string;
+    paymentProofUrl?: string; // Comprobante de pago
 }
+
 
 export interface CreateSaleInterface {
     clientId: number;
