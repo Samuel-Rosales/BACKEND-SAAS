@@ -18,8 +18,13 @@ router.post(
 
 router.get(
     '/me', 
-    authMiddleware, // 🔒 Obligatorio: Esto valida el token e inyecta req.user
+    authMiddleware,
     controller.getMe
+);
+
+router.post(
+    '/refresh',
+    controller.refresh
 );
 
 export const AuthRoute = router;
