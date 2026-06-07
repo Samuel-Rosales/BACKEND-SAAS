@@ -62,11 +62,20 @@ export class BusinessService {
             address: data.address,
             logoUrl: data.logoUrl,
             businessCategoryId: data.businessCategoryId,
+            rateStrategy: ExchangeRateStrategy.API_BCV,
             // C. Crear la relación BusinessMember automáticamente
             members: {
               create: {
                 userId: userId,
                 roleId: adminRole.id,
+                isActive: true
+              }
+            },
+            // E. Crear un Depósito por defecto
+            depots: {
+              create: {
+                name: 'Almacén Principal',
+                location: '',
                 isActive: true
               }
             },
