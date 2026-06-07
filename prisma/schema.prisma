@@ -671,18 +671,20 @@ model SalePayment {
   paymentMethodId Int
   paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
   amount          Decimal       @db.Decimal(15, 2)
-
+  
   exchangeRateId  Int // Si pagaron en Bs, qué tasa se usó
-
+  exchangeRate    ExchangeRate @relation(fields: [exchangeRateId], references: [id])
+  
   reference       String // Nro de referencia bancaria
+  paymentProofUrl String? // Comprobante de pago (Cloudinary URL)
   date            DateTime      @default(now())
-
+  
   cashRegisterId  Int? 
   cashRegister    CashRegister? @relation(fields: [cashRegisterId], references: [id])
-
+  
   sale         Sale         @relation(fields: [saleId], references: [id])
-  exchangeRate ExchangeRate @relation(fields: [exchangeRateId], references: [id])
 }
+
 
 // ==========================================
 // COMPRAS Y PROVEEDORES

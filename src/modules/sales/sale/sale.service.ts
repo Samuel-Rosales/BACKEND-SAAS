@@ -1180,16 +1180,18 @@ export class SaleService {
                     throw new BusinessError(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`, 400);
                 }
 
-                // 5. Crear el registro del Pago (Histórico)
-                const newPayment = await tx.salePayment.create({
-                    data: {
-                        saleId,
-                        paymentMethodId: data.paymentMethodId,
-                        exchangeRateId: exchangeRate.id,
-                        amount: new Decimal(data.amount), // Guardamos el monto original
-                        reference: data.reference || "N/A"
-                    }
-                });
+                    // 5. Crear el registro del Pago (Histórico)
+                    const newPayment = await tx.salePayment.create({
+                        data: {
+                            saleId,
+                            paymentMethodId: data.paymentMethodId,
+                            exchangeRateId: exchangeRate.id,
+                            amount: new Decimal(data.amount), // Guardamos el monto original
+                            reference: data.reference || "N/A",
+                            paymentProofUrl: data.paymentProofUrl
+                        }
+                    });
+
 
                 // =================================================================
                 // 6. LÓGICA DE CASCADA DE CUOTAS (Waterfall)
@@ -1494,16 +1496,18 @@ export class SaleService {
                     ? originalAmount / rate
                     : originalAmount;
 
-                return {
-                    id: p.id,
-                    date: p.date,
-                    methodName: p.paymentMethod.name,
-                    currency: p.paymentMethod.currency,
-                    originalAmount,
-                    rateUsed: rate,
-                    usdEquivalent: Number(usdEquivalent.toFixed(2)),
-                    reference: p.reference
-                };
+                                return {
+                                    id: p.id,
+                                    date: p.date,
+                                    methodName: p.paymentMethod.name,
+                                    currency: p.paymentMethod.currency,
+                                    originalAmount,
+                                    rateUsed: rate,
+                                    usdEquivalent: Number(usdEquivalent.toFixed(2)),
+                                    reference: p.reference,
+                                    paymentProofUrl: p.paymentProofUrl
+                                };
+
             });
 
             // 4. ✅ Map Installments (New Section)
