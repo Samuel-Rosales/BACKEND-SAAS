@@ -280,6 +280,25 @@ model SubscriptionPayment {
   @@unique([businessId, reference])
 }
 
+model SubscriptionPaymentMethod {
+  id        Int         @id @default(autoincrement())
+  name      String      // Ej: "Pago Móvil Banesco", "Zelle Personal"
+  type      PaymentType // Reutiliza enum existente
+  isActive  Boolean     @default(true)
+  currency  String      // "USD" o "VES"
+
+  // Datos específicos del método (JSON flexible)
+  // Ejemplo Pago Móvil: { "bank": "Banesco", "phone": "0412...", "ci": "26554121" }
+  // Ejemplo Zelle: { "email": "correo@ejemplo.com", "name": "Juan Pérez" }
+  details   Json?
+
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([name])
+}
+
 model ExchangeRate {
   id          Int      @id @default(autoincrement())
   businessId  Int?
