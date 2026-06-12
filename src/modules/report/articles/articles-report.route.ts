@@ -10,19 +10,19 @@ router.use(authMiddleware);
 
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.getOverview
 );
 
 router.get(
     '/ranking',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.getRanking
 );
 
 router.get(
     '/pdf',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.generatePDF
 );
 

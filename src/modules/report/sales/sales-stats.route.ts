@@ -13,7 +13,7 @@ router.use(authMiddleware);
 // Protegemos la ruta para asegurarnos de tener el usuario y el businessId
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_SALES_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.SalesMetrics
 );
 

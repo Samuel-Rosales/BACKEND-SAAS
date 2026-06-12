@@ -10,37 +10,37 @@ router.use(authMiddleware);
 
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.getOverview
 );
 
 router.get(
     '/by-cost',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.getByCost
 );
 
 router.get(
     '/by-sale',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.getBySale
 );
 
 router.get(
     '/by-category',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.getByCategory
 );
 
 router.get(
     '/control-stock-pdf',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.generateControlStockPDF
 );
 
 router.get(
     '/valued-stock-pdf',
-    requireBusinessPermission('REPORTS_INVENTORY_VIEW'),
+    requireBusinessPermission('REPORTS_VIEW'),
     controller.generateValuedStockPDF
 );
 
