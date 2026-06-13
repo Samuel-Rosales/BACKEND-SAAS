@@ -158,7 +158,8 @@ export class CashRegisterReportService {
 
             let totalUSD = new Decimal(0);
             let totalVES = new Decimal(0);
-            let payoutsUSD = new Decimal(0);
+            let cashPaymentsUSD = new Decimal(0);
+            let cashRefundsUSD = new Decimal(0);
             const salesCount = new Set(payments.map(p => p.saleId)).size;
 
             const methodStats = new Map<number, {
@@ -186,6 +187,10 @@ export class CashRegisterReportService {
 
                 totalUSD = totalUSD.add(amtUSD);
                 totalVES = totalVES.add(amtVES);
+
+                if (pay.paymentMethod.type === 'CASH') {
+                    cashPaymentsUSD = cashPaymentsUSD.add(amtUSD);
+                }
 
                 const existing = methodStats.get(pay.paymentMethodId);
                 if (existing) {
@@ -220,7 +225,10 @@ export class CashRegisterReportService {
                 // Subtract refunds from net collected totals
                 totalUSD = totalUSD.sub(amtUSD);
                 totalVES = totalVES.sub(amtVES);
-                payoutsUSD = payoutsUSD.add(amtUSD);
+
+                if (ref.paymentMethod.type === 'CASH') {
+                    cashRefundsUSD = cashRefundsUSD.add(amtUSD);
+                }
 
                 const existing = methodStats.get(ref.paymentMethodId);
                 if (existing) {
@@ -251,8 +259,9 @@ export class CashRegisterReportService {
                 };
             }).sort((a, b) => b.amountUSD - a.amountUSD);
 
-            // Final Cash Estimado = Apertura + Recaudación Total - Egresos
-            const finalCashUSD = initialCashUSD.add(totalUSD).sub(payoutsUSD);
+            // Final Cash Estimado = Apertura + Ventas en Efectivo - Egresos en Efectivo
+            const payoutsUSD = cashRefundsUSD; // Salidas declaradas en efectivo
+            const finalCashUSD = initialCashUSD.add(cashPaymentsUSD).sub(cashRefundsUSD);
 
             return {
                 status: 200,
