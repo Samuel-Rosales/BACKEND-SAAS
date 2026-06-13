@@ -9,7 +9,7 @@ type DateRangeQuery = {
 
 type RankingParams = DateRangeQuery & {
     categoryId?: number | string;
-    sortBy?: 'mostSold' | 'leastSold' | 'mostProfitable' | 'leastProfitable';
+    sortBy?: 'mostSold' | 'leastSold' | 'mostProfitable' | 'leastProfitable' | 'mostRotation' | 'leastRotation';
     page?: number | string;
     limit?: number | string;
 };
@@ -161,6 +161,8 @@ export class ArticlesReportService {
                     case 'leastSold': return Prisma.sql`"totalUnitsSold" ASC`;
                     case 'mostProfitable': return Prisma.sql`"netProfit" DESC`;
                     case 'leastProfitable': return Prisma.sql`"netProfit" ASC`;
+                    case 'mostRotation': return Prisma.sql`"rotation" DESC`;
+                    case 'leastRotation': return Prisma.sql`"rotation" ASC`;
                     default: return Prisma.sql`"totalUnitsSold" DESC`;
                 }
             })();
@@ -186,7 +188,33 @@ export class ArticlesReportService {
                         CASE WHEN (SUM(si.quantity) * p."costPrice") > 0
                             THEN ROUND(((SUM(si."subTotal") - (SUM(si.quantity) * p."costPrice")) / (SUM(si.quantity) * p."costPrice") * 100)::numeric, 2)
                             ELSE 0
-                        END as "profitMargin"
+                        END as "profitMargin",
+                        COALESCE((
+                            SELECT SUM(sm."quantity")
+                            FROM "StockMovement" sm
+                            WHERE sm."productId" = p.id
+                              AND sm."date" < ${start}
+                        ), 0)::numeric as "initialStock",
+                        COALESCE((
+                            SELECT SUM(sl."quantity")
+                            FROM "StockLot" sl
+                            WHERE sl."productId" = p.id
+                              AND sl."quantity" > 0
+                        ), 0)::numeric as "currentStock",
+                        CASE
+                            WHEN (
+                                COALESCE((SELECT SUM(sm."quantity") FROM "StockMovement" sm WHERE sm."productId" = p.id AND sm."date" < ${start}), 0) +
+                                COALESCE((SELECT SUM(sl."quantity") FROM "StockLot" sl WHERE sl."productId" = p.id AND sl."quantity" > 0), 0)
+                            ) / 2 > 0
+                            THEN ROUND(
+                                (SUM(si.quantity) / (
+                                    (COALESCE((SELECT SUM(sm."quantity") FROM "StockMovement" sm WHERE sm."productId" = p.id AND sm."date" < ${start}), 0) +
+                                     COALESCE((SELECT SUM(sl."quantity") FROM "StockLot" sl WHERE sl."productId" = p.id AND sl."quantity" > 0), 0)
+                                    ) / 2
+                                ))::numeric, 2
+                            )
+                            ELSE 0
+                        END as "rotation"
                     FROM "SaleItem" si
                     INNER JOIN "Sale" s ON si."saleId" = s.id
                     INNER JOIN "Product" p ON si."productId" = p.id
@@ -248,7 +276,10 @@ export class ArticlesReportService {
                 totalRevenue: Number(p.totalRevenue),
                 totalCost: Number(p.totalCost),
                 netProfit: Number(p.netProfit),
-                profitMargin: Number(p.profitMargin)
+                profitMargin: Number(p.profitMargin),
+                initialStock: Number(p.initialStock),
+                currentStock: Number(p.currentStock),
+                rotation: Number(p.rotation)
             }));
 
             const summary = summaryResult[0];
@@ -283,7 +314,7 @@ export class ArticlesReportService {
         }
     }
 
-    async getPDFData(businessId: number, range?: DateRangeQuery) {
+    async getPDFData(businessId: number, range?: DateRangeQuery & { sortBy?: string; categoryId?: string }) {
         try {
             const business = await prisma.business.findUnique({
                 where: { id: businessId },
@@ -295,6 +326,24 @@ export class ArticlesReportService {
             }
 
             const { start, end } = resolveDateRange(range);
+
+            const sortBy = range?.sortBy || 'mostSold';
+            const categoryId = range?.categoryId ? Number(range.categoryId) : null;
+
+            const orderClause = (() => {
+                switch (sortBy) {
+                    case 'leastSold': return Prisma.sql`"totalUnitsSold" ASC`;
+                    case 'mostProfitable': return Prisma.sql`"netProfit" DESC`;
+                    case 'leastProfitable': return Prisma.sql`"netProfit" ASC`;
+                    case 'mostRotation': return Prisma.sql`"rotation" DESC`;
+                    case 'leastRotation': return Prisma.sql`"rotation" ASC`;
+                    default: return Prisma.sql`"totalUnitsSold" DESC`;
+                }
+            })();
+
+            const categoryCondition = categoryId
+                ? Prisma.sql`AND p."categoryId" = ${categoryId}`
+                : Prisma.empty;
 
             const products = await prisma.$queryRaw<any[]>`
                 SELECT
@@ -312,7 +361,33 @@ export class ArticlesReportService {
                     CASE WHEN (SUM(si.quantity) * p."costPrice") > 0
                         THEN ROUND(((SUM(si."subTotal") - (SUM(si.quantity) * p."costPrice")) / (SUM(si.quantity) * p."costPrice") * 100)::numeric, 2)
                         ELSE 0
-                    END as "profitMargin"
+                    END as "profitMargin",
+                    COALESCE((
+                        SELECT SUM(sm."quantity")
+                        FROM "StockMovement" sm
+                        WHERE sm."productId" = p.id
+                          AND sm."date" < ${start}
+                    ), 0)::numeric as "initialStock",
+                    COALESCE((
+                        SELECT SUM(sl."quantity")
+                        FROM "StockLot" sl
+                        WHERE sl."productId" = p.id
+                          AND sl."quantity" > 0
+                    ), 0)::numeric as "currentStock",
+                    CASE
+                        WHEN (
+                            COALESCE((SELECT SUM(sm."quantity") FROM "StockMovement" sm WHERE sm."productId" = p.id AND sm."date" < ${start}), 0) +
+                            COALESCE((SELECT SUM(sl."quantity") FROM "StockLot" sl WHERE sl."productId" = p.id AND sl."quantity" > 0), 0)
+                        ) / 2 > 0
+                        THEN ROUND(
+                            (SUM(si.quantity) / (
+                                (COALESCE((SELECT SUM(sm."quantity") FROM "StockMovement" sm WHERE sm."productId" = p.id AND sm."date" < ${start}), 0) +
+                                 COALESCE((SELECT SUM(sl."quantity") FROM "StockLot" sl WHERE sl."productId" = p.id AND sl."quantity" > 0), 0)
+                                ) / 2
+                            ))::numeric, 2
+                        )
+                        ELSE 0
+                    END as "rotation"
                 FROM "SaleItem" si
                 INNER JOIN "Sale" s ON si."saleId" = s.id
                 INNER JOIN "Product" p ON si."productId" = p.id
@@ -323,8 +398,9 @@ export class ArticlesReportService {
                   AND s."deletedAt" IS NULL
                   AND s."createdAt" >= ${start}
                   AND s."createdAt" <= ${end}
+                  ${categoryCondition}
                 GROUP BY p.id, c.name, u.symbol
-                ORDER BY "totalUnitsSold" DESC
+                ORDER BY ${orderClause}
             `;
 
             const totals = products.reduce(
@@ -348,6 +424,7 @@ export class ArticlesReportService {
                     logoUrl: business.logoUrl,
                     fromDate,
                     toDate,
+                    sortBy,
                     products: products.map((p: any) => ({
                         id: Number(p.id),
                         name: p.name,
@@ -360,7 +437,10 @@ export class ArticlesReportService {
                         totalRevenue: Number(p.totalRevenue),
                         totalCost: Number(p.totalCost),
                         netProfit: Number(p.netProfit),
-                        profitMargin: Number(p.profitMargin)
+                        profitMargin: Number(p.profitMargin),
+                        initialStock: Number(p.initialStock),
+                        currentStock: Number(p.currentStock),
+                        rotation: Number(p.rotation)
                     })),
                     totals
                 }

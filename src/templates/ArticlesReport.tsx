@@ -17,6 +17,9 @@ type ArticleProduct = {
   totalCost: number;
   netProfit: number;
   profitMargin: number;
+  initialStock: number;
+  currentStock: number;
+  rotation: number;
 };
 
 export interface ArticlesReportProps {
@@ -25,6 +28,7 @@ export interface ArticlesReportProps {
   fromDate: string;
   toDate: string;
   products: ArticleProduct[];
+  sortBy: string;
   totals: {
     totalUnits: number;
     totalRevenue: number;
@@ -67,18 +71,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#d1d5db',
     paddingVertical: 5,
-    paddingHorizontal: 3,
+    paddingHorizontal: 2,
     justifyContent: 'center'
   },
   headCell: { backgroundColor: '#f9fafb', fontWeight: 'bold' },
-  colRank: { width: '5%', textAlign: 'center' },
-  colProduct: { width: '22%' },
-  colCategory: { width: '14%' },
-  colUnits: { width: '9%', textAlign: 'right' },
-  colRevenue: { width: '14%', textAlign: 'right' },
-  colCost: { width: '14%', textAlign: 'right' },
-  colProfit: { width: '12%', textAlign: 'right' },
-  colMargin: { width: '10%', textAlign: 'right' },
+  colRank: { width: '4%', textAlign: 'center' },
+  colProduct: { width: '19%' },
+  colCategory: { width: '12%' },
+  colUnits: { width: '8%', textAlign: 'right' },
+  colRevenue: { width: '12%', textAlign: 'right' },
+  colCost: { width: '12%', textAlign: 'right' },
+  colProfit: { width: '11%', textAlign: 'right' },
+  colMargin: { width: '9%', textAlign: 'right' },
+  colRotation: { width: '8%', textAlign: 'center' },
+  colStock: { width: '5%', textAlign: 'right' },
   productSku: { fontSize: 7, color: '#6b7280', marginTop: 1 },
   totalBox: {
     marginTop: 10,
@@ -87,7 +93,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb'
   },
   totalRow: { flexDirection: 'row' },
-  totalLabel: { width: '41%', fontWeight: 'bold' },
+  totalLabel: { width: '43%', fontWeight: 'bold' },
   totalCell: { fontWeight: 'bold', textAlign: 'right' },
   profitPositive: { color: '#059669' },
   profitNegative: { color: '#dc2626' }
@@ -95,15 +101,24 @@ const styles = StyleSheet.create({
 
 const money = (value: number) => new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'USD' }).format(value || 0);
 
-const ArticlesReportPDF = ({ businessName, logoUrl, fromDate, toDate, products, totals }: ArticlesReportProps) => (
+const sortLabels: Record<string, string> = {
+  mostSold: 'unidades vendidas (mayor a menor)',
+  leastSold: 'unidades vendidas (menor a mayor)',
+  mostProfitable: 'ganancia neta (mayor a menor)',
+  leastProfitable: 'ganancia neta (menor a mayor)',
+  mostRotation: 'rotación de inventario (mayor a menor)',
+  leastRotation: 'rotación de inventario (menor a mayor)',
+};
+
+const ArticlesReportPDF = ({ businessName, logoUrl, fromDate, toDate, products, totals, sortBy }: ArticlesReportProps) => (
   <Document>
-    <Page size="A4" style={styles.page}>
+    <Page size="A4" orientation="landscape" style={styles.page}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image style={styles.logo} src={logoUrl || logoPath} />
           <View style={styles.titleWrap}>
             <Text style={styles.title}>Reporte de Artículos</Text>
-            <Text style={styles.subtitle}>Ranking por ventas y ganancia</Text>
+            <Text style={styles.subtitle}>Ranking por ventas, ganancia y rotación</Text>
             <Text style={styles.business}>{businessName}</Text>
           </View>
         </View>
@@ -114,7 +129,7 @@ const ArticlesReportPDF = ({ businessName, logoUrl, fromDate, toDate, products, 
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Ranking de artículos por unidades vendidas</Text>
+      <Text style={styles.sectionTitle}>Ranking de artículos por {sortLabels[sortBy] || 'unidades vendidas'}</Text>
 
       <View style={styles.table}>
         <View style={styles.row}>
@@ -126,6 +141,8 @@ const ArticlesReportPDF = ({ businessName, logoUrl, fromDate, toDate, products, 
           <Text style={[styles.cell, styles.headCell, styles.colCost]}>Costo</Text>
           <Text style={[styles.cell, styles.headCell, styles.colProfit]}>Ganancia</Text>
           <Text style={[styles.cell, styles.headCell, styles.colMargin]}>Margen</Text>
+          <Text style={[styles.cell, styles.headCell, styles.colRotation]}>Rotación</Text>
+          <Text style={[styles.cell, styles.headCell, styles.colStock]}>Stock</Text>
         </View>
 
         {products.map((item, index) => (
@@ -145,6 +162,10 @@ const ArticlesReportPDF = ({ businessName, logoUrl, fromDate, toDate, products, 
             <Text style={[styles.cell, styles.colMargin, item.profitMargin >= 0 ? styles.profitPositive : styles.profitNegative]}>
               {item.profitMargin.toFixed(1)}%
             </Text>
+            <Text style={[styles.cell, styles.colRotation]}>
+              {item.rotation.toFixed(2)}x
+            </Text>
+            <Text style={[styles.cell, styles.colStock]}>{item.currentStock.toLocaleString('es-VE')}</Text>
           </View>
         ))}
       </View>
@@ -161,6 +182,8 @@ const ArticlesReportPDF = ({ businessName, logoUrl, fromDate, toDate, products, 
           <Text style={[styles.cell, styles.colMargin]}>
             {totals.totalCost > 0 ? ((totals.totalProfit / totals.totalCost) * 100).toFixed(1) : '0.0'}%
           </Text>
+          <Text style={[styles.cell, styles.colRotation]}> </Text>
+          <Text style={[styles.cell, styles.colStock]}> </Text>
         </View>
       </View>
     </Page>
