@@ -54,6 +54,9 @@ export type BusinessPermissionCode =
   | "FINANCE_READ"
 
   | "REPORTS_VIEW"
+  | "REPORTS_SALES_VIEW"
+  | "REPORTS_PURCHASES_VIEW"
+  | "REPORTS_INVENTORY_VIEW"
 
   | "TABLES_READ"
   | "TABLES_WRITE"
