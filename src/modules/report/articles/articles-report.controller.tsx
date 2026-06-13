@@ -73,7 +73,7 @@ export class ArticlesReportController {
     generatePDF = async (req: Request, res: Response) => {
         try {
             const { businessId } = req.user;
-            const { fromDate, toDate, tzOffset } = req.query;
+            const { fromDate, toDate, tzOffset, sortBy, categoryId } = req.query;
 
             if (!businessId) {
                 return res.status(400).json({ message: 'Falta el header x-business-id' });
@@ -82,7 +82,9 @@ export class ArticlesReportController {
             const result = await articlesService.getPDFData(businessId, {
                 fromDate: fromDate as string | undefined,
                 toDate: toDate as string | undefined,
-                tzOffset: tzOffset === undefined ? undefined : Number(tzOffset)
+                tzOffset: tzOffset === undefined ? undefined : Number(tzOffset),
+                sortBy: sortBy as string | undefined,
+                categoryId: categoryId as string | undefined
             });
 
             if (!result.data) {
@@ -97,6 +99,7 @@ export class ArticlesReportController {
                     toDate={result.data.toDate}
                     products={result.data.products}
                     totals={result.data.totals}
+                    sortBy={result.data.sortBy}
                 />
             );
 
