@@ -13,13 +13,13 @@ router.use(authMiddleware);
 // Protegemos la ruta para asegurarnos de tener el usuario y el businessId
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_PURCHASES_VIEW'),
     controller.PurchaseMetrics
 );
 
 router.get(
     '/grouped-report',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_PURCHASES_VIEW'),
     controller.generateGroupedReportPDF
 );
 
