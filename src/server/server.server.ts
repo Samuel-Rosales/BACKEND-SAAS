@@ -23,6 +23,7 @@ import { PurchaseReportRoute } from '@/modules/report/purchase/purchase-report.r
 import { InventoryReportRoute } from '@/modules/report/inventory//inventory-report.route';
 import { ArticlesReportRoute } from '@/modules/report/articles/articles-report.route';
 import { CashRegisterReportRoute } from '@/modules/report/cash-register/cash-register-report.route';
+import { CollectionsReportRoute } from '@/modules/report/collections/collections-report.route';
 
 import { AdminRoute } from '@/modules/admin';
 import { initCronJobs } from '@/cron';
@@ -96,6 +97,7 @@ export class Server {
             inventoryReports: `${this.prefix}/report/inventory`,
             articleReports: `${this.prefix}/report/articles`,
             cashRegisterReports: `${this.prefix}/report/cash-register`,
+            collectionsReports: `${this.prefix}/report/collections`,
 
             // MÓDULO ADMIN
             admin: `${this.prefix}/admin`,
@@ -174,6 +176,7 @@ export class Server {
         this.app.use(this.paths.inventoryReports, InventoryReportRoute);
         this.app.use(this.paths.articleReports, ArticlesReportRoute);
         this.app.use(this.paths.cashRegisterReports, CashRegisterReportRoute);
+        this.app.use(this.paths.collectionsReports, CollectionsReportRoute);
         this.app.use(this.paths.admin, AdminRoute);
 
         this.app.use((req, res) => {
