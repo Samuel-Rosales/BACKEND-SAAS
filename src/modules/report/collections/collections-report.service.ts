@@ -74,7 +74,7 @@ export class CollectionsReportService {
         }
 
         try {
-            const [debtAggregation, paymentsInPeriod, debtorsCount, overdueInstallmentsCount] = await Promise.all([
+            const [debtAggregation, paymentsInPeriod, debtorsCount, overdueInstallmentsCount, expectedInstallments] = await Promise.all([
                 // 1. Total por cobrar (deuda global, NO filtrada por fecha de creación)
                 prisma.sale.aggregate({
                     _sum: { remainingBalance: true },
@@ -125,11 +125,32 @@ export class CollectionsReportService {
                         status: { in: ['PENDING', 'PARTIAL'] },
                         dueDate: { lt: new Date() }
                     }
+                }),
+
+                // 5. Cuotas que vencen en el período seleccionado (para saber cuánto se espera cobrar)
+                prisma.saleInstallment.findMany({
+                    where: {
+                        sale: {
+                            businessId,
+                            conditions: 'CREDIT',
+                            status: 'COMPLETED',
+                            deletedAt: null
+                        },
+                        status: { in: ['PENDING', 'PARTIAL'] },
+                        dueDate: { gte: rangeStart, lte: rangeEnd }
+                    },
+                    select: {
+                        amount: true,
+                        amountPaid: true
+                    }
                 })
             ]);
 
             const totalToCollect = debtAggregation._sum.remainingBalance ? Number(debtAggregation._sum.remainingBalance) : 0;
             const totalCollected = paymentsInPeriod._sum.amount ? Number(paymentsInPeriod._sum.amount) : 0;
+            const expectedInPeriod = expectedInstallments.reduce((sum, inst) => {
+                return sum + (Number(inst.amount) - Number(inst.amountPaid));
+            }, 0);
 
             return {
                 status: 200,
@@ -138,7 +159,8 @@ export class CollectionsReportService {
                     totalToCollect,
                     totalCollected,
                     debtorsCount: debtorsCount.length,
-                    overdueInstallmentsCount
+                    overdueInstallmentsCount,
+                    expectedInPeriod
                 }
             };
 
@@ -198,7 +220,13 @@ export class CollectionsReportService {
             status: 'COMPLETED',
             remainingBalance: { gt: 0 },
             deletedAt: null,
-            ...(rangeStart && rangeEnd ? { createdAt: { gte: rangeStart, lte: rangeEnd } } : {}),
+            ...(rangeStart && rangeEnd ? {
+                installments: {
+                    some: {
+                        dueDate: { gte: rangeStart, lte: rangeEnd }
+                    }
+                }
+            } : {}),
             ...(search ? {
                 client: {
                     OR: [
