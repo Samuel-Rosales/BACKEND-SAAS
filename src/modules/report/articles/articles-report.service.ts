@@ -12,6 +12,7 @@ type RankingParams = DateRangeQuery & {
     sortBy?: 'mostSold' | 'leastSold' | 'mostProfitable' | 'leastProfitable' | 'mostRotation' | 'leastRotation';
     page?: number | string;
     limit?: number | string;
+    search?: string;
 };
 
 const parseDateOnlyStart = (value: string, tzOffsetMinutes: number) => {
@@ -171,6 +172,10 @@ export class ArticlesReportService {
                 ? Prisma.sql`AND p."categoryId" = ${categoryId}`
                 : Prisma.empty;
 
+            const searchCondition = params.search
+                ? Prisma.sql`AND (p."name" ILIKE ${`%${params.search}%`} OR p."sku" ILIKE ${`%${params.search}%`})`
+                : Prisma.empty;
+
             const [products, totalResult, summaryResult] = await Promise.all([
                 prisma.$queryRaw<any[]>`
                     SELECT
@@ -226,6 +231,7 @@ export class ArticlesReportService {
                       AND s."createdAt" >= ${start}
                       AND s."createdAt" <= ${end}
                       ${categoryCondition}
+                      ${searchCondition}
                     GROUP BY p.id, c.name, u.symbol
                     ORDER BY ${orderClause}
                     LIMIT ${limit} OFFSET ${skip}
@@ -244,6 +250,7 @@ export class ArticlesReportService {
                           AND s."createdAt" >= ${start}
                           AND s."createdAt" <= ${end}
                           ${categoryCondition}
+                          ${searchCondition}
                     ) sub
                 `,
 
@@ -261,6 +268,7 @@ export class ArticlesReportService {
                       AND s."createdAt" >= ${start}
                       AND s."createdAt" <= ${end}
                       ${categoryCondition}
+                      ${searchCondition}
                 `
             ]);
 

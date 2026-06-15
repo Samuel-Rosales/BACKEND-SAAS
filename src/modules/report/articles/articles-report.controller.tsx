@@ -37,7 +37,7 @@ export class ArticlesReportController {
 
     getRanking = async (req: Request, res: Response) => {
         const { businessId } = req.user;
-        const { page, limit, fromDate, toDate, tzOffset, categoryId, sortBy } = req.query;
+        const { page, limit, fromDate, toDate, tzOffset, categoryId, sortBy, search } = req.query;
 
         if (!businessId) {
             return res.status(400).json({ message: 'Falta el header x-business-id' });
@@ -51,7 +51,8 @@ export class ArticlesReportController {
                 toDate: toDate as string | undefined,
                 tzOffset: tzOffset === undefined ? undefined : Number(tzOffset),
                 categoryId: categoryId as string | undefined,
-                sortBy: sortBy as any
+                sortBy: sortBy as any,
+                search: search as string | undefined
             });
 
             if (result.status !== 200) {
