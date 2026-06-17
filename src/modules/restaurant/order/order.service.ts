@@ -56,6 +56,15 @@ export class OrderService {
                     id: { in: data.items.map(item => item.productId) },
                     businessId,
                     isActive: true
+                },
+                include: {
+                    tax: {
+                        select: {
+                            id: true,
+                            name: true,
+                            rate: true,
+                        }
+                    }
                 }
             });
 
@@ -70,23 +79,26 @@ export class OrderService {
             const productMap = new Map(products.map(p => [p.id, p]));
 
             let subTotal = 0;
+            let taxAmount = 0;
             const itemsData = data.items.map(item => {
                 const product = productMap.get(item.productId);
                 if (!product) throw new Error('Producto inválido');
 
-                const itemSubTotal = item.quantity * item.unitPrice;
+                const itemSubTotal = item.quantity * item.salePrice;
+                const taxRate = Number(product.tax?.rate || 0);
+                const itemTax = itemSubTotal * taxRate;
                 subTotal += itemSubTotal;
+                taxAmount += itemTax;
 
                 return {
                     productId: item.productId,
                     quantity: item.quantity,
-                    unitPrice: item.unitPrice,
+                    salePrice: item.salePrice,
                     subTotal: itemSubTotal,
                     notes: item.notes || null
                 };
             });
 
-            const taxAmount = 0;
             const totalAmount = subTotal + taxAmount;
 
             const lastOrder = await prisma.order.findFirst({
@@ -156,6 +168,10 @@ export class OrderService {
             if (query?.tableId) {
                 whereClause.tableId = query.tableId;
             }
+
+            whereClause.NOT = [
+                { status: 'DELIVERED', isPaid: true }
+            ];
 
             const orders = await prisma.order.findMany({
                 where: whereClause,
@@ -357,7 +373,8 @@ export class OrderService {
     async cancel(businessId: number, id: number) {
         try {
             const order = await prisma.order.findFirst({
-                where: { id, businessId }
+                where: { id, businessId },
+                include: { items: true }
             });
 
             if (!order) {
@@ -392,21 +409,12 @@ export class OrderService {
                 };
             }
 
-            const updatedOrder = await prisma.order.update({
-                where: { id },
-                data: {
-                    status: 'CANCELLED',
-                    completedAt: new Date()
-                },
-                include: {
-                    table: { select: { id: true, name: true } },
-                    client: { select: { id: true, name: true } },
-                    items: {
-                        include: {
-                            product: { select: { id: true, name: true } }
-                        }
-                    }
-                }
+            await prisma.orderItem.deleteMany({
+                where: { orderId: id }
+            });
+
+            await prisma.order.delete({
+                where: { id }
             });
 
             if (order.tableId) {
@@ -419,7 +427,7 @@ export class OrderService {
             return {
                 message: 'Pedido cancelado exitosamente',
                 status: 200,
-                data: updatedOrder
+                data: null
             };
 
         } catch (error) {

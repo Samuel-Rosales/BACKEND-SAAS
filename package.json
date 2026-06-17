@@ -21,7 +21,8 @@
     "db:reset": "pnpx prisma migrate reset",
     "db:reset:seed": "pnpx prisma migrate reset --skip-generate && pnpm prisma db seed",
     "seed": "ts-node prisma/seed.ts",
-    "seed:permissions": "ts-node -r tsconfig-paths/register prisma/seed-permissions-only.ts"
+    "seed:permissions": "ts-node -r tsconfig-paths/register prisma/seed-permissions-only.ts",
+    "reset:permissions": "ts-node -r tsconfig-paths/register prisma/reset-permissions.ts"
   },
   "repository": {
     "type": "git",

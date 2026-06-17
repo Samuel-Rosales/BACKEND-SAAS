@@ -9,20 +9,38 @@ export class BusinessAdminController {
    */
   async findAll(req: Request, res: Response) {
     try {
-
+ 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const status = req.query.status as string | undefined;
       const planType = req.query.planType as string | undefined;
       const search = req.query.search as string | undefined;
-
+ 
       const result = await businessAdminService.findAll(page, limit, status, planType, search);
-
+ 
       return res.status(result.status).json(result);
-
+ 
     } catch (error) {
       console.error('BusinessAdminController.findAll error:', error);
+ 
+      return res.status(500).json({
+        message: 'Error interno del servidor',
+        status: 500,
+        data: null,
+      });
+    }
+  }
 
+  /**
+   * GET /api/v1/admin/businesses/:id
+   */
+  async findOne(req: Request, res: Response) {
+    try {
+      const businessId = parseInt(req.params.id as string);
+      const result = await businessAdminService.findOne(businessId);
+      return res.status(result.status).json(result);
+    } catch (error) {
+      console.error('BusinessAdminController.findOne error:', error);
       return res.status(500).json({
         message: 'Error interno del servidor',
         status: 500,
@@ -33,6 +51,7 @@ export class BusinessAdminController {
 
   /**
    * PATCH /api/v1/admin/businesses/:id/status
+
    */
   async toggleStatus(req: Request, res: Response) {
     try {

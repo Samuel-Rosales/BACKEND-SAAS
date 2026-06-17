@@ -19,10 +19,12 @@ export interface CreateSaleItemDto {
 
 export interface CreateSalePaymentDto {
     paymentMethodId: number;
+    amount: number;
+    reference: string;
     exchangeRateId: number;
-    amount: Decimal; // Monto nominal (ej: 100 Bs)
-    reference?: string;
+    paymentProofUrl?: string; // Comprobante de pago
 }
+
 
 export interface CreateSaleInterface {
     clientId: number;
@@ -44,4 +46,5 @@ export interface CreateSaleInterface {
     totalAmount?: Decimal; // Monto total final (para validación)
     subTotal?: Decimal; // Monto subtotal (para validación)
     taxAmount?: Decimal; // Monto total de impuestos (para validación)
+    orderIds?: number[]; // IDs de pedidos de restaurante a marcar como pagados
 }

@@ -15,15 +15,20 @@ export class AuthController {
     };
 
     getMe = async (req: Request, res: Response) => {
-        // El userId viene del token decodificado por el middleware
-        // Asegúrate de que tu Request tenga tipado el usuario (ej. req.user?.id)
         const userId = req.user!.id; 
-
         const { status, message, data } = await this.service.getMe(userId);
+        res.status(status).json({ message, data });
+    };
 
-        res.status(status).json({
-            message,
-            data
-        });
+    refresh = async (req: Request, res: Response) => {
+        const authHeader = req.headers.authorization;
+        const token = authHeader?.split(' ')[1];
+
+        if (!token) {
+            return res.status(401).json({ message: 'Token faltante', data: null });
+        }
+
+        const { status, message, data } = await this.service.refreshToken(token);
+        res.status(status).json({ message, data });
     };
 }

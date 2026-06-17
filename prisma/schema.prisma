@@ -128,6 +128,7 @@ model Business {
 
   address   String
   logoUrl   String? // Logo del negocio
+  closingNotificationPhone String? // Número de WhatsApp para reportes de cierre
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -277,6 +278,25 @@ model SubscriptionPayment {
 
   @@index([businessId, status, createdAt])
   @@unique([businessId, reference])
+}
+
+model SubscriptionPaymentMethod {
+  id        Int         @id @default(autoincrement())
+  name      String      // Ej: "Pago Móvil Banesco", "Zelle Personal"
+  type      PaymentType // Reutiliza enum existente
+  isActive  Boolean     @default(true)
+  currency  String      // "USD" o "VES"
+
+  // Datos específicos del método (JSON flexible)
+  // Ejemplo Pago Móvil: { "bank": "Banesco", "phone": "0412...", "ci": "26554121" }
+  // Ejemplo Zelle: { "email": "correo@ejemplo.com", "name": "Juan Pérez" }
+  details   Json?
+
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([name])
 }
 
 model ExchangeRate {
@@ -671,18 +691,20 @@ model SalePayment {
   paymentMethodId Int
   paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id]) // EFECTIVO, PAGO_MOVIL, ZELLE, ETC
   amount          Decimal       @db.Decimal(15, 2)
-
+  
   exchangeRateId  Int // Si pagaron en Bs, qué tasa se usó
-
+  exchangeRate    ExchangeRate @relation(fields: [exchangeRateId], references: [id])
+  
   reference       String // Nro de referencia bancaria
+  paymentProofUrl String? // Comprobante de pago (Cloudinary URL)
   date            DateTime      @default(now())
-
+  
   cashRegisterId  Int? 
   cashRegister    CashRegister? @relation(fields: [cashRegisterId], references: [id])
-
+  
   sale         Sale         @relation(fields: [saleId], references: [id])
-  exchangeRate ExchangeRate @relation(fields: [exchangeRateId], references: [id])
 }
+
 
 // ==========================================
 // COMPRAS Y PROVEEDORES
@@ -872,7 +894,7 @@ model OrderItem {
   orderId   Int
   productId Int
   quantity  Decimal @db.Decimal(18, 6)
-  unitPrice Decimal @db.Decimal(15, 2)
+  salePrice Decimal @db.Decimal(15, 2)
   subTotal  Decimal @db.Decimal(15, 2)
   notes     String?
 

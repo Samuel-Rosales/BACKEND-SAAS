@@ -5,7 +5,7 @@ import { stream, connectDB } from '../configs';
 
 import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute, PermissionRoute } from '../modules/aim';
 
-import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPaymentRoute, SubscriptionPlanRoute } from '../modules/platform';
+import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPaymentRoute, SubscriptionPaymentMethodRoute, SubscriptionPlanRoute } from '../modules/platform';
 
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
 
@@ -21,6 +21,11 @@ import { DashboardRoute } from '@/modules/report/dashboard/dashboard.routes';
 import { SalesReportRoute } from '@/modules/report/sales/sales-stats.route';
 import { PurchaseReportRoute } from '@/modules/report/purchase/purchase-report.route';
 import { InventoryReportRoute } from '@/modules/report/inventory//inventory-report.route';
+import { ArticlesReportRoute } from '@/modules/report/articles/articles-report.route';
+import { CashRegisterReportRoute } from '@/modules/report/cash-register/cash-register-report.route';
+import { CollectionsReportRoute } from '@/modules/report/collections/collections-report.route';
+import { FinancialReportRoute } from '@/modules/report/financial/financial-report.route';
+import { DepositsReportRoute } from '@/modules/report/deposits/deposits-report.route';
 
 import { AdminRoute } from '@/modules/admin';
 import { initCronJobs } from '@/cron';
@@ -52,6 +57,7 @@ export class Server {
             businessCategories: `${this.prefix}/platform/business-category`,
             subscriptions: `${this.prefix}/platform/subscription`,
             subscriptionPayments: `${this.prefix}/platform/subscription-payment`,
+            subscriptionPaymentMethods: `${this.prefix}/platform/subscription-payment-method`,
             subscriptionPlans: `${this.prefix}/platform/subscription-plan`,
             businesses: `${this.prefix}/platform/business`,
 
@@ -91,6 +97,11 @@ export class Server {
             salesReports: `${this.prefix}/report/sales`,
             purchaseReports: `${this.prefix}/report/purchases`,
             inventoryReports: `${this.prefix}/report/inventory`,
+            articleReports: `${this.prefix}/report/articles`,
+            cashRegisterReports: `${this.prefix}/report/cash-register`,
+            collectionsReports: `${this.prefix}/report/collections`,
+            financialReports: `${this.prefix}/report/financial`,
+            depositsReports: `${this.prefix}/report/deposits`,
 
             // MÓDULO ADMIN
             admin: `${this.prefix}/admin`,
@@ -139,6 +150,7 @@ export class Server {
         this.app.use(this.paths.businessCategories, BusinessCategoryRoute);
         this.app.use(this.paths.subscriptions, SubscriptionRoute);
         this.app.use(this.paths.subscriptionPayments, SubscriptionPaymentRoute);
+        this.app.use(this.paths.subscriptionPaymentMethods, SubscriptionPaymentMethodRoute);
         this.app.use(this.paths.subscriptionPlans, SubscriptionPlanRoute);
         this.app.use(this.paths.businesses, BusinessRoute);
         this.app.use(this.paths.categories, CategoryRoute);
@@ -166,6 +178,11 @@ export class Server {
         this.app.use(this.paths.salesReports, SalesReportRoute);
         this.app.use(this.paths.purchaseReports, PurchaseReportRoute);
         this.app.use(this.paths.inventoryReports, InventoryReportRoute);
+        this.app.use(this.paths.articleReports, ArticlesReportRoute);
+        this.app.use(this.paths.cashRegisterReports, CashRegisterReportRoute);
+        this.app.use(this.paths.collectionsReports, CollectionsReportRoute);
+        this.app.use(this.paths.financialReports, FinancialReportRoute);
+        this.app.use(this.paths.depositsReports, DepositsReportRoute);
         this.app.use(this.paths.admin, AdminRoute);
 
         this.app.use((req, res) => {

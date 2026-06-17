@@ -5,8 +5,10 @@ const router = Router();
 const controller = new BusinessAdminController();
 
 router.get('/', controller.findAll.bind(controller));
-
+router.get('/:id', controller.findOne.bind(controller));
+ 
 router.patch('/:id/status', controller.toggleStatus.bind(controller));
+
 
 router.patch('/:id/subscription', controller.updateSubscription.bind(controller));
 
