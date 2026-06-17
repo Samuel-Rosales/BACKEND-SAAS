@@ -607,7 +607,10 @@ export class ProductService {
 
                 // NOTA: No enviamos 'stockLots' completos para no revelar costos.
                 // Si necesitas mostrar desglose por almacén, crea un objeto resumido:
-                stockByDepot: this.groupStockByDepot(product.stockLots)
+                stockByDepot: this.groupStockByDepot(product.stockLots),
+
+                // Impuesto del producto
+                tax: product.tax
             };
 
             return { message: 'Producto encontrado', status: 200, data: sanitizedProduct };

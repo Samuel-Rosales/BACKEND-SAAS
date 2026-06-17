@@ -1,7 +1,7 @@
 import { prisma } from '@/configs';
 import { AuthInterface } from './interface/auth.interface';
 import bcrypt from 'bcryptjs';
-import { generateToken } from '@/utils/jwt.util';
+import { generateToken, decodeTokenUnsafe } from '@/utils/jwt.util';
 
 export class AuthService {
 
@@ -106,6 +106,43 @@ export class AuthService {
             return {
                 message: 'Error interno del servidor',
                 status: 500,
+                data: null
+            };
+        }
+    }
+
+    async refreshToken(token: string) {
+        try {
+            const decoded: any = decodeTokenUnsafe(token);
+            if (!decoded || !decoded.id) {
+                return {
+                    status: 401,
+                    message: 'Token inválido',
+                    data: null
+                };
+            }
+
+            const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+            if (!user) {
+                return {
+                    status: 401,
+                    message: 'Usuario no encontrado',
+                    data: null
+                };
+            }
+
+            const newToken = generateToken({ id: user.id, ci: user.ci });
+
+            return {
+                status: 200,
+                message: 'Token renovado',
+                data: { token: newToken }
+            };
+        } catch (error) {
+            console.error('Error en refreshToken:', error);
+            return {
+                status: 500,
+                message: 'Error al renovar token',
                 data: null
             };
         }

@@ -1,7 +1,7 @@
 export interface OrderItemInput {
   productId: number;
   quantity: number;
-  unitPrice: number;
+  salePrice: number;
   notes?: string;
 }
 

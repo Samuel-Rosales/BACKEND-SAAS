@@ -62,11 +62,20 @@ export class BusinessService {
             address: data.address,
             logoUrl: data.logoUrl,
             businessCategoryId: data.businessCategoryId,
+            rateStrategy: ExchangeRateStrategy.API_BCV,
             // C. Crear la relación BusinessMember automáticamente
             members: {
               create: {
                 userId: userId,
                 roleId: adminRole.id,
+                isActive: true
+              }
+            },
+            // E. Crear un Depósito por defecto
+            depots: {
+              create: {
+                name: 'Almacén Principal',
+                location: '',
                 isActive: true
               }
             },
@@ -282,7 +291,8 @@ export class BusinessService {
         name: data.name,
         address: data.address,
         logoUrl: data.logoUrl,
-        businessCategoryId: data.businessCategoryId
+        businessCategoryId: data.businessCategoryId,
+        closingNotificationPhone: data.closingNotificationPhone
       };
 
       const updated = await prisma.business.update({
@@ -500,7 +510,8 @@ export class BusinessService {
               name: business.name,
               address: business.address,
               logoUrl: business.logoUrl,
-              businessCategoryId: business.businessCategoryId
+              businessCategoryId: business.businessCategoryId,
+              closingNotificationPhone: business.closingNotificationPhone
           },
           rates: {
               strategy: business.rateStrategy,

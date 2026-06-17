@@ -45,12 +45,6 @@ export type BusinessPermissionCode =
   | "CREDITS_PURCHASES_PAY"
   | "CREDIT_NOTES_CREATE"
 
-  | "REPORTS_SALES_VIEW"
-  | "REPORTS_PURCHASES_VIEW"
-  | "REPORTS_FINANCE_VIEW"
-  | "REPORTS_INVENTORY_VIEW"
-
-  // Coarse permissions kept for backward compatibility in existing services.
   | "INVENTORY_READ"
   | "INVENTORY_WRITE"
   | "SALES_READ"
@@ -58,8 +52,11 @@ export type BusinessPermissionCode =
   | "PROCUREMENT_READ"
   | "PROCUREMENT_WRITE"
   | "FINANCE_READ"
-  | "FINANCE_WRITE"
+
   | "REPORTS_VIEW"
+  | "REPORTS_SALES_VIEW"
+  | "REPORTS_PURCHASES_VIEW"
+  | "REPORTS_INVENTORY_VIEW"
 
   | "TABLES_READ"
   | "TABLES_WRITE"

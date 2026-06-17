@@ -49,21 +49,35 @@ export class UserService {
 
     async create(data: CreateUserInterface) {
         try {
-            
             const salt = await bcrypt.genSalt(10);
             const hashedPassword: string = await bcrypt.hash(data.password, salt);
 
-            const user = await prisma.user.create({
-                data: {
-                    ...data,
-                    password: hashedPassword, 
-                },
-                select: {
-                    id: true,
-                    name: true,
-                    ci: true,
-                    password: true,
-                },
+            const user = await prisma.$transaction(async (tx) => {
+                const newUser = await tx.user.create({
+                    data: {
+                        ci: data.ci,
+                        name: data.name,
+                        password: hashedPassword,
+                    },
+                    select: {
+                        id: true,
+                        name: true,
+                        ci: true,
+                    },
+                });
+
+                await tx.userContact.create({
+                    data: {
+                        userId: newUser.id,
+                        email: data.email,
+                        phone: data.phone,
+                        address: '',
+                        city: '',
+                        state: '',
+                    },
+                });
+
+                return newUser;
             });
 
             if (!user) {
