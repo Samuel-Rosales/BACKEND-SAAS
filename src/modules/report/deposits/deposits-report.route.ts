@@ -21,6 +21,12 @@ router.get(
 );
 
 router.get(
+    '/pdf',
+    requireBusinessPermission('REPORTS_VIEW'),
+    controller.generatePDF
+);
+
+router.get(
     '/:id',
     requireBusinessPermission('REPORTS_VIEW'),
     controller.getById

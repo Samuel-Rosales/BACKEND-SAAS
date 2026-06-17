@@ -310,4 +310,136 @@ export class DepositsReportService {
             };
         }
     }
+
+    /**
+     * GET /pdf - Data para el PDF del reporte de depósitos
+     */
+    async getPDFData(businessId: number) {
+        try {
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { name: true, logoUrl: true }
+            });
+
+            if (!business) {
+                return { status: 404, message: 'Negocio no encontrado', data: null };
+            }
+
+            const depotsRaw = await prisma.depot.findMany({
+                where: { businessId, isActive: true },
+                orderBy: { name: 'asc' },
+                select: { id: true, name: true, location: true }
+            });
+
+            const depots = await Promise.all(depotsRaw.map(async (depot) => {
+                const [products, lots] = await Promise.all([
+                    prisma.$queryRaw<any[]>`
+                        SELECT
+                            p.id as "productId",
+                            p.name as "productName",
+                            p.sku,
+                            c.name as "categoryName",
+                            u.symbol as "unitSymbol",
+                            p."costPrice",
+                            p."salePrice",
+                            COALESCE(SUM(sl.quantity), 0)::numeric as "currentStock",
+                            COALESCE(SUM(sl.quantity * sl."lotCost"), 0)::numeric as "totalCost",
+                            COALESCE(SUM(sl.quantity * p."salePrice"), 0)::numeric as "totalSale"
+                        FROM "StockLot" sl
+                        INNER JOIN "Product" p ON sl."productId" = p.id
+                        INNER JOIN "Category" c ON p."categoryId" = c.id
+                        INNER JOIN "MeasurementUnit" u ON p."unitId" = u.id
+                        WHERE sl."depotId" = ${depot.id}
+                        AND sl.quantity > 0
+                        GROUP BY p.id, p.name, p.sku, c.name, u.symbol, p."costPrice", p."salePrice"
+                        ORDER BY p.name ASC
+                    `,
+
+                    prisma.$queryRaw<any[]>`
+                        SELECT
+                            sl.id as "lotId",
+                            sl."productId",
+                            sl.quantity,
+                            sl."lotCost",
+                            sl."expirationDate"
+                        FROM "StockLot" sl
+                        WHERE sl."depotId" = ${depot.id}
+                        AND sl.quantity > 0
+                        ORDER BY sl."productId" ASC, sl."expirationDate" ASC
+                    `
+                ]);
+
+                const lotsByProduct = new Map<number, any[]>();
+                lots.forEach((lot: any) => {
+                    const pid = Number(lot.productId);
+                    if (!lotsByProduct.has(pid)) lotsByProduct.set(pid, []);
+                    lotsByProduct.get(pid)!.push({
+                        id: Number(lot.lotId),
+                        quantity: Number(lot.quantity),
+                        lotCost: Number(lot.lotCost),
+                        expirationDate: lot.expirationDate,
+                        totalCost: Number(lot.quantity) * Number(lot.lotCost)
+                    });
+                });
+
+                const productsData = products.map((p: any) => {
+                    const pid = Number(p.productId);
+                    return {
+                        id: pid,
+                        name: p.productName,
+                        sku: p.sku,
+                        category: p.categoryName,
+                        unit: p.unitSymbol,
+                        costPrice: Number(p.costPrice),
+                        salePrice: Number(p.salePrice),
+                        currentStock: Number(p.currentStock),
+                        totalCost: Number(p.totalCost),
+                        totalSale: Number(p.totalSale),
+                        lots: lotsByProduct.get(pid) || []
+                    };
+                });
+
+                const subtotalStock = productsData.reduce((s, p) => s + p.currentStock, 0);
+                const subtotalCost = productsData.reduce((s, p) => s + p.totalCost, 0);
+                const subtotalSale = productsData.reduce((s, p) => s + p.totalSale, 0);
+
+                return {
+                    id: depot.id,
+                    name: depot.name,
+                    location: depot.location,
+                    products: productsData,
+                    subtotalStock,
+                    subtotalCost,
+                    subtotalSale
+                };
+            }));
+
+            const grandTotals = {
+                totalDepots: depots.length,
+                totalStock: depots.reduce((s, d) => s + d.subtotalStock, 0),
+                totalCost: depots.reduce((s, d) => s + d.subtotalCost, 0),
+                totalSale: depots.reduce((s, d) => s + d.subtotalSale, 0)
+            };
+
+            return {
+                status: 200,
+                message: 'Data para PDF de depósitos obtenida',
+                data: {
+                    businessName: business.name,
+                    logoUrl: business.logoUrl,
+                    date: new Date().toLocaleDateString('es-VE'),
+                    depots,
+                    grandTotals
+                }
+            };
+
+        } catch (error) {
+            console.error('Error en DepositsReportService.getPDFData:', error);
+            return {
+                status: 500,
+                message: 'Error interno obteniendo data para PDF de depósitos',
+                data: null
+            };
+        }
+    }
 }
