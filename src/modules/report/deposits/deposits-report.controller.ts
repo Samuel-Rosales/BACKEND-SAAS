@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { DepositsReportService } from './deposits-report.service';
+import { renderToStream } from '@react-pdf/renderer';
+import React from 'react';
+import DepositsReportPDF from '@/templates/DepositsReport';
+import { Readable } from 'stream';
 
 const depositsService = new DepositsReportService();
 
@@ -85,6 +89,54 @@ export class DepositsReportController {
         } catch (error) {
             console.error('Error obteniendo detalle del depósito:', error);
             res.status(500).json({ error: 'Error interno al obtener detalle del depósito' });
+        }
+    };
+
+    generatePDF = async (req: Request, res: Response) => {
+        try {
+            const { businessId } = req.user;
+
+            if (!businessId) {
+                return res.status(400).json({ message: 'Falta el header x-business-id' });
+            }
+
+            const result = await depositsService.getPDFData(businessId);
+
+            if (!result.data) {
+                return res.status(result.status).json({ error: result.message });
+            }
+
+            const pdfStream = await renderToStream(
+                React.createElement(DepositsReportPDF, {
+                    businessName: result.data.businessName,
+                    logoUrl: result.data.logoUrl,
+                    date: result.data.date,
+                    depots: result.data.depots,
+                    grandTotals: result.data.grandTotals
+                }) as any
+            );
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'inline; filename="reporte-depositos.pdf"');
+
+            req.on('close', () => {
+                if (!res.writableFinished) {
+                    (pdfStream as Readable).destroy();
+                    console.warn(`Descarga abortada por el cliente para businessId: ${businessId}`);
+                }
+            });
+
+            pdfStream.on('error', (err) => {
+                console.error('Error interno en el stream del PDF de depósitos:', err);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Error al compilar el documento PDF' });
+                }
+            });
+
+            pdfStream.pipe(res);
+        } catch (error) {
+            console.error('Error generando PDF de depósitos:', error);
+            return res.status(500).json({ error: 'Error interno al generar PDF de depósitos' });
         }
     };
 }
