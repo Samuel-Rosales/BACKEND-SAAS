@@ -1,17 +1,16 @@
 import { Router } from 'express';
 import { DashboardController } from './dashboard.controller';
-import { authMiddleware } from '@/middlewares/auth.middleware'; // Ajusta la ruta a tu proyecto
+import { authMiddleware } from '@/middlewares/auth.middleware';
+import { requireBusinessPermission } from '@/middlewares';
 
 const router = Router();
 const dashboardController = new DashboardController();
 
-// Aplicar autenticación a todas las rutas
 router.use(authMiddleware);
 
-// GET /api/dashboard/overview
-// Protegemos la ruta para asegurarnos de tener el usuario y el businessId
 router.get(
     '/overview',
+    requireBusinessPermission('REPORTS_DASHBOARD_VIEW'),
     dashboardController.getDashboardOverview
 );
 

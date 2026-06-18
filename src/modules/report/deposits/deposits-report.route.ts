@@ -10,25 +10,25 @@ router.use(authMiddleware);
 
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_DEPOSITS_VIEW'),
     controller.getOverview
 );
 
 router.get(
     '/',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_DEPOSITS_VIEW'),
     controller.getAll
 );
 
 router.get(
     '/pdf',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_DEPOSITS_VIEW'),
     controller.generatePDF
 );
 
 router.get(
     '/:id',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_DEPOSITS_VIEW'),
     controller.getById
 );
 
