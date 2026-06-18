@@ -35,10 +35,15 @@ export const permissions: { code: string; name: string; module: PermissionModule
   { code: "PROCUREMENT_READ", name: "Ver compras", module: "PROCUREMENT" },
   { code: "PROCUREMENT_WRITE", name: "Gestionar compras", module: "PROCUREMENT" },
   { code: "FINANCE_READ", name: "Ver finanzas", module: "FINANCE" },
-  { code: "REPORTS_VIEW", name: "Ver reportes", module: "REPORTS" },
+  { code: "REPORTS_DASHBOARD_VIEW", name: "Ver dashboard de reportes", module: "REPORTS" },
   { code: "REPORTS_SALES_VIEW", name: "Ver reporte de ventas", module: "REPORTS" },
   { code: "REPORTS_PURCHASES_VIEW", name: "Ver reporte de compras", module: "REPORTS" },
   { code: "REPORTS_INVENTORY_VIEW", name: "Ver reporte de inventario", module: "REPORTS" },
+  { code: "REPORTS_CASH_REGISTER_VIEW", name: "Ver reporte de caja", module: "REPORTS" },
+  { code: "REPORTS_COLLECTIONS_VIEW", name: "Ver reporte de cobros", module: "REPORTS" },
+  { code: "REPORTS_FINANCIAL_VIEW", name: "Ver reporte financiero", module: "REPORTS" },
+  { code: "REPORTS_DEPOSITS_VIEW", name: "Ver reporte de depósitos", module: "REPORTS" },
+  { code: "REPORTS_CREDITS_VIEW", name: "Ver reporte de créditos", module: "REPORTS" },
   { code: "TABLES_READ", name: "Ver mesas", module: "RESTAURANT" },
   { code: "TABLES_WRITE", name: "Gestionar mesas", module: "RESTAURANT" },
   { code: "ORDERS_READ", name: "Ver pedidos", module: "RESTAURANT" },
@@ -82,10 +87,15 @@ export const rolePermissions: Record<string, string[]> = {
     "PROCUREMENT_READ",
     "PROCUREMENT_WRITE",
     "FINANCE_READ",
-    "REPORTS_VIEW",
+    "REPORTS_DASHBOARD_VIEW",
     "REPORTS_SALES_VIEW",
     "REPORTS_PURCHASES_VIEW",
     "REPORTS_INVENTORY_VIEW",
+    "REPORTS_CASH_REGISTER_VIEW",
+    "REPORTS_COLLECTIONS_VIEW",
+    "REPORTS_FINANCIAL_VIEW",
+    "REPORTS_DEPOSITS_VIEW",
+    "REPORTS_CREDITS_VIEW",
     "TABLES_READ",
     "TABLES_WRITE",
     "ORDERS_READ",
@@ -104,9 +114,10 @@ export const rolePermissions: Record<string, string[]> = {
     "CASH_REGISTER_OPEN",
     "CASH_REGISTER_CLOSE",
     "CASH_COUNT",
-    "REPORTS_VIEW",
+    "REPORTS_DASHBOARD_VIEW",
     "REPORTS_SALES_VIEW",
     "REPORTS_PURCHASES_VIEW",
+    "REPORTS_CASH_REGISTER_VIEW",
     "FINANCE_READ",
     "TABLES_READ",
     "TABLES_WRITE",
@@ -128,10 +139,15 @@ export const rolePermissions: Record<string, string[]> = {
     "SALES_READ",
     "PROCUREMENT_READ",
     "FINANCE_READ",
-    "REPORTS_VIEW",
+    "REPORTS_DASHBOARD_VIEW",
     "REPORTS_SALES_VIEW",
     "REPORTS_PURCHASES_VIEW",
     "REPORTS_INVENTORY_VIEW",
+    "REPORTS_CASH_REGISTER_VIEW",
+    "REPORTS_COLLECTIONS_VIEW",
+    "REPORTS_FINANCIAL_VIEW",
+    "REPORTS_DEPOSITS_VIEW",
+    "REPORTS_CREDITS_VIEW",
     "TABLES_READ",
     "ORDERS_READ",
   ],
@@ -170,10 +186,15 @@ export const rolePermissions: Record<string, string[]> = {
     "PROCUREMENT_READ",
     "PROCUREMENT_WRITE",
     "FINANCE_READ",
-    "REPORTS_VIEW",
+    "REPORTS_DASHBOARD_VIEW",
     "REPORTS_SALES_VIEW",
     "REPORTS_PURCHASES_VIEW",
     "REPORTS_INVENTORY_VIEW",
+    "REPORTS_CASH_REGISTER_VIEW",
+    "REPORTS_COLLECTIONS_VIEW",
+    "REPORTS_FINANCIAL_VIEW",
+    "REPORTS_DEPOSITS_VIEW",
+    "REPORTS_CREDITS_VIEW",
     "TABLES_READ",
     "TABLES_WRITE",
     "ORDERS_READ",
@@ -194,8 +215,9 @@ export const rolePermissions: Record<string, string[]> = {
     "CASH_REGISTER_OPEN",
     "CASH_REGISTER_CLOSE",
     "CASH_COUNT",
-    "REPORTS_VIEW",
+    "REPORTS_DASHBOARD_VIEW",
     "REPORTS_SALES_VIEW",
+    "REPORTS_CASH_REGISTER_VIEW",
     "FINANCE_READ",
     "TABLES_READ",
     "TABLES_WRITE",
@@ -209,7 +231,6 @@ export const rolePermissions: Record<string, string[]> = {
     "SALES_READ",
     "SALES_WRITE",
     "CREDITS_SALES_COLLECT",
-    "REPORTS_VIEW",
     "REPORTS_SALES_VIEW",
     "TABLES_READ",
     "TABLES_WRITE",
@@ -229,9 +250,9 @@ export const rolePermissions: Record<string, string[]> = {
     "PROCUREMENT_WRITE",
     "INVENTORY_READ",
     "INVENTORY_WRITE",
-    "REPORTS_VIEW",
     "REPORTS_PURCHASES_VIEW",
     "REPORTS_INVENTORY_VIEW",
+    "REPORTS_DEPOSITS_VIEW",
   ],
   WAREHOUSE: [
     "PRODUCTS_READ",
@@ -256,14 +277,31 @@ export const rolePermissions: Record<string, string[]> = {
     "FINANCE_READ",
     "SALES_READ",
     "PROCUREMENT_READ",
-    "REPORTS_VIEW",
+    "REPORTS_DASHBOARD_VIEW",
     "REPORTS_SALES_VIEW",
     "REPORTS_PURCHASES_VIEW",
     "REPORTS_INVENTORY_VIEW",
+    "REPORTS_CASH_REGISTER_VIEW",
+    "REPORTS_COLLECTIONS_VIEW",
+    "REPORTS_FINANCIAL_VIEW",
+    "REPORTS_DEPOSITS_VIEW",
+    "REPORTS_CREDITS_VIEW",
   ],
 };
 
 export const seedPermissions = async (prisma: PrismaClient) => {
+  const currentCodes = new Set(permissions.map((p) => p.code));
+
+  const existingPerms = await prisma.permission.findMany({ select: { id: true, code: true } });
+  const toDelete = existingPerms.filter((p) => !currentCodes.has(p.code));
+
+  if (toDelete.length > 0) {
+    const ids = toDelete.map((p) => p.id);
+    await prisma.rolePermission.deleteMany({ where: { permissionId: { in: ids } } });
+    await prisma.permission.deleteMany({ where: { id: { in: ids } } });
+    console.log(`🗑️  Removed ${ids.length} obsolete permissions: ${toDelete.map((p) => p.code).join(', ')}`);
+  }
+
   await prisma.permission.createMany({
     data: permissions.map((permission) => ({
       code: permission.code,
@@ -295,6 +333,7 @@ export const seedPermissions = async (prisma: PrismaClient) => {
 
     if (!data.length) continue;
 
+    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
     await prisma.rolePermission.createMany({
       data,
       skipDuplicates: true,

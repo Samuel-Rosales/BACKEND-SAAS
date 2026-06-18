@@ -12,14 +12,14 @@ router.use(authMiddleware);
 // GET /api/v1/report/collections/overview
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_COLLECTIONS_VIEW'),
     controller.getOverview
 );
 
 // GET /api/v1/report/collections/debtors
 router.get(
     '/debtors',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_COLLECTIONS_VIEW'),
     controller.getDebtors
 );
 

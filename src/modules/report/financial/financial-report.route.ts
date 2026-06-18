@@ -12,14 +12,14 @@ router.use(authMiddleware);
 // GET /api/v1/report/financial/overview
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_FINANCIAL_VIEW'),
     controller.getOverview
 );
 
 // GET /api/v1/report/financial/product-margins
 router.get(
     '/product-margins',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_FINANCIAL_VIEW'),
     controller.getProductMargins
 );
 

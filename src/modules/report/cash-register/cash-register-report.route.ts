@@ -12,14 +12,14 @@ router.use(authMiddleware);
 // GET /api/v1/report/cash-register/overview
 router.get(
     '/overview',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_CASH_REGISTER_VIEW'),
     controller.getOverview
 );
 
 // GET /api/v1/report/cash-register/sellers
 router.get(
     '/sellers',
-    requireBusinessPermission('REPORTS_VIEW'),
+    requireBusinessPermission('REPORTS_CASH_REGISTER_VIEW'),
     controller.getSellersReport
 );
 
