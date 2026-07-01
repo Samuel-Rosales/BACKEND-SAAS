@@ -373,4 +373,53 @@ export class FinancialReportService {
             };
         }
     }
+
+    async generateFinancialPDF(businessId: number, range?: DateRangeQuery) {
+        try {
+            // Business info
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { name: true, logoUrl: true }
+            });
+
+            if (!business) {
+                return { status: 404, message: 'Negocio no encontrado', data: null };
+            }
+
+            // Reuse existing service methods in parallel
+            const [overviewResult, marginsResult] = await Promise.all([
+                this.getFinancialOverview(businessId, range),
+                this.getProductMarginReport(businessId, range, { page: 1, limit: 50 }),
+            ]);
+
+            if (overviewResult.status !== 200 || !overviewResult.data) {
+                return { status: overviewResult.status, message: overviewResult.message, data: null };
+            }
+            if (marginsResult.status !== 200 || !marginsResult.data) {
+                return { status: marginsResult.status, message: marginsResult.message, data: null };
+            }
+
+            // Date range labels
+            const { start, end } = resolveDateRange(range);
+            const fromLabel = range?.fromDate || start.toISOString().split('T')[0];
+            const toLabel = range?.toDate || end.toISOString().split('T')[0];
+
+            return {
+                status: 200,
+                message: 'Datos del PDF financiero generados exitosamente',
+                data: {
+                    businessName: business.name,
+                    logoUrl: business.logoUrl ?? null,
+                    dateRange: { from: fromLabel, to: toLabel },
+                    overview: overviewResult.data,
+                    products: marginsResult.data.products,
+                }
+            };
+
+        } catch (error) {
+            console.error('Error generando datos para PDF financiero:', error);
+            return { status: 500, message: 'Error interno al generar PDF financiero', data: null };
+        }
+    }
 }
+
