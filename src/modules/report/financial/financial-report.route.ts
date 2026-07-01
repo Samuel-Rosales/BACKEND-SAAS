@@ -23,4 +23,11 @@ router.get(
     controller.getProductMargins
 );
 
+// GET /api/v1/report/financial/pdf
+router.get(
+    '/pdf',
+    requireBusinessPermission('REPORTS_FINANCIAL_VIEW'),
+    controller.generateReportPDF
+);
+
 export const FinancialReportRoute = router;
