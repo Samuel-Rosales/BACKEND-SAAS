@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay } from 'date-fns';
+import { startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay, subMonths } from 'date-fns';
 
 export class CreditStatsService {
 
@@ -7,9 +7,11 @@ export class CreditStatsService {
         try {
             const now = new Date();
             const startOfCurrentMonth = startOfMonth(now);
+            const startOfPrevMonth = startOfMonth(subMonths(now, 1));
+            const endOfPrevMonth = endOfMonth(subMonths(now, 1));
             
             // 1. Ejecutar consultas en paralelo
-            const [debtStats, uniqueDebtors, creditHistory] = await Promise.all([
+            const [debtStats, uniqueDebtors, creditHistory, previousCreditHistory] = await Promise.all([
                 
                 // A. KPI Principal: ¿Cuánto me deben HOY? (Money in the street)
                 prisma.sale.aggregate({
@@ -48,6 +50,21 @@ export class CreditStatsService {
                         status: 'COMPLETED'
                     },
                     orderBy: { createdAt: 'asc' }
+                }),
+
+                // D. Tendencia del mes anterior (para gráfico extendido a inicio de mes)
+                prisma.sale.findMany({
+                    select: {
+                        createdAt: true,
+                        totalAmount: true
+                    },
+                    where: {
+                        businessId,
+                        conditions: 'CREDIT',
+                        createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+                        status: 'COMPLETED'
+                    },
+                    orderBy: { createdAt: 'asc' }
                 })
             ]);
 
@@ -66,16 +83,32 @@ export class CreditStatsService {
                 end: now
             });
 
-            // Mapeamos día por día sumando los créditos otorgados
-            const trend = daysInMonth.map(day => {
+            let trend = daysInMonth.map(day => {
                 const salesThatDay = creditHistory.filter(sale => 
                     isSameDay(sale.createdAt, day)
                 );
-                
-                // Sumamos el totalAmount de las ventas a crédito del día
-                const dayTotal = salesThatDay.reduce((acc, curr) => acc + Number(curr.totalAmount), 0);
-                return dayTotal;
+                return salesThatDay.reduce((acc, curr) => acc + Number(curr.totalAmount), 0);
             });
+
+            // Si estamos a inicio de mes, incluimos el mes anterior
+            let previousMonthDays = 0;
+            const MIN_TREND_POINTS = 7;
+            if (daysInMonth.length < MIN_TREND_POINTS) {
+                const prevDays = eachDayOfInterval({
+                    start: startOfPrevMonth,
+                    end: endOfPrevMonth
+                });
+
+                const prevTrend = prevDays.map(day => {
+                    const salesThatDay = previousCreditHistory.filter(sale =>
+                        isSameDay(sale.createdAt, day)
+                    );
+                    return salesThatDay.reduce((acc, curr) => acc + Number(curr.totalAmount), 0);
+                });
+
+                trend = [...prevTrend, ...trend];
+                previousMonthDays = prevDays.length;
+            }
 
             return {
                 status: 200,
@@ -85,6 +118,7 @@ export class CreditStatsService {
                     totalDebtors: debtorsCount,    // 84 clientes
                     status: status,                // "Warning"
                     trend: trend,                  // [0, 150, 0, 500...]
+                    previousMonthDays: previousMonthDays,
                     label: "Pagos Pendientes"
                 }
             };
