@@ -78,7 +78,7 @@ export class SalesStatsService {
 
         try {
             // 2. Ejecutar consultas en Paralelo (Promise.all)
-            const [currentMonthStats, previousMonthStats, dailyMovements] = await Promise.all([
+            const [currentMonthStats, previousMonthStats, dailyMovements, previousDailyMovements] = await Promise.all([
                 
                 // A. Suma total del Mes Actual
                 prisma.sale.aggregate({
@@ -113,6 +113,20 @@ export class SalesStatsService {
                         createdAt: { gte: currentStart, lte: currentEnd }
                     },
                     orderBy: { createdAt: 'asc' }
+                }),
+
+                // D. Datos diarios del Mes Anterior (para gráfico extendido a inicio de mes)
+                prisma.sale.findMany({
+                    select: {
+                        createdAt: true,
+                        totalAmount: true
+                    },
+                    where: {
+                        businessId,
+                        status: 'COMPLETED',
+                        createdAt: { gte: previousStart, lte: previousEnd }
+                    },
+                    orderBy: { createdAt: 'asc' }
                 })
             ]);
 
@@ -126,26 +140,38 @@ export class SalesStatsService {
             const status = currentTotal?.gte(previousTotal) ? 'Good' : 'Warning';
 
             // 4. Generar el Array para el Gráfico (Sparkline)
-            // El reto: La DB devuelve ventas sueltas, el gráfico necesita un array de 30/31 puntos (uno por día)
             const daysInCurrentMonth = currentRange.daysInMonth;
-            
-            // Creamos un array lleno de ceros: [0, 0, 0, ... 30 veces]
             const chartData = new Array(daysInCurrentMonth).fill(0);
 
-            // Rellenamos con las ventas reales
             dailyMovements.forEach(sale => {
-                const dayOfMonth = getLocalDayOfMonth(sale.createdAt, tzOffsetMinutes); // 1..31 en TZ del cliente
-                // Sumamos al índice correspondiente (dayOfMonth - 1 porque los arrays empiezan en 0)
-                // Usamos += porque puede haber varias ventas el mismo día
+                const dayOfMonth = getLocalDayOfMonth(sale.createdAt, tzOffsetMinutes);
                 if (dayOfMonth >= 1 && dayOfMonth <= daysInCurrentMonth) {
                     chartData[dayOfMonth - 1] += Number(sale.totalAmount);
                 }
             });
 
-            // Si estamos a mitad de mes (ej. día 15), es mejor cortar el gráfico hasta hoy
-            // para que no se vea una línea plana de ceros hasta el día 31.
+            // Cortamos hasta el día actual para no mostrar ceros futuros
             const today = currentRange.localTodayDayOfMonth;
-            const trend = chartData.slice(0, today); 
+            let trend = chartData.slice(0, today);
+            let previousMonthDays = 0;
+
+            // Si estamos en los primeros días del mes, incluimos el mes anterior
+            // para que la gráfica tenga suficientes puntos y se vea correctamente.
+            const MIN_TREND_POINTS = 7;
+            if (today < MIN_TREND_POINTS) {
+                const prevDaysInMonth = previousRange.daysInMonth;
+                const prevChartData = new Array(prevDaysInMonth).fill(0);
+
+                previousDailyMovements.forEach(sale => {
+                    const dayOfMonth = getLocalDayOfMonth(sale.createdAt, tzOffsetMinutes);
+                    if (dayOfMonth >= 1 && dayOfMonth <= prevDaysInMonth) {
+                        prevChartData[dayOfMonth - 1] += Number(sale.totalAmount);
+                    }
+                });
+
+                trend = [...prevChartData, ...trend];
+                previousMonthDays = prevDaysInMonth;
+            }
 
             return {
                 status: 200,
@@ -153,7 +179,8 @@ export class SalesStatsService {
                 data: {
                     currentMonthRevenue: currentTotal, // $45,200
                     status: status,                    // "Good" o "Warning"
-                    trend: trend                       // [120, 500, 0, 230...]
+                    trend: trend,                      // [120, 500, 0, 230...]
+                    previousMonthDays: previousMonthDays
                 }                       
             };
 

@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { startOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
+import { startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths } from 'date-fns';
 
 export class ClientStatsService {
 
@@ -7,8 +7,10 @@ export class ClientStatsService {
         try {
             const now = new Date();
             const startOfCurrentMonth = startOfMonth(now);
+            const startOfPrevMonth = startOfMonth(subMonths(now, 1));
+            const endOfPrevMonth = endOfMonth(subMonths(now, 1));
 
-            const [totalActive, newClientsThisMonth] = await Promise.all([
+            const [totalActive, newClientsThisMonth, previousNewClients] = await Promise.all([
                 
                 // A. KPI Principal: Total de Clientes en la Base de Datos
                 prisma.client.count({
@@ -28,6 +30,15 @@ export class ClientStatsService {
                         businessId,
                         createdAt: { gte: startOfCurrentMonth }
                     }
+                }),
+
+                // C. Clientes nuevos del mes anterior (para gráfico extendido a inicio de mes)
+                prisma.client.findMany({
+                    select: { createdAt: true },
+                    where: {
+                        businessId,
+                        createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth }
+                    }
                 })
             ]);
 
@@ -42,12 +53,30 @@ export class ClientStatsService {
                 end: now
             });
 
-            const trend = daysInMonth.map(day => {
-                // Contamos cuántos se registraron en este día específico
+            let trend = daysInMonth.map(day => {
                 return newClientsThisMonth.filter(client => 
                     isSameDay(client.createdAt, day)
                 ).length;
             });
+
+            // Si estamos a inicio de mes, incluimos el mes anterior
+            let previousMonthDays = 0;
+            const MIN_TREND_POINTS = 7;
+            if (daysInMonth.length < MIN_TREND_POINTS) {
+                const prevDays = eachDayOfInterval({
+                    start: startOfPrevMonth,
+                    end: endOfPrevMonth
+                });
+
+                const prevTrend = prevDays.map(day => {
+                    return previousNewClients.filter(client =>
+                        isSameDay(client.createdAt, day)
+                    ).length;
+                });
+
+                trend = [...prevTrend, ...trend];
+                previousMonthDays = prevDays.length;
+            }
 
             return {
                 status: 200,
@@ -56,6 +85,7 @@ export class ClientStatsService {
                     totalActive,       // 842
                     status,            // "Good"
                     trend,             // [0, 2, 1, 0, 5...] (Clientes nuevos por día)
+                    previousMonthDays,
                     label: "Activos Totales"
                 }
             };
