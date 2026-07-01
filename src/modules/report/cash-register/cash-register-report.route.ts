@@ -23,4 +23,11 @@ router.get(
     controller.getSellersReport
 );
 
+// GET /api/v1/report/cash-register/pdf
+router.get(
+    '/pdf',
+    requireBusinessPermission('REPORTS_CASH_REGISTER_VIEW'),
+    controller.generateReportPDF
+);
+
 export const CashRegisterReportRoute = router;
