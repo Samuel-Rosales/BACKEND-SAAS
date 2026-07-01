@@ -553,4 +553,77 @@ export class CashRegisterReportService {
             };
         }
     }
+
+    async generateCashRegisterPDF(businessId: number, query: DateRangeQuery & { sellerId?: string | number }) {
+        try {
+            // Fetch business info for the PDF header
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { name: true, logoUrl: true }
+            });
+
+            if (!business) {
+                return { status: 404, message: 'Negocio no encontrado', data: null };
+            }
+
+            // Reuse existing service methods
+            const [overviewResult, sellersResult] = await Promise.all([
+                this.getOverview(businessId, query),
+                this.getSellersReport(businessId, query),
+            ]);
+
+            if (overviewResult.status !== 200 || !overviewResult.data) {
+                return { status: overviewResult.status, message: overviewResult.message, data: null };
+            }
+            if (sellersResult.status !== 200 || !sellersResult.data) {
+                return { status: sellersResult.status, message: sellersResult.message, data: null };
+            }
+
+            // Build date range label
+            const tzOffsetMinutes = (() => {
+                if (query.tzOffset === null || query.tzOffset === undefined) {
+                    return new Date().getTimezoneOffset();
+                }
+                const parsed = Number(query.tzOffset);
+                return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+            })();
+
+            const now = new Date();
+            const defaultMonthRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, 0);
+
+            const fromLabel = query.fromDate
+                ? query.fromDate
+                : defaultMonthRange.start.toISOString().split('T')[0];
+
+            const toLabel = query.toDate
+                ? query.toDate
+                : defaultMonthRange.end.toISOString().split('T')[0];
+
+            // Seller name for filter label (if filtered)
+            let sellerFilterName: string | null = null;
+            if (query.sellerId) {
+                const seller = sellersResult.data.find(
+                    (s: { id: string }) => s.id === String(query.sellerId)
+                );
+                sellerFilterName = seller?.name ?? null;
+            }
+
+            return {
+                status: 200,
+                message: 'Datos del PDF generados exitosamente',
+                data: {
+                    businessName: business.name,
+                    logoUrl: business.logoUrl ?? null,
+                    dateRange: { from: fromLabel, to: toLabel },
+                    sellerFilter: sellerFilterName,
+                    overview: overviewResult.data,
+                    sellers: sellersResult.data,
+                }
+            };
+
+        } catch (error) {
+            console.error('Error generando datos para PDF de caja:', error);
+            return { status: 500, message: 'Error interno al generar PDF de caja', data: null };
+        }
+    }
 }
