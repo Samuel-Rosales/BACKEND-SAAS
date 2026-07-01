@@ -173,7 +173,8 @@ export class CollectionsReportService {
                     totalToCollect: 0,
                     totalCollected: 0,
                     debtorsCount: 0,
-                    overdueInstallmentsCount: 0
+                    overdueInstallmentsCount: 0,
+                    expectedInPeriod: 0
                 }
             };
         }
@@ -340,4 +341,60 @@ export class CollectionsReportService {
             };
         }
     }
+
+    async generateCollectionsPDF(businessId: number, query: DateRangeQuery) {
+        try {
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { name: true, logoUrl: true }
+            });
+
+            if (!business) {
+                return { status: 404, message: 'Negocio no encontrado', data: null };
+            }
+
+            const [overviewResult, debtorsResult] = await Promise.all([
+                this.getOverview(businessId, query),
+                this.getDebtors(businessId, { ...query, page: 1, limit: 100 }),
+            ]);
+
+            if (overviewResult.status !== 200 || !overviewResult.data) {
+                return { status: overviewResult.status, message: overviewResult.message, data: null };
+            }
+            if (debtorsResult.status !== 200 || !debtorsResult.data) {
+                return { status: debtorsResult.status, message: debtorsResult.message, data: null };
+            }
+
+            // Date range labels
+            const now = new Date();
+            const tzOffsetMinutes = (() => {
+                if (query.tzOffset === null || query.tzOffset === undefined) {
+                    return new Date().getTimezoneOffset();
+                }
+                const parsed = Number(query.tzOffset);
+                return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+            })();
+
+            const defaultMonthRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, 0);
+            const fromLabel = query.fromDate || defaultMonthRange.start.toISOString().split('T')[0];
+            const toLabel = query.toDate || defaultMonthRange.end.toISOString().split('T')[0];
+
+            return {
+                status: 200,
+                message: 'Datos del PDF de cobranza generados exitosamente',
+                data: {
+                    businessName: business.name,
+                    logoUrl: business.logoUrl ?? null,
+                    dateRange: { from: fromLabel, to: toLabel },
+                    overview: overviewResult.data,
+                    debtors: debtorsResult.data.data,
+                }
+            };
+
+        } catch (error) {
+            console.error('Error generando datos para PDF de cobranza:', error);
+            return { status: 500, message: 'Error interno al generar PDF de cobranza', data: null };
+        }
+    }
 }
+

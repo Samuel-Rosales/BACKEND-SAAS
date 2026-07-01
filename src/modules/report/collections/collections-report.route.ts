@@ -23,4 +23,11 @@ router.get(
     controller.getDebtors
 );
 
+// GET /api/v1/report/collections/pdf
+router.get(
+    '/pdf',
+    requireBusinessPermission('REPORTS_COLLECTIONS_VIEW'),
+    controller.generateReportPDF
+);
+
 export const CollectionsReportRoute = router;
