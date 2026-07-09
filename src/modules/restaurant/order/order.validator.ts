@@ -9,6 +9,7 @@ export class OrderValidator {
             .toInt(),
 
         body('clientId')
+            .optional()
             .isInt({ min: 1 }).withMessage('ID de cliente inválido')
             .toInt(),
 

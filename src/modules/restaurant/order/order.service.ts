@@ -31,16 +31,18 @@ export class OrderService {
                 }
             }
 
-            const client = await prisma.client.findFirst({
-                where: { id: data.clientId, businessId }
-            });
+            if (data.clientId) {
+                const client = await prisma.client.findFirst({
+                    where: { id: data.clientId, businessId }
+                });
 
-            if (!client) {
-                return {
-                    message: 'Cliente no encontrado',
-                    status: 404,
-                    data: null
-                };
+                if (!client) {
+                    return {
+                        message: 'Cliente no encontrado',
+                        status: 404,
+                        data: null
+                    };
+                }
             }
 
             if (!data.items || data.items.length === 0) {
@@ -113,7 +115,7 @@ export class OrderService {
                 data: {
                     businessId,
                     tableId: data.tableId || null,
-                    clientId: data.clientId,
+                    clientId: data.clientId ?? undefined,
                     orderNumber,
                     notes: data.notes || null,
                     subTotal,

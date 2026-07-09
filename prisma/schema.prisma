@@ -868,7 +868,7 @@ model Order {
   id          Int         @id @default(autoincrement())
   businessId  Int
   tableId     Int?
-  clientId    Int
+  clientId    Int?
   orderNumber Int
   status      OrderStatus @default(PENDING)
   isPaid      Boolean     @default(false)
@@ -882,7 +882,7 @@ model Order {
 
   business  Business        @relation(fields: [businessId], references: [id])
   table     RestaurantTable? @relation(fields: [tableId], references: [id])
-  client    Client          @relation(fields: [clientId], references: [id])
+  client    Client?         @relation(fields: [clientId], references: [id])
   items     OrderItem[]
 
   @@index([businessId, status])

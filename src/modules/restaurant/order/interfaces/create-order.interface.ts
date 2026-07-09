@@ -7,7 +7,7 @@ export interface OrderItemInput {
 
 export interface CreateOrderInterface {
   tableId?: number;
-  clientId: number;
+  clientId?: number;
   notes?: string;
   items: OrderItemInput[];
 }
