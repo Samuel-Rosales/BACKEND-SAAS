@@ -553,12 +553,18 @@ export class BusinessAdminService {
         data: { deletedBusinessId: businessId, deletedBusinessName: business.name },
       };
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('BusinessAdminService.permanentlyDeleteBusiness error:', error);
+
+      // Extraer detalles del error de Prisma para diagnóstico
+      const prismaCode = error?.code || 'UNKNOWN';
+      const prismaMeta = error?.meta ? JSON.stringify(error.meta) : 'N/A';
+      const errorMessage = error?.message || 'Error desconocido';
+
       return {
-        message: 'Error al eliminar el negocio permanentemente',
+        message: `Error al eliminar el negocio: [${prismaCode}] ${errorMessage}`,
         status: 500,
-        data: null,
+        data: { prismaCode, prismaMeta },
       };
     }
   }
