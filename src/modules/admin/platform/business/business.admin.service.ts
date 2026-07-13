@@ -303,4 +303,263 @@ export class BusinessAdminService {
       };
     }
   }
+
+  /**
+   * DELETE /api/v1/admin/business/:id
+   * Elimina permanentemente un negocio y TODOS sus registros asociados.
+   * Usa $transaction para garantizar atomicidad.
+   */
+  async permanentlyDeleteBusiness(businessId: number, confirmName: string) {
+    try {
+      // 1. Verificar que el negocio existe
+      const business = await prisma.business.findUnique({
+        where: { id: businessId },
+        select: { id: true, name: true },
+      });
+
+      if (!business) {
+        return {
+          message: 'Negocio no encontrado',
+          status: 404,
+          data: null,
+        };
+      }
+
+      // 2. Validar confirmación de nombre
+      if (business.name.trim().toLowerCase() !== confirmName.trim().toLowerCase()) {
+        return {
+          message: 'El nombre de confirmación no coincide con el nombre del negocio',
+          status: 400,
+          data: null,
+        };
+      }
+
+      // 3. Obtener IDs necesarios para sub-selects
+      const saleIds = (await prisma.sale.findMany({
+        where: { businessId },
+        select: { id: true },
+      })).map(s => s.id);
+
+      const creditNoteIds = (await prisma.creditNote.findMany({
+        where: { businessId },
+        select: { id: true },
+      })).map(cn => cn.id);
+
+      const purchaseIds = (await prisma.purchase.findMany({
+        where: { businessId },
+        select: { id: true },
+      })).map(p => p.id);
+
+      const productIds = (await prisma.product.findMany({
+        where: { businessId },
+        select: { id: true },
+      })).map(p => p.id);
+
+      const cashRegisterIds = (await prisma.cashRegister.findMany({
+        where: { businessId },
+        select: { id: true },
+      })).map(cr => cr.id);
+
+      const depotIds = (await prisma.depot.findMany({
+        where: { businessId },
+        select: { id: true },
+      })).map(d => d.id);
+
+      // 4. Ejecutar eliminación en transacción (hojas → raíz)
+      await prisma.$transaction(async (tx) => {
+
+        // === RESTAURANT ===
+        // OrderItem → depende de Order
+        await tx.orderItem.deleteMany({
+          where: { order: { businessId } },
+        });
+        // Order → depende de Business
+        await tx.order.deleteMany({
+          where: { businessId },
+        });
+        // RestaurantTable → depende de Business
+        await tx.restaurantTable.deleteMany({
+          where: { businessId },
+        });
+
+        // === CREDIT NOTES (hojas primero) ===
+        // CreditNotePayment → depende de CreditNote
+        if (creditNoteIds.length > 0) {
+          await tx.creditNotePayment.deleteMany({
+            where: { creditNoteId: { in: creditNoteIds } },
+          });
+        }
+        // CreditNoteItem → depende de CreditNote
+        if (creditNoteIds.length > 0) {
+          await tx.creditNoteItem.deleteMany({
+            where: { creditNoteId: { in: creditNoteIds } },
+          });
+        }
+        // CreditNote → depende de Sale (que tiene businessId)
+        await tx.creditNote.deleteMany({
+          where: { businessId },
+        });
+
+        // === SALES (hojas primero) ===
+        // SaleInstallment → depende de Sale
+        if (saleIds.length > 0) {
+          await tx.saleInstallment.deleteMany({
+            where: { saleId: { in: saleIds } },
+          });
+        }
+        // SaleItemLot → depende de SaleItem → Sale
+        if (saleIds.length > 0) {
+          await tx.saleItemLot.deleteMany({
+            where: { saleItem: { saleId: { in: saleIds } } },
+          });
+        }
+        // SaleItem → depende de Sale
+        if (saleIds.length > 0) {
+          await tx.saleItem.deleteMany({
+            where: { saleId: { in: saleIds } },
+          });
+        }
+        // SalePayment → depende de Sale
+        if (saleIds.length > 0) {
+          await tx.salePayment.deleteMany({
+            where: { saleId: { in: saleIds } },
+          });
+        }
+        // Sale
+        await tx.sale.deleteMany({
+          where: { businessId },
+        });
+
+        // === PURCHASES (hojas primero) ===
+        // PurchaseInstallment → depende de Purchase
+        if (purchaseIds.length > 0) {
+          await tx.purchaseInstallment.deleteMany({
+            where: { purchaseId: { in: purchaseIds } },
+          });
+        }
+        // PurchasePayment → depende de Purchase
+        if (purchaseIds.length > 0) {
+          await tx.purchasePayment.deleteMany({
+            where: { purchaseId: { in: purchaseIds } },
+          });
+        }
+        // PurchaseItem → depende de Purchase
+        if (purchaseIds.length > 0) {
+          await tx.purchaseItem.deleteMany({
+            where: { purchaseId: { in: purchaseIds } },
+          });
+        }
+        // Purchase
+        await tx.purchase.deleteMany({
+          where: { businessId },
+        });
+
+        // === CASH REGISTER ===
+        // CashCount → depende de CashRegister
+        if (cashRegisterIds.length > 0) {
+          await tx.cashCount.deleteMany({
+            where: { cashRegisterId: { in: cashRegisterIds } },
+          });
+        }
+        // CashRegister
+        await tx.cashRegister.deleteMany({
+          where: { businessId },
+        });
+
+        // === INVENTORY ===
+        // StockMovement → depende de Business
+        await tx.stockMovement.deleteMany({
+          where: { businessId },
+        });
+        // StockLot → depende de Product y Depot
+        if (productIds.length > 0) {
+          await tx.stockLot.deleteMany({
+            where: { productId: { in: productIds } },
+          });
+        }
+        // ProductComponent (self-ref en Product)
+        if (productIds.length > 0) {
+          await tx.productComponent.deleteMany({
+            where: {
+              OR: [
+                { parentProductId: { in: productIds } },
+                { childProductId: { in: productIds } },
+              ],
+            },
+          });
+        }
+        // ProductPresentation → depende de Product
+        if (productIds.length > 0) {
+          await tx.productPresentation.deleteMany({
+            where: { productId: { in: productIds } },
+          });
+        }
+        // Product
+        await tx.product.deleteMany({
+          where: { businessId },
+        });
+
+        // === CATÁLOGOS DEL NEGOCIO ===
+        // Category
+        await tx.category.deleteMany({
+          where: { businessId },
+        });
+        // Depot
+        await tx.depot.deleteMany({
+          where: { businessId },
+        });
+        // Client
+        await tx.client.deleteMany({
+          where: { businessId },
+        });
+        // Supplier
+        await tx.supplier.deleteMany({
+          where: { businessId },
+        });
+
+        // === TASA DE CAMBIO (solo las del negocio) ===
+        await tx.exchangeRate.deleteMany({
+          where: { businessId },
+        });
+
+        // === SUSCRIPCIÓN ===
+        // SubscriptionPayment → depende de Subscription y Business
+        await tx.subscriptionPayment.deleteMany({
+          where: { businessId },
+        });
+        // Subscription (1:1 con Business)
+        await tx.subscription.deleteMany({
+          where: { businessId },
+        });
+
+        // === MIEMBROS ===
+        await tx.businessMember.deleteMany({
+          where: { businessId },
+        });
+
+        // === RAÍZ: BUSINESS ===
+        await tx.business.delete({
+          where: { id: businessId },
+        });
+      }, {
+        timeout: 60000, // 60s para negocios con muchos datos
+      });
+
+      console.log(`[ADMIN] Negocio "${business.name}" (ID: ${businessId}) eliminado permanentemente.`);
+
+      return {
+        message: `Negocio "${business.name}" eliminado permanentemente junto con todos sus registros`,
+        status: 200,
+        data: { deletedBusinessId: businessId, deletedBusinessName: business.name },
+      };
+
+    } catch (error) {
+      console.error('BusinessAdminService.permanentlyDeleteBusiness error:', error);
+      return {
+        message: 'Error al eliminar el negocio permanentemente',
+        status: 500,
+        data: null,
+      };
+    }
+  }
 }

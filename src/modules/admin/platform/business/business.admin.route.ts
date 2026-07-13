@@ -12,6 +12,8 @@ router.patch('/:id/status', controller.toggleStatus.bind(controller));
 
 router.patch('/:id/subscription', controller.updateSubscription.bind(controller));
 
+router.delete('/:id', controller.deleteBusiness.bind(controller));
+
 export const BusinessAdminRoute = router;
 
 export default router;

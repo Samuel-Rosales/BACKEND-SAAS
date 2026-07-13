@@ -120,4 +120,44 @@ export class BusinessAdminController {
       });
     }
   }
+
+  /**
+   * DELETE /api/v1/admin/business/:id
+   * Eliminar permanentemente un negocio y todos sus registros
+   */
+  async deleteBusiness(req: Request, res: Response) {
+    try {
+      const businessId = parseInt(req.params.id as string);
+
+      if (isNaN(businessId)) {
+        return res.status(400).json({
+          message: 'ID de negocio inválido',
+          status: 400,
+          data: null,
+        });
+      }
+
+      const { confirmName } = req.body;
+
+      if (!confirmName || typeof confirmName !== 'string' || !confirmName.trim()) {
+        return res.status(400).json({
+          message: 'Debe proporcionar el nombre del negocio como confirmación (campo "confirmName")',
+          status: 400,
+          data: null,
+        });
+      }
+
+      const result = await businessAdminService.permanentlyDeleteBusiness(businessId, confirmName);
+
+      return res.status(result.status).json(result);
+
+    } catch (error) {
+      console.error('BusinessAdminController.deleteBusiness error:', error);
+      return res.status(500).json({
+        message: 'Error interno del servidor',
+        status: 500,
+        data: null,
+      });
+    }
+  }
 }
