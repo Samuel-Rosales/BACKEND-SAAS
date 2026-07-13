@@ -365,6 +365,11 @@ export class BusinessAdminService {
         select: { id: true },
       })).map(d => d.id);
 
+      const memberIds = (await prisma.businessMember.findMany({
+        where: { businessId },
+        select: { id: true },
+      })).map(m => m.id);
+
       // 4. Ejecutar eliminación en transacción (hojas → raíz)
       await prisma.$transaction(async (tx) => {
 
@@ -533,6 +538,62 @@ export class BusinessAdminService {
         });
 
         // === MIEMBROS ===
+        // Limpieza de seguridad: eliminar cualquier referencia cruzada
+        // entre negocios que apunte a estos miembros (edge case de datos)
+        if (memberIds.length > 0) {
+          // Obtener IDs de Sales/Purchases/CashRegisters de OTROS negocios que referencien estos members
+          const crossSaleIds = (await tx.sale.findMany({
+            where: { memberId: { in: memberIds }, businessId: { not: businessId } },
+            select: { id: true },
+          })).map(s => s.id);
+
+          const crossPurchaseIds = (await tx.purchase.findMany({
+            where: { memberId: { in: memberIds }, businessId: { not: businessId } },
+            select: { id: true },
+          })).map(p => p.id);
+
+          const crossCashRegisterIds = (await tx.cashRegister.findMany({
+            where: { memberId: { in: memberIds }, businessId: { not: businessId } },
+            select: { id: true },
+          })).map(cr => cr.id);
+
+          // Eliminar hijos de cross-sales
+          if (crossSaleIds.length > 0) {
+            const crossCreditNoteIds = (await tx.creditNote.findMany({
+              where: { saleId: { in: crossSaleIds } },
+              select: { id: true },
+            })).map(cn => cn.id);
+            if (crossCreditNoteIds.length > 0) {
+              await tx.creditNotePayment.deleteMany({ where: { creditNoteId: { in: crossCreditNoteIds } } });
+              await tx.creditNoteItem.deleteMany({ where: { creditNoteId: { in: crossCreditNoteIds } } });
+              await tx.creditNote.deleteMany({ where: { id: { in: crossCreditNoteIds } } });
+            }
+            await tx.saleInstallment.deleteMany({ where: { saleId: { in: crossSaleIds } } });
+            await tx.saleItemLot.deleteMany({ where: { saleItem: { saleId: { in: crossSaleIds } } } });
+            await tx.saleItem.deleteMany({ where: { saleId: { in: crossSaleIds } } });
+            await tx.salePayment.deleteMany({ where: { saleId: { in: crossSaleIds } } });
+            await tx.sale.deleteMany({ where: { id: { in: crossSaleIds } } });
+          }
+
+          // Eliminar hijos de cross-purchases
+          if (crossPurchaseIds.length > 0) {
+            await tx.purchaseInstallment.deleteMany({ where: { purchaseId: { in: crossPurchaseIds } } });
+            await tx.purchasePayment.deleteMany({ where: { purchaseId: { in: crossPurchaseIds } } });
+            await tx.purchaseItem.deleteMany({ where: { purchaseId: { in: crossPurchaseIds } } });
+            await tx.purchase.deleteMany({ where: { id: { in: crossPurchaseIds } } });
+          }
+
+          // Eliminar hijos de cross-cash-registers
+          if (crossCashRegisterIds.length > 0) {
+            await tx.cashCount.deleteMany({ where: { cashRegisterId: { in: crossCashRegisterIds } } });
+            await tx.cashRegister.deleteMany({ where: { id: { in: crossCashRegisterIds } } });
+          }
+
+          // Eliminar stock movements que referencien estos members
+          await tx.stockMovement.deleteMany({
+            where: { memberId: { in: memberIds } },
+          });
+        }
         await tx.businessMember.deleteMany({
           where: { businessId },
         });
