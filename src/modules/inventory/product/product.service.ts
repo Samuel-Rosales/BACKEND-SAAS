@@ -85,7 +85,7 @@ export class ProductService {
         return typeNames[type] || type;
     }
 
-    async create(businessId: number, userId: number, data: CreateProductInterface) {
+    async create(businessId: number, userId: number, membershipId: number, data: CreateProductInterface) {
         try {
             const initialStock = Number(data.stockInitial || 0);
             const hasInitialStock = initialStock > 0;
@@ -242,7 +242,7 @@ export class ProductService {
                             quantity: initialStock,
                             type: 'IN',
                             reason: 'Stock inicial al crear producto',
-                            memberId: userId,
+                            memberId: membershipId,
                             historicalCost: finalCostPrice,
                             stockLotId: stockLot.id
                         }

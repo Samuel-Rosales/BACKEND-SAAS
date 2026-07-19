@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ProductService } from './product.service';
 import { v2 as cloudinary } from 'cloudinary';
+import { prisma } from '@/configs';
 
 const service = new ProductService();
 
@@ -100,7 +101,7 @@ export class ProductController {
     async create(req: Request, res: Response) {
         try {
             
-            const { businessId, id: userId } = req.user;
+            const { businessId, id: userId, membershipId } = req.user;
 
             if (!businessId) {
                 return res.status(400).json({
@@ -118,7 +119,28 @@ export class ProductController {
                 });
             }
 
-            const result = await service.create(businessId, userId, req.body);
+            // Si es SuperAdmin u otro caso especial donde membershipId no esté en la sesión,
+            // intentamos resolverlo dinámicamente consultando la tabla.
+            let resolvedMembershipId = membershipId ? Number(membershipId) : null;
+            if (!resolvedMembershipId) {
+                const member = await prisma.businessMember.findFirst({
+                    where: { userId: Number(userId), businessId: Number(businessId), isActive: true },
+                    select: { id: true }
+                });
+                if (member) {
+                    resolvedMembershipId = member.id;
+                }
+            }
+
+            if (!resolvedMembershipId) {
+                return res.status(403).json({
+                    status: 403,
+                    message: 'No tienes una membresía activa en este negocio.',
+                    data: null
+                });
+            }
+
+            const result = await service.create(businessId, userId, resolvedMembershipId, req.body);
 
             return res.status(result.status).json(result);
 
