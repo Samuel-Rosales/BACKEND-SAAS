@@ -1,4 +1,5 @@
 import { prisma } from '@/configs';
+import bcrypt from 'bcryptjs';
 
 export type AdminUserListParams = {
   page?: number;
@@ -101,4 +102,54 @@ export class UserAdminService {
       };
     }
   }
+
+  /**
+   * POST /api/v1/admin/users/:id/reset-password
+   */
+  async resetPassword(id: number) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id },
+        select: { id: true, name: true, ci: true },
+      });
+
+      if (!user) {
+        return {
+          message: 'Usuario no encontrado',
+          status: 404,
+          data: null,
+        };
+      }
+
+      if (!user.ci) {
+        return {
+          message: 'El usuario no posee cédula de identidad registrada para resetear la contraseña',
+          status: 400,
+          data: null,
+        };
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(user.ci, salt);
+
+      await prisma.user.update({
+        where: { id },
+        data: { password: hashedPassword },
+      });
+
+      return {
+        message: `La contraseña del usuario ${user.name} ha sido reseteada a su cédula (${user.ci})`,
+        status: 200,
+        data: { id: user.id, ci: user.ci },
+      };
+    } catch (error) {
+      console.error('UserAdminService.resetPassword error:', error);
+      return {
+        message: 'Error al resetear la contraseña del usuario',
+        status: 500,
+        data: null,
+      };
+    }
+  }
 }
+

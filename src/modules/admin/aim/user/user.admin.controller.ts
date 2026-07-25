@@ -35,4 +35,31 @@ export class UserAdminController {
       });
     }
   }
+
+  /**
+   * POST /api/v1/admin/users/:id/reset-password
+   */
+  async resetPassword(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({
+          message: 'ID de usuario inválido',
+          status: 400,
+          data: null,
+        });
+      }
+
+      const result = await userAdminService.resetPassword(id);
+      return res.status(result.status).json(result);
+    } catch (error) {
+      console.error('UserAdminController.resetPassword error:', error);
+      return res.status(500).json({
+        message: 'Error interno del servidor',
+        status: 500,
+        data: null,
+      });
+    }
+  }
 }
+
