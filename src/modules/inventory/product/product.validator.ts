@@ -86,7 +86,18 @@ export class ProductValidator {
     
         body('salePrice')
             .isFloat({ min: 0 }).withMessage('El precio de venta debe ser positivo')
-            .toFloat(),
+            .toFloat()
+            .custom((salePrice, { req }) => {
+                // Prevención: un producto SIMPLE con stock inicial NO debe crearse con
+                // costo unitario mayor que el precio de venta (ese costo pasa al lote).
+                if (req.body?.type === ProductType.SIMPLE) {
+                    const cost = Number(req.body.costPrice);
+                    if (Number.isFinite(cost) && Number(salePrice) < cost) {
+                        throw new Error('El precio de venta no puede ser menor que el costo unitario');
+                    }
+                }
+                return true;
+            }),
 
         // 5. CONFIGURACIÓN
         body('minStock')
@@ -191,6 +202,23 @@ export class ProductValidator {
         body('costPrice').optional().isFloat({ min: 0 }).toFloat(),
         body('salePrice').optional().isFloat({ min: 0 }).toFloat(),
         body('profitMargin').optional().isFloat({ min: 0 }).toFloat(),
+        
+        // Revalorización de lotes al cambiar el costo (requiere confirmar escribiendo el nombre)
+        body('revalueLots')
+            .optional()
+            .isBoolean().withMessage('revalueLots debe ser booleano')
+            .toBoolean(),
+
+        body('confirmProductName')
+            .optional()
+            .isString().withMessage('confirmProductName debe ser texto')
+            .trim()
+            .custom((value, { req }) => {
+                if (req.body?.revalueLots && !value) {
+                    throw new Error('Debes escribir el nombre del producto para confirmar la revalorización de lotes');
+                }
+                return true;
+            }),
         
         body('minStock').optional().isInt({ min: 0 }).toInt(),
         body('isPerishable').optional().isBoolean().toBoolean(),

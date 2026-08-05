@@ -1,5 +1,6 @@
 import { prisma } from '@/configs';
 import { CreateStockLotInterface, FindStockLotsQuery, UpdateStockLotInterface } from './interfaces';
+import { Decimal } from '@prisma/client/runtime/client';
 
 export class StockLotService {
 
@@ -266,7 +267,7 @@ export class StockLotService {
     }
 
     // 5. ACTUALIZAR
-    async update(businessId: number, id: number, data: UpdateStockLotInterface) {
+    async update(businessId: number, id: number, data: UpdateStockLotInterface, membershipId?: number) {
 
         try {
 
@@ -276,6 +277,16 @@ export class StockLotService {
                     id,
                     product: {
                         businessId: businessId
+                    }
+                },
+                include: {
+                    product: {
+                        select: {
+                            id: true,
+                            name: true,
+                            costPrice: true,
+                            salePrice: true
+                        }
                     }
                 }
             });
@@ -288,24 +299,62 @@ export class StockLotService {
                 };
             }
 
-            const updatedStockLot = await prisma.stockLot.update({
-                where: { id },
-                data: data,
-                include: {
-                    product: {
-                        select: {
-                            id: true,
-                            name: true,
-                            sku: true
-                        }
+            const costChanged = data.lotCost !== undefined
+                && new Decimal(data.lotCost).toNumber() !== Number(existingLot.lotCost);
+
+            // Sanidad: un costo unitario jamás debería superar el precio de venta
+            if (costChanged && Number(data.lotCost) > Number(existingLot.product.salePrice)) {
+                return {
+                    message: `El costo unitario del lote (${Number(data.lotCost)}) no puede superar el precio de venta del producto (${existingLot.product.salePrice}). Revisa el valor ingresado.`,
+                    status: 400,
+                    data: null
+                };
+            }
+
+            const updatedStockLot = await prisma.$transaction(async (tx) => {
+                const updated = await tx.stockLot.update({
+                    where: { id },
+                    data: {
+                        ...(data.quantity !== undefined && { quantity: data.quantity }),
+                        ...(data.expirationDate !== undefined && { expirationDate: data.expirationDate }),
+                        ...(data.lotCost !== undefined && { lotCost: data.lotCost })
                     },
-                    depot: {
-                        select: {
-                            id: true,
-                            name: true
+                    include: {
+                        product: {
+                            select: {
+                                id: true,
+                                name: true,
+                                sku: true
+                            }
+                        },
+                        depot: {
+                            select: {
+                                id: true,
+                                name: true
+                            }
                         }
                     }
+                });
+
+                // Revalorización de costo: registramos el cambio en el kardex
+                if (costChanged && membershipId) {
+                    await tx.stockMovement.create({
+                        data: {
+                            businessId,
+                            productId: existingLot.productId,
+                            memberId: membershipId,
+                            depotId: existingLot.depotId,
+                            type: 'REVALUATION',
+                            quantity: 0,
+                            historicalCost: Number(data.lotCost),
+                            reason: `Revalorización de costo del lote: ${Number(existingLot.lotCost)} → ${Number(data.lotCost)}`,
+                            date: new Date(),
+                            stockLotId: id
+                        }
+                    });
                 }
+
+                return updated;
             });
 
             if (!updatedStockLot) {

@@ -11,24 +11,20 @@ export class InventoryStatsService {
     async getDashboardKPIs(businessId: number) {
         try {
             // 1. Ejecutamos las agregaciones en paralelo para máxima velocidad
-            const [stockAggregates, productCount, criticalStock] = await Promise.all([
+            const [stockTotals, productCount, criticalStock] = await Promise.all([
                 
-                // A. Sumar cantidades y costos de todos los lotes
-                prisma.stockLot.aggregate({
-                    _sum: {
-                        quantity: true,
-                        lotCost: true // Asumiendo que guardas el costo total del lote
-                    },
-                    where: {
-                        product: { 
-                            businessId,
-                            type: ProductType.SIMPLE,  // Ignoramos servicios y combos
-                            isActive: true
-                        },
-                        // Opcional: Solo contar lotes activos/con stock
-                        quantity: { gt: 0 } 
-                    }
-                }),
+                // A. Total de items y valor del inventario (cantidad × costo unitario maestro)
+                prisma.$queryRaw<[{ total_quantity: number; inventory_value: number }]>`
+                    SELECT
+                        COALESCE(SUM(sl.quantity), 0)::numeric as total_quantity,
+                        COALESCE(SUM(sl.quantity * p."costPrice"), 0)::numeric as inventory_value
+                    FROM "StockLot" sl
+                    INNER JOIN "Product" p ON sl."productId" = p.id
+                    WHERE p."businessId" = ${businessId}
+                    AND p."type" = ${ProductType.SIMPLE}
+                    AND p."isActive" = true
+                    AND sl.quantity > 0
+                `,
 
                 // B. Contar productos únicos (SKUs)
                 prisma.product.count({
@@ -60,8 +56,8 @@ export class InventoryStatsService {
                 status: 200,
                 message: 'KPIs de inventario calculados exitosamente',
                 data: {
-                    totalItems: stockAggregates._sum.quantity || 0,     // "1,234"
-                    inventoryValue: stockAggregates._sum.lotCost || 0,  // "$ Valor"
+                    totalItems: Number(stockTotals[0]?.total_quantity || 0),     // "1,234"
+                    inventoryValue: Number(stockTotals[0]?.inventory_value || 0),  // "$ Valor"
                     uniqueProducts: productCount,                       // "450"
                     criticalStock: criticalStock[0]?.count || 0         // "5"
                 }

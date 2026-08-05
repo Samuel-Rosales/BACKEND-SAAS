@@ -947,6 +947,7 @@ enum MovementType {
   ADJUSTMENT // Ajuste manual (Inventario físico)
   TRANSFER // Movimiento entre bodegas
   RETURN // Devolución
+  REVALUATION // Cambio de costo unitario (sin movimiento de stock)
 }
 
 enum SaleType {

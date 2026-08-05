@@ -77,7 +77,7 @@ export class StockLotController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const businessId = req.user?.businessId;
+        const { businessId, membershipId } = req.user;
 
         if (!businessId) {
             return res.status(400).json({
@@ -86,7 +86,7 @@ export class StockLotController {
             });
         }
 
-        const {status, data, message} = await this.service.update(businessId, +id, req.body);
+        const {status, data, message} = await this.service.update(businessId, +id, req.body, membershipId);
         
         res.status(status).json({ 
             message, 
