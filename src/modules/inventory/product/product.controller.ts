@@ -214,7 +214,7 @@ export class ProductController {
     // 4. ACTUALIZAR
     async update(req: Request, res: Response) {
         try {
-            const { businessId, id: userId } = req.user;
+            const { businessId, id: userId, membershipId } = req.user;
             const id = Number(req.params.id);
 
             if (!businessId) {
@@ -225,7 +225,7 @@ export class ProductController {
                 });
             }
 
-            const result = await service.update(businessId, userId, id, req.body);
+            const result = await service.update(businessId, userId, membershipId, id, req.body);
 
             return res.status(result.status).json(result);
 

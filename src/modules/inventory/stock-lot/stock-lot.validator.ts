@@ -18,7 +18,7 @@ export class StockLotValidator {
         .toDate(),
 
         body('lotCost')
-        .isFloat({ min: 0 }).withMessage('El costo del lote debe ser un número positivo'),
+        .isFloat({ min: 0 }).withMessage('El costo unitario del lote debe ser un número positivo'),
     ];
 
     public validateUpdate: ValidationChain[] = [
@@ -36,7 +36,7 @@ export class StockLotValidator {
 
         body('lotCost')
         .optional()
-        .isFloat({ min: 0 }).withMessage('El costo del lote debe ser un número positivo'),
+        .isFloat({ min: 0 }).withMessage('El costo unitario del lote debe ser un número positivo'),
     ];
 
     public validateId: ValidationChain[] = [

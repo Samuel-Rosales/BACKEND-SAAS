@@ -1,7 +1,7 @@
 import { prisma } from '@/configs';
 import { CreateStockMovementInterface, FindMovementsQuery, StockOutputResult, UpdateStockMovementInterface } from './interfaces';
 import { BusinessError } from '@/utils/catch-errors.util';
-import { Prisma } from '@prisma/client';
+import { MovementType, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
 
 export class StockMovementService {
@@ -27,6 +27,12 @@ export class StockMovementService {
             if (!depot) throw new BusinessError('Depósito de origen no encontrado', 404);
             if (!member) throw new BusinessError('Usuario no autorizado', 403);
             if (data.type === 'TRANSFER' && !targetDepot) throw new BusinessError('Depósito destino inválido', 400);
+
+            // Las revalorizaciones de costo se generan internamente (producto o lote),
+            // no modifican stock y no deben pasar por este endpoint genérico.
+            if (data.type === MovementType.REVALUATION) {
+                throw new BusinessError('La revalorización de costo se gestiona desde el producto o el lote', 400);
+            }
 
             // 2. Transacción
             const result = await prisma.$transaction(async (tx) => {
@@ -360,7 +366,7 @@ export class StockMovementService {
                     orderBy: { date: 'desc' },
                     include: {
                         product: {
-                            select: { id: true, name: true, sku: true, imageUrl: true }
+                            select: { id: true, name: true, sku: true, imageUrl: true, costPrice: true, salePrice: true }
                         },
                         depot: {
                             select: { id: true, name: true, location: true }

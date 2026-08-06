@@ -1,6 +1,6 @@
 import { prisma } from '@/configs';
 import { CreateProductInterface, DepotInterface, StockLotInterface, UpdateProductInterface } from './interfaces';
-import { ProductType } from '@prisma/client';
+import { ProductType, Prisma } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
 import { v2 as cloudinary } from 'cloudinary';
@@ -656,16 +656,22 @@ export class ProductService {
     }
 
     // 4. ACTUALIZAR
-    async update(businessId: number, userId: number, id: number, data: UpdateProductInterface) {
+    async update(businessId: number, userId: number, membershipId: number | undefined, id: number, data: UpdateProductInterface) {
         try {
             console.log('Iniciando actualización de producto:', { businessId, userId, id, data });
             // 1. Verificar existencia
             const existingProduct = await prisma.product.findFirst({ where: { id, businessId } });
             if (!existingProduct) return { message: 'Producto no encontrado', status: 404, data: null };
 
-            // 2. Separamos los 'components' del resto de la data para tratarlos especial
-            // 'rest' contiene nombre, precio, sku, etc.
-            const { components, ...rest } = data;
+            // 2. Separamos los 'components' y las flags de revalorización del resto de la data
+            // para tratarlos por separado (no son campos del Product)
+            const { components, revalueLots, confirmProductName, ...rest } = data;
+
+            // Revalorización general: requiere confirmar escribiendo el nombre exacto del producto
+            const revalue = revalueLots === true;
+            if (revalue && confirmProductName?.trim() !== existingProduct.name) {
+                throw new BusinessError('El nombre escrito no coincide con el producto. Revalorización cancelada.', 400);
+            }
 
             // =================================================================
             // FASE DE VALIDACIONES (Igual que antes)
@@ -782,30 +788,70 @@ export class ProductService {
             const oldImageUrl = existingProduct.imageUrl || null;
             const oldImagePublicId = existingProduct.imagePublicId || null;
 
-            const updatedProduct = await prisma.product.update({
-                where: { id },
-                data: {
-                    ...rest,
-                    businessId,
-                    updatedById: userId,
+            const persist = async (client: Prisma.TransactionClient) => {
+                const updated = await client.product.update({
+                    where: { id },
+                    data: {
+                        ...rest,
+                        businessId,
+                        updatedById: userId,
 
-                    // Valores Financieros Calculados
-                    costPrice: newCostPrice,
-                    salePrice: newSalePrice,
+                        // Valores Financieros Calculados
+                        costPrice: newCostPrice,
+                        salePrice: newSalePrice,
 
-                    // Relaciones
-                    components: componentsUpdateLogic
-                },
-                include: {
-                    category: true,
-                    unit: true,
-                    components: {
-                        include: {
-                            child: { select: { id: true, name: true, unit: { select: { symbol: true } } } }
+                        // Relaciones
+                        components: componentsUpdateLogic
+                    },
+                    include: {
+                        category: true,
+                        unit: true,
+                        components: {
+                            include: {
+                                child: { select: { id: true, name: true, unit: { select: { symbol: true } } } }
+                            }
+                        }
+                    }
+                });
+
+                // REVALORIZACIÓN GENERAL: actualiza TODOS los lotes al nuevo costo
+                // y registra un movimiento por lote en el kardex (sin mover stock).
+                if (revalue) {
+                    const lots = await client.stockLot.findMany({
+                        where: { productId: id, quantity: { gt: 0 } }
+                    });
+
+                    for (const lot of lots) {
+                        await client.stockLot.update({
+                            where: { id: lot.id },
+                            data: { lotCost: newCostPrice }
+                        });
+
+                        if (membershipId) {
+                            await client.stockMovement.create({
+                                data: {
+                                    businessId,
+                                    productId: id,
+                                    memberId: membershipId,
+                                    depotId: lot.depotId,
+                                    type: 'REVALUATION',
+                                    quantity: 0,
+                                    historicalCost: newCostPrice,
+                                    reason: `Revalorización de costo: ${Number(existingProduct.costPrice)} → ${Number(newCostPrice)}`,
+                                    date: new Date(),
+                                    stockLotId: lot.id
+                                }
+                            });
                         }
                     }
                 }
-            });
+
+                return updated;
+            };
+
+            const updatedProduct = revalue
+                ? await prisma.$transaction((tx) => persist(tx))
+                : await persist(prisma);
 
             // =================================================================
             // FASE DE LIMPIEZA CLOUDINARY (NO BLOQUEANTE) 🧹

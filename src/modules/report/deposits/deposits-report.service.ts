@@ -238,11 +238,20 @@ export class DepositsReportService {
                         sm.date,
                         p.name as "productName",
                         p.sku,
-                        u.name as "memberName"
+                        p."costPrice",
+                        p."salePrice",
+                        u.name as "memberName",
+                        d.name as "depotName",
+                        sl.id as "stockLotId",
+                        sl.quantity as "lotQuantity",
+                        sl."lotCost" as "lotCost",
+                        sl."expirationDate" as "lotExpiration"
                     FROM "StockMovement" sm
                     INNER JOIN "Product" p ON sm."productId" = p.id
                     INNER JOIN "BusinessMember" bm ON sm."memberId" = bm.id
                     INNER JOIN "User" u ON bm."userId" = u.id
+                    INNER JOIN "Depot" d ON sm."depotId" = d.id
+                    LEFT JOIN "StockLot" sl ON sm."stockLotId" = sl.id
                     WHERE sm."depotId" = ${depotId}
                     ORDER BY sm.date DESC
                     LIMIT 20
@@ -286,9 +295,16 @@ export class DepositsReportService {
                 sku: m.sku,
                 quantity: Number(m.quantity),
                 historicalCost: Number(m.historicalCost),
+                costPrice: Number(m.costPrice),
+                salePrice: Number(m.salePrice),
                 reason: m.reason,
                 date: m.date,
-                memberName: m.memberName
+                memberName: m.memberName,
+                depotName: m.depotName,
+                stockLotId: m.stockLotId ? Number(m.stockLotId) : null,
+                lotQuantity: m.lotQuantity ? Number(m.lotQuantity) : null,
+                lotCost: m.lotCost ? Number(m.lotCost) : null,
+                lotExpiration: m.lotExpiration || null
             }));
 
             return {
