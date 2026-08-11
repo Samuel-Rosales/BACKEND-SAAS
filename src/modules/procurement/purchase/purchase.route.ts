@@ -53,6 +53,14 @@ router.post(
     controller.addPayment
 );
 
+router.post(
+    '/:id/cancel',
+    requireBusinessPermission('PROCUREMENT_WRITE'),
+    validator.validateId,
+    handleValidationErrors,
+    controller.cancel
+);
+
 router.get(
     '/:id/purchase-payment/details',
     requireBusinessPermission('PROCUREMENT_READ'),
