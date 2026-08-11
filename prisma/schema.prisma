@@ -1020,6 +1020,7 @@ enum InstallmentStatus {
   PENDING // Aún no se cubre el monto
   PAID    // Monto cubierto
   OVERDUE // Vencida (se calcula por fecha, pero el estado ayuda en filtros)
+  CANCELLED // Cuota anulada (compra anulada)
 }
 
 enum Currency {
