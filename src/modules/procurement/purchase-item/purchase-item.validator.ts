@@ -67,8 +67,8 @@ export class PurchaseItemValidator {
             }),
 
         body('quantity')
-            .isInt({ min: 1 }).withMessage('La cantidad debe ser un número entero mayor a cero')
-            .toInt(),
+            .isFloat({ min: 0.01 }).withMessage('La cantidad debe ser un número mayor a cero')
+            .toFloat(),
 
         body('unitCost')
             .isFloat({ min: 0.01 }).withMessage('El costo unitario debe ser un número mayor a cero')
@@ -106,8 +106,8 @@ export class PurchaseItemValidator {
 
         body('quantity')
             .optional()
-            .isInt({ min: 1 }).withMessage('La cantidad debe ser un número entero mayor a cero')
-            .toInt(),
+            .isFloat({ min: 0.01 }).withMessage('La cantidad debe ser un número mayor a cero')
+            .toFloat(),
 
         body('unitCost')
             .optional()

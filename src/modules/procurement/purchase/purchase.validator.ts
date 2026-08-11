@@ -90,7 +90,7 @@ export class PurchaseValidator {
       .isInt().withMessage('El ID del almacén debe ser un entero'),
 
     body('items.*.quantity')
-      .isInt({ min: 1 }).withMessage('La cantidad debe ser mayor a 0'),
+      .isFloat({ min: 0.01 }).withMessage('La cantidad debe ser mayor a 0'),
 
     body('items.*.unitCost')
       .isFloat({ min: 0 }).withMessage('El costo unitario no puede ser negativo'),

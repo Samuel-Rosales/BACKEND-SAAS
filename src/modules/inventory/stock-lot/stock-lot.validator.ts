@@ -11,7 +11,7 @@ export class StockLotValidator {
         .isInt().withMessage('El ID del depósito debe ser un número entero'),
 
         body('quantity')
-        .isInt({ min: 1 }).withMessage('La cantidad debe ser un número entero positivo mayor a cero'),
+        .isFloat({ min: 0.01 }).withMessage('La cantidad debe ser un número mayor a cero'),
 
         body('expirationDate')
         .isISO8601().withMessage('La fecha de vencimiento debe ser una fecha válida (ISO 8601)')
@@ -27,7 +27,7 @@ export class StockLotValidator {
         
         body('quantity')
         .optional()
-        .isInt({ min: 0 }).withMessage('La cantidad debe ser un número entero positivo o cero'),
+        .isFloat({ min: 0 }).withMessage('La cantidad debe ser un número positivo o cero'),
 
         body('expirationDate')
         .optional()
