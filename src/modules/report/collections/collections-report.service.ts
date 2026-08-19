@@ -43,6 +43,18 @@ const getLocalMonthRangeUtc = (baseDateUtc: Date, tzOffsetMinutes: number, month
     };
 };
 
+const parseCalendarDateStart = (value: string) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return new Date(value);
+    return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+};
+
+const parseCalendarDateEnd = (value: string) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return new Date(value);
+    return new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+};
+
 export class CollectionsReportService {
 
     async getOverview(businessId: number, query: DateRangeQuery) {
@@ -60,22 +72,46 @@ export class CollectionsReportService {
         let rangeStart = defaultMonthRange.start;
         let rangeEnd = defaultMonthRange.end;
 
+        let calendarRangeStart: Date;
+        let calendarRangeEnd: Date;
+
         if (query.fromDate && query.toDate) {
             rangeStart = parseDateOnlyStart(query.fromDate, tzOffsetMinutes);
             rangeEnd = parseDateOnlyEnd(query.toDate, tzOffsetMinutes);
+            calendarRangeStart = parseCalendarDateStart(query.fromDate);
+            calendarRangeEnd = parseCalendarDateEnd(query.toDate);
         } else if (query.fromDate && !query.toDate) {
             rangeStart = parseDateOnlyStart(query.fromDate, tzOffsetMinutes);
             rangeEnd = now;
+            calendarRangeStart = parseCalendarDateStart(query.fromDate);
+            calendarRangeEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
         } else if (!query.fromDate && query.toDate) {
             const base = parseDateOnlyStart(query.toDate, tzOffsetMinutes);
             const monthRange = getLocalMonthRangeUtc(base, tzOffsetMinutes, 0);
             rangeStart = monthRange.start;
             rangeEnd = parseDateOnlyEnd(query.toDate, tzOffsetMinutes);
+            const fromStr = monthRange.start.toISOString().split('T')[0];
+            calendarRangeStart = parseCalendarDateStart(fromStr);
+            calendarRangeEnd = parseCalendarDateEnd(query.toDate);
+        } else {
+            const fromStr = defaultMonthRange.start.toISOString().split('T')[0];
+            const toStr = defaultMonthRange.end.toISOString().split('T')[0];
+            calendarRangeStart = parseCalendarDateStart(fromStr);
+            calendarRangeEnd = parseCalendarDateEnd(toStr);
         }
 
+        const todayStartCalendar = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+
         try {
-            const [debtAggregation, paymentsInPeriod, debtorsCount, overdueInstallmentsCount, expectedInstallments] = await Promise.all([
-                // 1. Total por cobrar (deuda global, NO filtrada por fecha de creación)
+            const [
+                debtAggregation,
+                paymentsInPeriod,
+                debtorsCount,
+                overdueInstallmentsCount,
+                expectedInstallments,
+                singleDueDateSales
+            ] = await Promise.all([
+                // 1. Total por cobrar (deuda global activa, NO filtrada por fecha de creación)
                 prisma.sale.aggregate({
                     _sum: { remainingBalance: true },
                     where: {
@@ -87,9 +123,8 @@ export class CollectionsReportService {
                     }
                 }),
 
-                // 2. Total cobrado EN el período (pagos recibidos en el rango de fechas para ventas a crédito)
-                prisma.salePayment.aggregate({
-                    _sum: { amount: true },
+                // 2. Total cobrado EN el período (pagos recibidos para ventas a crédito con conversión de moneda a USD)
+                prisma.salePayment.findMany({
                     where: {
                         sale: {
                             businessId,
@@ -98,6 +133,10 @@ export class CollectionsReportService {
                             deletedAt: null
                         },
                         date: { gte: rangeStart, lte: rangeEnd }
+                    },
+                    include: {
+                        paymentMethod: { select: { currency: true } },
+                        exchangeRate: { select: { rate: true } }
                     }
                 }),
 
@@ -123,11 +162,11 @@ export class CollectionsReportService {
                             deletedAt: null
                         },
                         status: { in: ['PENDING', 'PARTIAL'] },
-                        dueDate: { lt: new Date() }
+                        dueDate: { lt: todayStartCalendar }
                     }
                 }),
 
-                // 5. Cuotas que vencen en el período seleccionado (para saber cuánto se espera cobrar)
+                // 5. Cuotas comprometidas/programadas para vencer en el período seleccionado
                 prisma.saleInstallment.findMany({
                     where: {
                         sale: {
@@ -136,21 +175,49 @@ export class CollectionsReportService {
                             status: 'COMPLETED',
                             deletedAt: null
                         },
-                        status: { in: ['PENDING', 'PARTIAL'] },
-                        dueDate: { gte: rangeStart, lte: rangeEnd }
+                        dueDate: { gte: calendarRangeStart, lte: calendarRangeEnd }
                     },
                     select: {
-                        amount: true,
-                        amountPaid: true
+                        amount: true
+                    }
+                }),
+
+                // 6. Ventas a crédito sin cuotas individuales pero con fecha de vencimiento en el período
+                prisma.sale.findMany({
+                    where: {
+                        businessId,
+                        conditions: 'CREDIT',
+                        status: 'COMPLETED',
+                        deletedAt: null,
+                        installments: { none: {} },
+                        paymentDueDate: { gte: calendarRangeStart, lte: calendarRangeEnd }
+                    },
+                    select: {
+                        totalAmount: true
                     }
                 })
             ]);
 
             const totalToCollect = debtAggregation._sum.remainingBalance ? Number(debtAggregation._sum.remainingBalance) : 0;
-            const totalCollected = paymentsInPeriod._sum.amount ? Number(paymentsInPeriod._sum.amount) : 0;
-            const expectedInPeriod = expectedInstallments.reduce((sum, inst) => {
-                return sum + (Number(inst.amount) - Number(inst.amountPaid));
-            }, 0);
+
+            // Suma convertida a USD según la divisa y tasa histórica de cada pago
+            let totalCollectedDecimal = new Decimal(0);
+            for (const pay of paymentsInPeriod) {
+                const amt = new Decimal(pay.amount);
+                const currency = pay.paymentMethod?.currency;
+                const rate = pay.exchangeRate?.rate ? new Decimal(pay.exchangeRate.rate) : new Decimal(1);
+
+                if (currency === 'USD') {
+                    totalCollectedDecimal = totalCollectedDecimal.add(amt);
+                } else {
+                    totalCollectedDecimal = totalCollectedDecimal.add(rate.gt(0) ? amt.div(rate) : new Decimal(0));
+                }
+            }
+            const totalCollected = totalCollectedDecimal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+
+            const installmentsTotal = expectedInstallments.reduce((sum, inst) => sum + Number(inst.amount), 0);
+            const singleSalesTotal = singleDueDateSales.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
+            const expectedInPeriod = Number((installmentsTotal + singleSalesTotal).toFixed(2));
 
             return {
                 status: 200,
@@ -194,20 +261,21 @@ export class CollectionsReportService {
             return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
         })();
 
-        let rangeStart: Date | undefined;
-        let rangeEnd: Date | undefined;
+        let calendarRangeStart: Date | undefined;
+        let calendarRangeEnd: Date | undefined;
 
         if (query.fromDate && query.toDate) {
-            rangeStart = parseDateOnlyStart(query.fromDate, tzOffsetMinutes);
-            rangeEnd = parseDateOnlyEnd(query.toDate, tzOffsetMinutes);
+            calendarRangeStart = parseCalendarDateStart(query.fromDate);
+            calendarRangeEnd = parseCalendarDateEnd(query.toDate);
         } else if (query.fromDate && !query.toDate) {
-            rangeStart = parseDateOnlyStart(query.fromDate, tzOffsetMinutes);
-            rangeEnd = now;
+            calendarRangeStart = parseCalendarDateStart(query.fromDate);
+            calendarRangeEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
         } else if (!query.fromDate && query.toDate) {
             const base = parseDateOnlyStart(query.toDate, tzOffsetMinutes);
             const monthRange = getLocalMonthRangeUtc(base, tzOffsetMinutes, 0);
-            rangeStart = monthRange.start;
-            rangeEnd = parseDateOnlyEnd(query.toDate, tzOffsetMinutes);
+            const fromStr = monthRange.start.toISOString().split('T')[0];
+            calendarRangeStart = parseCalendarDateStart(fromStr);
+            calendarRangeEnd = parseCalendarDateEnd(query.toDate);
         }
 
         const page = query.page && query.page > 0 ? query.page : 1;
@@ -221,12 +289,20 @@ export class CollectionsReportService {
             status: 'COMPLETED',
             remainingBalance: { gt: 0 },
             deletedAt: null,
-            ...(rangeStart && rangeEnd ? {
-                installments: {
-                    some: {
-                        dueDate: { gte: rangeStart, lte: rangeEnd }
+            ...(calendarRangeStart && calendarRangeEnd ? {
+                OR: [
+                    {
+                        installments: {
+                            some: {
+                                dueDate: { gte: calendarRangeStart, lte: calendarRangeEnd }
+                            }
+                        }
+                    },
+                    {
+                        installments: { none: {} },
+                        paymentDueDate: { gte: calendarRangeStart, lte: calendarRangeEnd }
                     }
-                }
+                ]
             } : {}),
             ...(search ? {
                 client: {
