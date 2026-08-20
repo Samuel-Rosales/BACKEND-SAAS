@@ -1,6 +1,6 @@
 import { prisma } from '@/configs';
 import { CreatePaymentDto, CreatePurchaseInterface, FindPurchasesQuery } from './interfaces';
-import { Conditions, Currency, InstallmentStatus, MovementType, PaymentStatus, ProductType } from '@prisma/client';
+import { Conditions, Currency, InstallmentStatus, MovementType, PaymentStatus, ProductType, PurchaseStatus } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, resolveBusinessExchangeRate, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
 
@@ -630,6 +630,10 @@ export class PurchaseService {
                 // 2. Validaciones
                 if (!purchase) throw new BusinessError("Compra no encontrada", 404);
 
+                if (purchase.status === PurchaseStatus.CANCELLED) {
+                    throw new BusinessError("No se puede abonar a una compra anulada", 400);
+                }
+
                 if (purchase.paymentStatus === PaymentStatus.PAID) {
                     throw new BusinessError("Esta compra ya está pagada por completo", 400);
                 }
@@ -1001,5 +1005,91 @@ export class PurchaseService {
         }
 
         return `COMP-${nextNumber.toString().padStart(5, '0')}`;
+    }
+
+    async cancelPurchase(businessId: number, purchaseId: number, memberId: number, reason?: string) {
+        try {
+            await prisma.$transaction(async (tx) => {
+                // 1. Cargar y validar la compra
+                const purchase = await tx.purchase.findUnique({
+                    where: { id: purchaseId, businessId }
+                });
+
+                if (!purchase) throw new BusinessError('Compra no encontrada', 404);
+
+                if (purchase.status === PurchaseStatus.CANCELLED) {
+                    throw new BusinessError('La compra ya está anulada', 400);
+                }
+
+                // 2. Localizar los movimientos de entrada generados por esta compra
+                // (Se crean en `create` con reason `Compra #<id>` y stockLotId asociado)
+                const purchaseMovements = await tx.stockMovement.findMany({
+                    where: { businessId, reason: `Compra #${purchaseId}` },
+                    include: { stockLot: true }
+                });
+
+                // 3. Revertir stock y registrar el movimiento de salida
+                for (const movement of purchaseMovements) {
+                    const lot = movement.stockLot;
+                    if (!lot) continue;
+
+                    const quantityToReverse = new Decimal(movement.quantity);
+
+                    // Bloquear si el stock de la compra ya fue consumido
+                    if (lot.quantity.lt(quantityToReverse)) {
+                        throw new BusinessError(
+                            'No se puede anular: parte del stock de esta compra ya fue consumido',
+                            400
+                        );
+                    }
+
+                    // Decrementar el lote original
+                    await tx.stockLot.update({
+                        where: { id: lot.id },
+                        data: { quantity: { decrement: quantityToReverse } }
+                    });
+
+                    // Kardex: salida por anulación (queda registro en movimientos)
+                    await tx.stockMovement.create({
+                        data: {
+                            businessId,
+                            productId: movement.productId,
+                            memberId,
+                            depotId: movement.depotId,
+                            type: MovementType.OUT,
+                            quantity: quantityToReverse.negated(),
+                            historicalCost: lot.lotCost,
+                            reason: `Anulación Compra #${purchaseId}${reason ? `: ${reason}` : ''}`,
+                            date: new Date(),
+                            stockLotId: lot.id
+                        }
+                    });
+                }
+
+                // 4. Financiero: cancelar cuotas, saldo a 0 y estado anulada
+                await tx.purchaseInstallment.updateMany({
+                    where: { purchaseId },
+                    data: { status: InstallmentStatus.CANCELLED }
+                });
+
+                await tx.purchase.update({
+                    where: { id: purchaseId },
+                    data: {
+                        status: PurchaseStatus.CANCELLED,
+                        paymentStatus: PaymentStatus.REFUNDED,
+                        remainingBalance: 0
+                    }
+                });
+            });
+
+            return { status: 200, message: 'Compra anulada exitosamente', data: null };
+
+        } catch (error) {
+            console.error('Error cancel purchase:', error);
+            if (error instanceof BusinessError) {
+                return { status: error.status, message: error.message, data: null };
+            }
+            return { status: 500, message: 'Error interno al anular la compra', data: null };
+        }
     }
 }

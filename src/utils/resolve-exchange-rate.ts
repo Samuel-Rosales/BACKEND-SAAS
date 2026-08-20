@@ -14,9 +14,6 @@ export async function resolveBusinessExchangeRate(
     tx: PrismaTx = prisma 
 ) {
 
-    const dateToday = new Date();
-    dateToday.setHours(0, 0, 0, 0); // Normalizamos a medianoche para comparar solo la fecha
-
     // 1. Buscamos la configuración del negocio
     const business = await tx.business.findUnique({
         where: { id: businessId },
@@ -42,8 +39,7 @@ export async function resolveBusinessExchangeRate(
         where: {
             businessId: targetBusinessId,
             source: targetSource,
-            isActive: true,
-            createdAt: { lte: dateToday }
+            isActive: true
         },
         orderBy: { createdAt: 'desc' } // La más reciente (LIFO)
     });
