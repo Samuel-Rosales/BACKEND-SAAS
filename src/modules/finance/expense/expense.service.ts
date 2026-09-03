@@ -20,21 +20,39 @@ export class ExpenseService {
         };
       }
 
-      const activeExchangeRate = await resolveBusinessExchangeRate(businessId, prisma);
+      let activeExchangeRate = null;
+      try {
+        activeExchangeRate = await resolveBusinessExchangeRate(businessId, prisma);
+      } catch (e: any) {
+        console.warn(`[ExpenseService] Negocio ${businessId} sin tasa de cambio activa configurada.`);
+      }
+
+      // Si no hay tasa activa para la estrategia configurada, buscar la tasa más reciente registrada como respaldo
       if (!activeExchangeRate) {
-        return {
-          status: 400,
-          message: 'No se encontró una tasa de cambio activa para el negocio',
-          data: null,
-        };
+        activeExchangeRate = await prisma.exchangeRate.findFirst({
+          where: {
+            OR: [
+              { businessId },
+              { businessId: null },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
       }
 
       const currency: Currency = data.currency || Currency.USD;
       const amountDecimal = new Decimal(data.amount);
-      const rateDecimal = new Decimal(activeExchangeRate.rate);
 
       let amountInUSD: Decimal;
       if (currency === Currency.VES) {
+        if (!activeExchangeRate) {
+          return {
+            status: 400,
+            message: 'Para registrar gastos en Bolívares (VES) se requiere una tasa de cambio configurada en el negocio.',
+            data: null,
+          };
+        }
+        const rateDecimal = new Decimal(activeExchangeRate.rate);
         amountInUSD = amountDecimal.div(rateDecimal);
       } else {
         amountInUSD = amountDecimal;
@@ -47,7 +65,7 @@ export class ExpenseService {
           businessId,
           categoryId: data.categoryId,
           memberId,
-          exchangeRateId: activeExchangeRate.id,
+          exchangeRateId: activeExchangeRate ? activeExchangeRate.id : null,
           title: data.title.trim(),
           description: data.description?.trim() || null,
           amount: amountDecimal,
@@ -225,12 +243,31 @@ export class ExpenseService {
 
       const newCurrency = data.currency || existing.currency;
       const newAmount = data.amount !== undefined ? new Decimal(data.amount) : existing.amount;
-      const rate = new Decimal(existing.exchangeRate.rate);
-
       let newAmountInUSD = existing.amountInUSD;
       if (data.amount !== undefined || data.currency !== undefined) {
         if (newCurrency === Currency.VES) {
-          newAmountInUSD = newAmount.div(rate);
+          let rateValue: Decimal | null | undefined = existing.exchangeRate?.rate;
+          if (!rateValue) {
+            let activeRate = null;
+            try {
+              activeRate = await resolveBusinessExchangeRate(businessId, prisma);
+            } catch (e) {}
+            if (!activeRate) {
+              activeRate = await prisma.exchangeRate.findFirst({
+                where: { OR: [{ businessId }, { businessId: null }] },
+                orderBy: { createdAt: 'desc' },
+              });
+            }
+            rateValue = activeRate?.rate;
+          }
+          if (!rateValue) {
+            return {
+              status: 400,
+              message: 'No se encontró una tasa de cambio activa para convertir el gasto en VES',
+              data: null,
+            };
+          }
+          newAmountInUSD = newAmount.div(new Decimal(rateValue));
         } else {
           newAmountInUSD = newAmount;
         }

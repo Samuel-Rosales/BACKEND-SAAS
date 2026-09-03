@@ -947,7 +947,7 @@ model Expense {
   businessId     Int
   categoryId     Int
   memberId       Int
-  exchangeRateId Int
+  exchangeRateId Int?
 
   title       String
   description String?
@@ -965,7 +965,7 @@ model Expense {
   business     Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
   category     ExpenseCategory @relation(fields: [categoryId], references: [id])
   member       BusinessMember  @relation(fields: [memberId], references: [id])
-  exchangeRate ExchangeRate    @relation(fields: [exchangeRateId], references: [id])
+  exchangeRate ExchangeRate?   @relation(fields: [exchangeRateId], references: [id])
 
   @@index([businessId, expenseDate])
   @@index([businessId, categoryId])
