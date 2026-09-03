@@ -24,14 +24,22 @@ export class AuthService {
             });
 
             if (!user) {
-                throw new Error('Credenciales inválidas'); // No digas "usuario no existe" por seguridad
+                return {
+                    status: 401,
+                    message: 'Credenciales inválidas. Cédula o contraseña incorrecta.',
+                    data: null
+                };
             }
 
             // 2. Comparar contraseñas (Hash vs Texto plano)
             const isMatch = await bcrypt.compare(data.password, user.password);
 
             if (!isMatch) {
-                throw new Error('Credenciales inválidas, contraseña incorrecta');
+                return {
+                    status: 401,
+                    message: 'Credenciales inválidas. Cédula o contraseña incorrecta.',
+                    data: null
+                };
             }
 
             // 3. Generar Token

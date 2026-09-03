@@ -107,7 +107,9 @@ export class PurchaseService {
             }
 
             // Constantes convertidas a Decimal para operaciones
-            const taxRate = new Decimal(tax.rate); // Asumo que IVA es 0.16 o similar
+            // La tasa se guarda como fracción (0.16) o porcentaje (16): normalizamos.
+            let taxRate = new Decimal(tax.rate);
+            if (taxRate.gte(1)) taxRate = taxRate.div(100);
             const zero = new Decimal(0);
             const tolerance = new Decimal(0.01); // Reemplazo de EPSILON para tolerar redondeos mínimos
 
