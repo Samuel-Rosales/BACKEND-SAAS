@@ -134,8 +134,7 @@ export class ExpenseService {
         const searchTerm = query.search.trim();
         whereClause.OR = [
           { title: { contains: searchTerm, mode: 'insensitive' } },
-          { beneficiary: { contains: searchTerm, mode: 'insensitive' } },
-          { reference: { contains: searchTerm, mode: 'insensitive' } },
+          { description: { contains: searchTerm, mode: 'insensitive' } },
         ];
       }
 
