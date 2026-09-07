@@ -88,11 +88,13 @@ export class FinancialReportService {
             const [
                 salesCurrent,
                 creditNotesCurrent,
+                expensesCurrent,
                 purchasesCurrent,
                 cogsCurrentResult,
                 // Previous Period Data for comparison
                 salesPrev,
                 creditNotesPrev,
+                expensesPrev,
                 purchasesPrev,
                 cogsPrevResult
             ] = await Promise.all([
@@ -116,7 +118,17 @@ export class FinancialReportService {
                     },
                     _sum: { totalAmount: true }
                 }),
-                // Purchases
+                // Operating Expenses (Current)
+                prisma.expense.aggregate({
+                    where: {
+                        businessId,
+                        deletedAt: null,
+                        expenseDate: { gte: start, lte: end }
+                    },
+                    _sum: { amountInUSD: true },
+                    _count: { _all: true }
+                }),
+                // Purchases (Inventory)
                 prisma.purchase.aggregate({
                     where: {
                         businessId,
@@ -157,6 +169,16 @@ export class FinancialReportService {
                     },
                     _sum: { totalAmount: true }
                 }),
+                // Previous Operating Expenses
+                prisma.expense.aggregate({
+                    where: {
+                        businessId,
+                        deletedAt: null,
+                        expenseDate: { gte: prevStart, lte: prevEnd }
+                    },
+                    _sum: { amountInUSD: true },
+                    _count: { _all: true }
+                }),
                 // Previous Purchases
                 prisma.purchase.aggregate({
                     where: {
@@ -164,7 +186,8 @@ export class FinancialReportService {
                         status: { not: 'CANCELLED' },
                         createdAt: { gte: prevStart, lte: prevEnd }
                     },
-                    _sum: { totalCost: true }
+                    _sum: { totalCost: true },
+                    _count: { id: true }
                 }),
                 // Previous Cost of Goods Sold
                 prisma.$queryRaw<[{ totalCost: number }]>`
@@ -190,8 +213,11 @@ export class FinancialReportService {
             const grossProfit = netRevenue - costOfGoodsSold;
             const grossMarginPct = netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0;
 
-            const totalExpenses = Number(purchasesCurrent._sum.totalCost || 0);
-            const purchasesCount = Number(purchasesCurrent._count.id || 0);
+            const totalExpenses = Number(expensesCurrent._sum?.amountInUSD || 0);
+            const expensesCount = Number(expensesCurrent._count?._all || 0);
+
+            const inventoryPurchases = Number(purchasesCurrent._sum?.totalCost || 0);
+            const purchasesCount = Number(purchasesCurrent._count?.id || 0);
 
             const netProfit = grossProfit - totalExpenses;
             const netMarginPct = netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0;
@@ -204,7 +230,7 @@ export class FinancialReportService {
             const netRevenuePrev = grossRevenuePrev - returnsPrev;
             const costOfGoodsSoldPrev = Number(cogsPrevResult[0]?.totalCost || 0);
             const grossProfitPrev = netRevenuePrev - costOfGoodsSoldPrev;
-            const totalExpensesPrev = Number(purchasesPrev._sum.totalCost || 0);
+            const totalExpensesPrev = Number(expensesPrev._sum?.amountInUSD || 0);
             const netProfitPrev = grossProfitPrev - totalExpensesPrev;
 
             // Variations
@@ -223,10 +249,12 @@ export class FinancialReportService {
                     grossProfit,
                     grossMarginPct,
                     totalExpenses,
+                    expensesCount,
+                    inventoryPurchases,
+                    purchasesCount,
                     netProfit,
                     netMarginPct,
                     salesCount,
-                    purchasesCount,
                     avgTicket,
                     prevNetRevenue: netRevenuePrev,
                     prevTotalExpenses: totalExpensesPrev,
