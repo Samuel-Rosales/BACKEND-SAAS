@@ -113,6 +113,9 @@ export class ExpenseService {
       }
 
       if (query.currency) {
+        if (query.currency !== Currency.USD && query.currency !== Currency.VES) {
+          return { status: 400, message: 'La moneda debe ser USD o VES', data: null };
+        }
         whereClause.currency = query.currency;
       }
 
