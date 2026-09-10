@@ -27,10 +27,12 @@ interface FinancialOverview {
     grossProfit: number;
     grossMarginPct: number;
     totalExpenses: number;
+    expensesCount?: number;
+    inventoryPurchases?: number;
     netProfit: number;
     netMarginPct: number;
     salesCount: number;
-    purchasesCount: number;
+    purchasesCount?: number;
     avgTicket: number;
     revenueVariation: number;
     expensesVariation: number;
@@ -407,7 +409,7 @@ const FinancialReport = ({
 
                     {/* (-) Gastos Operativos */}
                     <View style={styles.plRowAlt}>
-                        <Text style={styles.plLabelIndent}>(-) Gastos Operativos (Compras)</Text>
+                        <Text style={styles.plLabelIndent}>(-) Gastos Operativos</Text>
                         <Text style={[styles.plAmount, { color: C.red }]}>({usd(o.totalExpenses)})</Text>
                         <Text style={styles.plPct}>{pct(expPct)}</Text>
                     </View>

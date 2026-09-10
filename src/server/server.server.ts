@@ -9,7 +9,7 @@ import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPa
 
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
 
-import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute } from '../modules/finance';
+import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute, ExpenseRoute, ExpenseCategoryRoute } from '../modules/finance';
 
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
 
@@ -76,6 +76,8 @@ export class Server {
             cashRegisters: `${this.prefix}/finance/cash-register`,
             cashCounts: `${this.prefix}/finance/cash-count`,
             taxes: `${this.prefix}/finance/tax`,
+            expenses: `${this.prefix}/finance/expense`,
+            expenseCategories: `${this.prefix}/finance/expense-category`,
 
             // MÓDULO PROCUREMENT
             suppliers: `${this.prefix}/procurement/supplier`,
@@ -165,6 +167,8 @@ export class Server {
         this.app.use(this.paths.cashRegisters, CashRegisterRoute);
         this.app.use(this.paths.cashCounts, CashCountRoute);
         this.app.use(this.paths.taxes, TaxRoute);
+        this.app.use(this.paths.expenses, ExpenseRoute);
+        this.app.use(this.paths.expenseCategories, ExpenseCategoryRoute);
         this.app.use(this.paths.suppliers, SupplierRoute);
         this.app.use(this.paths.purchases, PurchaseRoute);
         this.app.use(this.paths.purchasePayments, PurchasePaymentRoute);

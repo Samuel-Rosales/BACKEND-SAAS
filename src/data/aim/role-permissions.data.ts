@@ -67,4 +67,9 @@ export type BusinessPermissionCode =
   | "TABLES_WRITE"
 
   | "ORDERS_READ"
-  | "ORDERS_WRITE";
+  | "ORDERS_WRITE"
+
+  | "EXPENSES_READ"
+  | "EXPENSES_WRITE"
+  | "EXPENSES_DELETE"
+  | "EXPENSES_CATEGORIES_MANAGE";
