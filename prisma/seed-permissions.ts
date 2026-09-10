@@ -51,7 +51,7 @@ export const permissions: { code: string; name: string; module: PermissionModule
   { code: "EXPENSES_READ", name: "Ver gastos del negocio", module: "EXPENSES" },
   { code: "EXPENSES_WRITE", name: "Registrar y editar gastos", module: "EXPENSES" },
   { code: "EXPENSES_DELETE", name: "Eliminar gastos", module: "EXPENSES" },
-  { code: "EXPENSES_CATEGORIES_MANAGE", name: "Gestionar categorias de gastos", module: "EXPENSES" },
+  { code: "EXPENSES_CATEGORIES_MANAGE", name: "Gestionar categorías de gastos", module: "EXPENSES" },
 ];
 
 export const rolePermissions: Record<string, string[]> = {
