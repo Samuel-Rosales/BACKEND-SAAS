@@ -13,7 +13,7 @@ import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRout
 
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
 
-import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
+import { ClientRoute, SaleRoute, CreditNoteRoute, BudgetRoute } from '@/modules/sales';
 
 import { TableRoute, OrderRoute } from '@/modules/restaurant';
 
@@ -89,6 +89,7 @@ export class Server {
             clients: `${this.prefix}/sales/client`,
             sales: `${this.prefix}/sales/sale`,
             creditNotes: `${this.prefix}/sales/credit-note`,
+            budgets: `${this.prefix}/sales/budget`,
 
             // MÓDULO RESTAURANT
             tables: `${this.prefix}/restaurant/table`,
@@ -176,6 +177,7 @@ export class Server {
         this.app.use(this.paths.clients, ClientRoute);
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
+        this.app.use(this.paths.budgets, BudgetRoute);
         this.app.use(this.paths.tables, TableRoute);
         this.app.use(this.paths.orders, OrderRoute);
         this.app.use(this.paths.dashboardReports, DashboardRoute);
