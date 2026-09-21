@@ -368,41 +368,39 @@ export class SaleService {
                     : PaymentStatus.PENDING;
             }
 
-            // 1. Aseguramos que los datos entrantes sean instancias de Decimal
-            // Si data.totalAmount es un número o string, 'new Decimal()' lo convierte en objeto con métodos.
-            const incomingTotal = new Decimal(data.totalAmount || 0);
-            const incomingSubTotal = new Decimal(data.subTotal || 0);
-            const incomingTax = new Decimal(data.taxAmount || 0);
-
-            // 2. Ahora sí podemos usar .sub() con seguridad
-            const differenceTotalAmount = incomingTotal.sub(totalAmount).abs();
-            // Compat: algunos frontends mandan subtotal BRUTO (sin descuento) y otros el NETO (con descuento).
-            // Guardamos en BD el BRUTO para que coincida con la UI (Subtotal - Descuento).
-            const differenceSubTotalGross = incomingSubTotal.sub(rawSubTotal).abs();
-            const differenceSubTotalNet = incomingSubTotal.sub(finalSubTotal).abs();
-            const differenceTaxAmount = incomingTax.sub(finalTaxAmount).abs();
-
-            // 3. Validación - Solo lanzar error si hay una diferencia real mayor al epsilon
-            if (differenceTotalAmount.gt(EPSILON)) {
-                throw new BusinessError(
-                    `Discrepancia en total: Recibido ${incomingTotal.toFixed(2)} vs Calculado ${totalAmount.toFixed(2)} (Diferencia: ${differenceTotalAmount.toFixed(2)})`,
-                    400
-                );
+            // Validaciones opcionales de coherencia si el cliente envió los montos calculados
+            if (data.totalAmount !== undefined && data.totalAmount !== null) {
+                const incomingTotal = new Decimal(data.totalAmount);
+                const differenceTotalAmount = incomingTotal.sub(totalAmount).abs();
+                if (differenceTotalAmount.gt(EPSILON)) {
+                    throw new BusinessError(
+                        `Discrepancia en total: Recibido ${incomingTotal.toFixed(2)} vs Calculado ${totalAmount.toFixed(2)} (Diferencia: ${differenceTotalAmount.toFixed(2)})`,
+                        400
+                    );
+                }
             }
 
-            // Aceptamos si coincide con bruto o neto dentro del epsilon.
-            if (differenceSubTotalGross.gt(EPSILON) && differenceSubTotalNet.gt(EPSILON)) {
-                throw new BusinessError(
-                    `Discrepancia en subtotal: Recibido ${incomingSubTotal.toFixed(2)} vs Calculado $${rawSubTotal.toFixed(2)} (bruto) / $${finalSubTotal.toFixed(2)} (neto). Diferencias: ${differenceSubTotalGross.toFixed(2)} / ${differenceSubTotalNet.toFixed(2)}`,
-                    400
-                );
+            if (data.subTotal !== undefined && data.subTotal !== null) {
+                const incomingSubTotal = new Decimal(data.subTotal);
+                const differenceSubTotalGross = incomingSubTotal.sub(rawSubTotal).abs();
+                const differenceSubTotalNet = incomingSubTotal.sub(finalSubTotal).abs();
+                if (differenceSubTotalGross.gt(EPSILON) && differenceSubTotalNet.gt(EPSILON)) {
+                    throw new BusinessError(
+                        `Discrepancia en subtotal: Recibido ${incomingSubTotal.toFixed(2)} vs Calculado $${rawSubTotal.toFixed(2)} (bruto) / $${finalSubTotal.toFixed(2)} (neto). Diferencias: ${differenceSubTotalGross.toFixed(2)} / ${differenceSubTotalNet.toFixed(2)}`,
+                        400
+                    );
+                }
             }
 
-            if (differenceTaxAmount.gt(EPSILON)) {
-                throw new BusinessError(
-                    `Discrepancia en impuestos: Recibido ${incomingTax.toFixed(2)} vs Calculado ${finalTaxAmount.toFixed(2)} (Diferencia: ${differenceTaxAmount.toFixed(2)})`,
-                    400
-                );
+            if (data.taxAmount !== undefined && data.taxAmount !== null) {
+                const incomingTax = new Decimal(data.taxAmount);
+                const differenceTaxAmount = incomingTax.sub(finalTaxAmount).abs();
+                if (differenceTaxAmount.gt(EPSILON)) {
+                    throw new BusinessError(
+                        `Discrepancia en impuestos: Recibido ${incomingTax.toFixed(2)} vs Calculado ${finalTaxAmount.toFixed(2)} (Diferencia: ${differenceTaxAmount.toFixed(2)})`,
+                        400
+                    );
+                }
             }
             // =================================================================
             // FASE 4: TRANSACCIÓN ATÓMICA (ESCRITURA EN DB)
@@ -574,6 +572,28 @@ export class SaleService {
                         // Logging pero no revierte la venta
                         console.error(`Error al marcar pedido ${orderId} como pagado:`, orderErr);
                     }
+                }
+            }
+
+            // Marcar presupuesto como CONVERTED si la venta proviene de uno
+            if (data.budgetId) {
+                try {
+                    const budget = await prisma.budget.findFirst({
+                        where: { id: data.budgetId, businessId }
+                    });
+
+                    if (budget && budget.status !== 'CONVERTED') {
+                        await prisma.budget.update({
+                            where: { id: data.budgetId },
+                            data: {
+                                status: 'CONVERTED',
+                                saleId: result.id,
+                                convertedAt: new Date()
+                            }
+                        });
+                    }
+                } catch (budgetErr) {
+                    console.error(`Error al marcar presupuesto ${data.budgetId} como convertido:`, budgetErr);
                 }
             }
 
