@@ -1234,6 +1234,9 @@ export class ProductService {
                         });
                     }
                 }
+            }, {
+                maxWait: 15000,
+                timeout: 60000
             });
 
             return {

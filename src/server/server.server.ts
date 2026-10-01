@@ -126,7 +126,8 @@ export class Server {
             allowedHeaders: ['Content-Type', 'Authorization', 'x-business-id'],
             credentials: false,
         }));
-        this.app.use(express.json());
+        this.app.use(express.json({ limit: '25mb' }));
+        this.app.use(express.urlencoded({ limit: '25mb', extended: true }));
         this.app.use(express.static("src/public"));
         this.app.use(morgan('dev', { stream }));
     }
@@ -196,6 +197,17 @@ export class Server {
                 requestedPath: req.originalUrl,
                 validPrefix: this.prefix
             });
+        });
+
+        this.app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+            if (err) {
+                console.error('[SERVER ERROR]:', err);
+                return res.status(err.status || 500).json({
+                    ok: false,
+                    message: err.message || 'Error interno del servidor'
+                });
+            }
+            next();
         });
     }
 
