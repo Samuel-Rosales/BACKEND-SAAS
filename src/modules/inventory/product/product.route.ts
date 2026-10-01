@@ -26,6 +26,12 @@ router.post(
   controller.create
 );
 
+router.post(
+  '/batch-import',
+  requireBusinessPermission('PRODUCTS_WRITE'),
+  controller.batchImport
+);
+
 router.get('/', requireBusinessPermission('PRODUCTS_READ'), controller.findAll);
 
 router.get(

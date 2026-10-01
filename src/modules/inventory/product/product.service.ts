@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { CreateProductInterface, DepotInterface, StockLotInterface, UpdateProductInterface } from './interfaces';
+import { CreateProductInterface, DepotInterface, StockLotInterface, UpdateProductInterface, BatchImportDTO } from './interfaces';
 import { ProductType, Prisma } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -1002,6 +1002,257 @@ export class ProductService {
         } catch (error) {
             console.error('Error al eliminar producto:', error);
             return { message: 'Error interno al procesar la eliminación', status: 500, data: null };
+        }
+    }
+
+    // 8. IMPORTACIÓN MASIVA POR LOTES (EXCEL / CSV)
+    async batchImport(businessId: number, userId: number, membershipId: number, dto: BatchImportDTO) {
+        try {
+            if (!dto.products || !Array.isArray(dto.products) || dto.products.length === 0) {
+                return {
+                    status: 400,
+                    message: 'No se enviaron productos para importar',
+                    data: null
+                };
+            }
+
+            const [business, taxes, units, depots, existingCategories] = await Promise.all([
+                prisma.business.findUnique({ where: { id: businessId } }),
+                prisma.tax.findMany({ where: { isActive: true } }),
+                prisma.measurementUnit.findMany({ where: { isActive: true } }),
+                prisma.depot.findMany({ where: { businessId, isActive: true } }),
+                prisma.category.findMany({ where: { businessId, isActive: true } })
+            ]);
+
+            if (!business) {
+                return { status: 404, message: 'Negocio no encontrado', data: null };
+            }
+
+            // Impuesto por defecto (preferir 16% o el primero disponible)
+            const defaultTax = taxes.find(t => Number(t.rate) === 0.16) || taxes[0];
+            if (!defaultTax) {
+                return { status: 400, message: 'No hay impuestos configurados en el sistema', data: null };
+            }
+
+            // Unidad por defecto (preferir "und" o "unidad" o la primera disponible)
+            const defaultUnit = units.find(u => 
+                u.symbol.toLowerCase() === 'und' || 
+                u.name.toLowerCase().includes('unidad')
+            ) || units[0];
+
+            if (!defaultUnit) {
+                return { status: 400, message: 'No hay unidades de medida configuradas en el sistema', data: null };
+            }
+
+            // Depósito por defecto
+            let defaultDepot = depots.find(d => d.id === dto.defaultDepotId) || depots[0] || null;
+
+            // Mapa de categorías para resolución rápida
+            const categoryMap = new Map<string, number>();
+            existingCategories.forEach(c => categoryMap.set(c.name.trim().toLowerCase(), c.id));
+
+            // Mapa de unidades por símbolo y por nombre
+            const unitMap = new Map<string, number>();
+            units.forEach(u => {
+                unitMap.set(u.symbol.trim().toLowerCase(), u.id);
+                unitMap.set(u.name.trim().toLowerCase(), u.id);
+            });
+
+            // Mapa de depósitos por nombre
+            const depotNameMap = new Map<string, number>();
+            depots.forEach(d => depotNameMap.set(d.name.trim().toLowerCase(), d.id));
+
+            // Mapa de productos existentes por SKU para actualizar si ya existen
+            const existingProducts = await prisma.product.findMany({
+                where: { businessId, sku: { not: null } },
+                select: { id: true, sku: true }
+            });
+            const skuMap = new Map<string, number>();
+            existingProducts.forEach(p => {
+                if (p.sku) skuMap.set(p.sku.trim().toLowerCase(), p.id);
+            });
+
+            let createdCount = 0;
+            let updatedCount = 0;
+            const errors: { row: number; name?: string; error: string }[] = [];
+
+            // Procesamos fila a fila dentro de una transacción o por batches seguros
+            await prisma.$transaction(async (tx) => {
+                for (let i = 0; i < dto.products.length; i++) {
+                    const rowNum = i + 1;
+                    const item = dto.products[i];
+
+                    const name = (item.name || '').trim();
+                    if (!name) {
+                        errors.push({ row: rowNum, error: 'El nombre del producto es obligatorio' });
+                        continue;
+                    }
+
+                    // Resolver o crear categoría
+                    let categoryId = dto.defaultCategoryId;
+                    if (item.categoryName && item.categoryName.trim()) {
+                        const catKey = item.categoryName.trim().toLowerCase();
+                        if (categoryMap.has(catKey)) {
+                            categoryId = categoryMap.get(catKey)!;
+                        } else {
+                            // Crear nueva categoría en la transacción
+                            const newCat = await tx.category.create({
+                                data: {
+                                    businessId,
+                                    name: item.categoryName.trim(),
+                                    description: 'Creada por importación de Excel'
+                                }
+                            });
+                            categoryId = newCat.id;
+                            categoryMap.set(catKey, newCat.id);
+                        }
+                    }
+
+                    if (!categoryId) {
+                        if (existingCategories.length > 0) {
+                            categoryId = existingCategories[0].id;
+                        } else {
+                            const generalCat = await tx.category.create({
+                                data: {
+                                    businessId,
+                                    name: 'General',
+                                    description: 'Categoría general creada automáticamente'
+                                }
+                            });
+                            categoryId = generalCat.id;
+                            categoryMap.set('general', generalCat.id);
+                        }
+                    }
+
+                    // Resolver unidad
+                    let unitId = defaultUnit.id;
+                    if (item.unitSymbolOrName && item.unitSymbolOrName.trim()) {
+                        const unitKey = item.unitSymbolOrName.trim().toLowerCase();
+                        if (unitMap.has(unitKey)) {
+                            unitId = unitMap.get(unitKey)!;
+                        }
+                    }
+
+                    // Resolver valores numéricos
+                    const costPrice = Math.max(0, Number(item.costPrice) || 0);
+                    const salePrice = Math.max(0, Number(item.salePrice) || 0);
+                    const profitMargin = item.profitMargin !== undefined && item.profitMargin !== null
+                        ? Number(item.profitMargin)
+                        : (costPrice > 0 && salePrice > costPrice ? ((salePrice - costPrice) / costPrice) * 100 : 0);
+                    const minStock = Math.max(0, Math.floor(Number(item.minStock) || 0));
+                    const initialStock = Math.max(0, Math.floor(Number(item.stockInitial) || 0));
+                    const sku = item.sku ? item.sku.trim() : null;
+
+                    // Resolver depósito si hay stock inicial
+                    let targetDepotId: number | null = null;
+                    if (initialStock > 0) {
+                        if (item.depotNameOrId) {
+                            if (typeof item.depotNameOrId === 'number' && depots.some(d => d.id === item.depotNameOrId)) {
+                                targetDepotId = item.depotNameOrId;
+                            } else if (typeof item.depotNameOrId === 'string' && depotNameMap.has(item.depotNameOrId.trim().toLowerCase())) {
+                                targetDepotId = depotNameMap.get(item.depotNameOrId.trim().toLowerCase())!;
+                            }
+                        }
+                        if (!targetDepotId && defaultDepot) {
+                            targetDepotId = defaultDepot.id;
+                        }
+                    }
+
+                    const skuKey = sku ? sku.toLowerCase() : null;
+                    const existingId = skuKey ? skuMap.get(skuKey) : null;
+
+                    let productId: number;
+
+                    if (existingId) {
+                        // Actualizar existente
+                        await tx.product.update({
+                            where: { id: existingId },
+                            data: {
+                                name,
+                                description: item.description || undefined,
+                                categoryId,
+                                unitId,
+                                costPrice,
+                                profitMargin,
+                                salePrice,
+                                minStock,
+                                updatedById: userId,
+                                isActive: true
+                            }
+                        });
+                        productId = existingId;
+                        updatedCount++;
+                    } else {
+                        // Crear nuevo producto
+                        const newProduct = await tx.product.create({
+                            data: {
+                                businessId,
+                                updatedById: userId,
+                                name,
+                                sku,
+                                description: item.description || '',
+                                categoryId,
+                                unitId,
+                                taxId: defaultTax.id,
+                                type: item.type || ProductType.SIMPLE,
+                                isPerishable: item.isPerishable || false,
+                                costPrice,
+                                profitMargin,
+                                salePrice,
+                                minStock
+                            }
+                        });
+                        productId = newProduct.id;
+                        if (skuKey) skuMap.set(skuKey, productId);
+                        createdCount++;
+                    }
+
+                    // Registrar stock inicial si aplica
+                    if (initialStock > 0 && targetDepotId) {
+                        const stockLot = await tx.stockLot.create({
+                            data: {
+                                productId,
+                                depotId: targetDepotId,
+                                quantity: initialStock,
+                                expirationDate: new Date('2099-12-31'),
+                                lotCost: costPrice
+                            }
+                        });
+
+                        await tx.stockMovement.create({
+                            data: {
+                                businessId,
+                                depotId: targetDepotId,
+                                productId,
+                                quantity: initialStock,
+                                type: 'IN',
+                                reason: 'Stock inicial por importación de Excel',
+                                memberId: membershipId,
+                                historicalCost: costPrice,
+                                stockLotId: stockLot.id
+                            }
+                        });
+                    }
+                }
+            });
+
+            return {
+                status: 200,
+                message: `Importación completada: ${createdCount} creados, ${updatedCount} actualizados.`,
+                data: {
+                    createdCount,
+                    updatedCount,
+                    totalProcessed: dto.products.length,
+                    errors
+                }
+            };
+        } catch (error: any) {
+            console.error('Error en batchImport:', error);
+            return {
+                status: 500,
+                message: error?.message || 'Error al procesar la importación por lotes',
+                data: null
+            };
         }
     }
 }
