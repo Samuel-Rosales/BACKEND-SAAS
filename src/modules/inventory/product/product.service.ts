@@ -1062,14 +1062,26 @@ export class ProductService {
             const depotNameMap = new Map<string, number>();
             depots.forEach(d => depotNameMap.set(d.name.trim().toLowerCase(), d.id));
 
-            // Mapa de productos existentes por SKU para actualizar si ya existen
+            // Mapa de productos existentes por SKU y por Nombre para actualizar si ya existen
             const existingProducts = await prisma.product.findMany({
-                where: { businessId, sku: { not: null } },
-                select: { id: true, sku: true }
+                where: { businessId },
+                select: {
+                    id: true,
+                    sku: true,
+                    name: true,
+                    costPrice: true,
+                    salePrice: true,
+                    profitMargin: true,
+                    categoryId: true,
+                    unitId: true,
+                    minStock: true
+                }
             });
-            const skuMap = new Map<string, number>();
+            const skuMap = new Map<string, any>();
+            const nameMap = new Map<string, any>();
             existingProducts.forEach(p => {
-                if (p.sku) skuMap.set(p.sku.trim().toLowerCase(), p.id);
+                if (p.sku) skuMap.set(p.sku.trim().toLowerCase(), p);
+                if (p.name) nameMap.set(p.name.trim().toLowerCase(), p);
             });
 
             let createdCount = 0;
@@ -1082,36 +1094,44 @@ export class ProductService {
                     const rowNum = i + 1;
                     const item = dto.products[i];
 
-                    const name = (item.name || '').trim();
-                    if (!name) {
-                        errors.push({ row: rowNum, error: 'El nombre del producto es obligatorio' });
+                    const rawSku = item.sku ? String(item.sku).trim() : '';
+                    const rawName = item.name ? String(item.name).trim() : '';
+                    const skuKey = rawSku ? rawSku.toLowerCase() : null;
+                    const nameKey = rawName ? rawName.toLowerCase() : null;
+
+                    // Buscar producto existente por SKU o por Nombre
+                    const existingProduct = (skuKey ? skuMap.get(skuKey) : null) || (nameKey ? nameMap.get(nameKey) : null);
+
+                    // Si no existe y no tiene nombre, no se puede crear
+                    if (!existingProduct && !rawName) {
+                        errors.push({
+                            row: rowNum,
+                            name: rawSku || `Fila ${rowNum}`,
+                            error: `Artículo con código "${rawSku || '-'}" no existe en Guardián para actualizar precio (requiere nombre para registrarse como nuevo).`
+                        });
                         continue;
                     }
 
-                    // Resolver o crear categoría
-                    let categoryId = dto.defaultCategoryId;
-                    if (item.categoryName && item.categoryName.trim()) {
-                        const catKey = item.categoryName.trim().toLowerCase();
+                    // Resolver o crear categoría (solo si vino en el archivo o si es creación nueva)
+                    let categoryId: number | undefined = undefined;
+                    if (item.categoryName && String(item.categoryName).trim()) {
+                        const catKey = String(item.categoryName).trim().toLowerCase();
                         if (categoryMap.has(catKey)) {
                             categoryId = categoryMap.get(catKey)!;
                         } else {
-                            // Crear nueva categoría en la transacción
                             const newCat = await tx.category.create({
                                 data: {
                                     businessId,
-                                    name: item.categoryName.trim(),
+                                    name: String(item.categoryName).trim(),
                                     description: 'Creada por importación de Excel'
                                 }
                             });
                             categoryId = newCat.id;
                             categoryMap.set(catKey, newCat.id);
                         }
-                    }
-
-                    if (!categoryId) {
-                        if (existingCategories.length > 0) {
-                            categoryId = existingCategories[0].id;
-                        } else {
+                    } else if (!existingProduct) {
+                        categoryId = dto.defaultCategoryId || (existingCategories.length > 0 ? existingCategories[0].id : undefined);
+                        if (!categoryId) {
                             const generalCat = await tx.category.create({
                                 data: {
                                     businessId,
@@ -1124,24 +1144,23 @@ export class ProductService {
                         }
                     }
 
-                    // Resolver unidad
-                    let unitId = defaultUnit.id;
-                    if (item.unitSymbolOrName && item.unitSymbolOrName.trim()) {
-                        const unitKey = item.unitSymbolOrName.trim().toLowerCase();
+                    // Resolver unidad (solo si vino en el archivo o si es creación nueva)
+                    let unitId: number | undefined = undefined;
+                    if (item.unitSymbolOrName && String(item.unitSymbolOrName).trim()) {
+                        const unitKey = String(item.unitSymbolOrName).trim().toLowerCase();
                         if (unitMap.has(unitKey)) {
                             unitId = unitMap.get(unitKey)!;
                         }
+                    } else if (!existingProduct) {
+                        unitId = defaultUnit.id;
                     }
 
-                    // Resolver valores numéricos
-                    const costPrice = Math.max(0, Number(item.costPrice) || 0);
-                    const salePrice = Math.max(0, Number(item.salePrice) || 0);
-                    const profitMargin = item.profitMargin !== undefined && item.profitMargin !== null
-                        ? Number(item.profitMargin)
-                        : (costPrice > 0 && salePrice > costPrice ? ((salePrice - costPrice) / costPrice) * 100 : 0);
-                    const minStock = Math.max(0, Math.floor(Number(item.minStock) || 0));
+                    // Precios
+                    const hasSalePrice = item.salePrice !== undefined && item.salePrice !== null && !isNaN(Number(item.salePrice)) && Number(item.salePrice) > 0;
+                    const hasCostPrice = item.costPrice !== undefined && item.costPrice !== null && !isNaN(Number(item.costPrice)) && Number(item.costPrice) > 0;
+
                     const initialStock = Math.max(0, Math.floor(Number(item.stockInitial) || 0));
-                    const sku = item.sku ? item.sku.trim() : null;
+                    const sku = rawSku || null;
 
                     // Resolver depósito si hay stock inicial
                     let targetDepotId: number | null = null;
@@ -1158,41 +1177,68 @@ export class ProductService {
                         }
                     }
 
-                    const skuKey = sku ? sku.toLowerCase() : null;
-                    const existingId = skuKey ? skuMap.get(skuKey) : null;
-
                     let productId: number;
 
-                    if (existingId) {
-                        // Actualizar existente
+                    if (existingProduct) {
+                        const existingId = existingProduct.id;
+                        const updateData: any = {
+                            updatedById: userId,
+                            isActive: true
+                        };
+
+                        // Actualizar nombre solo si vino explícito
+                        if (rawName) updateData.name = rawName;
+                        if (item.description && String(item.description).trim()) updateData.description = String(item.description).trim();
+                        if (categoryId) updateData.categoryId = categoryId;
+                        if (unitId) updateData.unitId = unitId;
+
+                        const currentCost = hasCostPrice ? Number(item.costPrice) : Number(existingProduct.costPrice || 0);
+                        const currentSale = hasSalePrice ? Number(item.salePrice) : Number(existingProduct.salePrice || 0);
+
+                        if (hasSalePrice) updateData.salePrice = currentSale;
+                        if (hasCostPrice) updateData.costPrice = currentCost;
+
+                        if (item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin)) && Number(item.profitMargin) > 0) {
+                            updateData.profitMargin = Number(item.profitMargin);
+                        } else if (hasSalePrice || hasCostPrice) {
+                            if (currentCost > 0 && currentSale > currentCost) {
+                                updateData.profitMargin = ((currentSale - currentCost) / currentCost) * 100;
+                            }
+                        }
+
+                        if (item.minStock !== undefined && item.minStock !== null && !isNaN(Number(item.minStock)) && Number(item.minStock) > 0) {
+                            updateData.minStock = Math.floor(Number(item.minStock));
+                        }
+
                         await tx.product.update({
                             where: { id: existingId },
-                            data: {
-                                name,
-                                description: item.description || undefined,
-                                categoryId,
-                                unitId,
-                                costPrice,
-                                profitMargin,
-                                salePrice,
-                                minStock,
-                                updatedById: userId,
-                                isActive: true
-                            }
+                            data: updateData
                         });
+
+                        // Actualizar en memoria para filas siguientes
+                        if (hasSalePrice) existingProduct.salePrice = currentSale;
+                        if (hasCostPrice) existingProduct.costPrice = currentCost;
+
                         productId = existingId;
                         updatedCount++;
                     } else {
                         // Crear nuevo producto
+                        const costPrice = hasCostPrice ? Number(item.costPrice) : 0;
+                        const salePrice = hasSalePrice ? Number(item.salePrice) : 0;
+                        const profitMargin = item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin))
+                            ? Number(item.profitMargin)
+                            : (costPrice > 0 && salePrice > costPrice ? ((salePrice - costPrice) / costPrice) * 100 : 0);
+                        const minStock = Math.max(0, Math.floor(Number(item.minStock) || 0));
+
                         const newProduct = await tx.product.create({
                             data: {
                                 businessId,
                                 updatedById: userId,
-                                name,
+                                name: rawName,
                                 sku,
                                 description: item.description || '',
-                                categoryId,
-                                unitId,
+                                categoryId: categoryId!,
+                                unitId: unitId!,
                                 taxId: defaultTax.id,
                                 type: item.type || ProductType.SIMPLE,
                                 isPerishable: item.isPerishable || false,
@@ -1203,7 +1249,8 @@ export class ProductService {
                             }
                         });
                         productId = newProduct.id;
-                        if (skuKey) skuMap.set(skuKey, productId);
+                        if (skuKey) skuMap.set(skuKey, newProduct);
+                        if (nameKey) nameMap.set(nameKey, newProduct);
                         createdCount++;
                     }
 
