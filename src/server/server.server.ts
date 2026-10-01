@@ -13,14 +13,15 @@ import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRout
 
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
 
-import { ClientRoute, SaleRoute, CreditNoteRoute, BudgetRoute } from '@/modules/sales';
+import { ClientRoute, SaleRoute, CreditNoteRoute, QuotationRoute } from '@/modules/sales';
 
 import { TableRoute, OrderRoute } from '@/modules/restaurant';
 
 import { DashboardRoute } from '@/modules/report/dashboard/dashboard.routes';
 import { SalesReportRoute } from '@/modules/report/sales/sales-stats.route';
 import { PurchaseReportRoute } from '@/modules/report/purchase/purchase-report.route';
-import { InventoryReportRoute } from '@/modules/report/inventory//inventory-report.route';
+import { InventoryReportRoute } from '@/modules/report/inventory/inventory-report.route';
+import { QuotationReportRoute } from '@/modules/report/quotation/quotation-report.route';
 import { ArticlesReportRoute } from '@/modules/report/articles/articles-report.route';
 import { CashRegisterReportRoute } from '@/modules/report/cash-register/cash-register-report.route';
 import { CollectionsReportRoute } from '@/modules/report/collections/collections-report.route';
@@ -89,7 +90,7 @@ export class Server {
             clients: `${this.prefix}/sales/client`,
             sales: `${this.prefix}/sales/sale`,
             creditNotes: `${this.prefix}/sales/credit-note`,
-            budgets: `${this.prefix}/sales/budget`,
+            quotations: `${this.prefix}/sales/quotation`,
 
             // MÓDULO RESTAURANT
             tables: `${this.prefix}/restaurant/table`,
@@ -105,6 +106,7 @@ export class Server {
             collectionsReports: `${this.prefix}/report/collections`,
             financialReports: `${this.prefix}/report/financial`,
             depositsReports: `${this.prefix}/report/deposits`,
+            quotationReports: `${this.prefix}/report/quotations`,
 
             // MÓDULO ADMIN
             admin: `${this.prefix}/admin`,
@@ -178,13 +180,14 @@ export class Server {
         this.app.use(this.paths.clients, ClientRoute);
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
-        this.app.use(this.paths.budgets, BudgetRoute);
+        this.app.use(this.paths.quotations, QuotationRoute);
         this.app.use(this.paths.tables, TableRoute);
         this.app.use(this.paths.orders, OrderRoute);
         this.app.use(this.paths.dashboardReports, DashboardRoute);
         this.app.use(this.paths.salesReports, SalesReportRoute);
         this.app.use(this.paths.purchaseReports, PurchaseReportRoute);
         this.app.use(this.paths.inventoryReports, InventoryReportRoute);
+        this.app.use(this.paths.quotationReports, QuotationReportRoute);
         this.app.use(this.paths.articleReports, ArticlesReportRoute);
         this.app.use(this.paths.cashRegisterReports, CashRegisterReportRoute);
         this.app.use(this.paths.collectionsReports, CollectionsReportRoute);
