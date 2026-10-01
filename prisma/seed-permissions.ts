@@ -52,6 +52,10 @@ export const permissions: { code: string; name: string; module: PermissionModule
   { code: "EXPENSES_WRITE", name: "Registrar y editar gastos", module: "EXPENSES" },
   { code: "EXPENSES_DELETE", name: "Eliminar gastos", module: "EXPENSES" },
   { code: "EXPENSES_CATEGORIES_MANAGE", name: "Gestionar categorías de gastos", module: "EXPENSES" },
+  { code: "BUDGETS_READ", name: "Ver presupuestos", module: "BUDGETS" },
+  { code: "BUDGETS_WRITE", name: "Crear y editar presupuestos", module: "BUDGETS" },
+  { code: "BUDGETS_DELETE", name: "Anular presupuestos", module: "BUDGETS" },
+  { code: "BUDGETS_CONVERT", name: "Convertir presupuesto a venta", module: "BUDGETS" },
 ];
 
 export const rolePermissions: Record<string, string[]> = {
@@ -108,6 +112,10 @@ export const rolePermissions: Record<string, string[]> = {
     "EXPENSES_WRITE",
     "EXPENSES_DELETE",
     "EXPENSES_CATEGORIES_MANAGE",
+    "BUDGETS_READ",
+    "BUDGETS_WRITE",
+    "BUDGETS_DELETE",
+    "BUDGETS_CONVERT",
   ],
   OPERATOR: [
     "CLIENTS_READ",
@@ -211,6 +219,10 @@ export const rolePermissions: Record<string, string[]> = {
     "EXPENSES_WRITE",
     "EXPENSES_DELETE",
     "EXPENSES_CATEGORIES_MANAGE",
+    "BUDGETS_READ",
+    "BUDGETS_WRITE",
+    "BUDGETS_DELETE",
+    "BUDGETS_CONVERT",
   ],
   CASHIER: [
     "BUSINESS_SETTINGS_VIEW",
@@ -235,6 +247,9 @@ export const rolePermissions: Record<string, string[]> = {
     "TABLES_WRITE",
     "ORDERS_READ",
     "ORDERS_WRITE",
+    "BUDGETS_READ",
+    "BUDGETS_WRITE",
+    "BUDGETS_CONVERT",
   ],
   SELLER: [
     "CLIENTS_READ",
@@ -248,6 +263,9 @@ export const rolePermissions: Record<string, string[]> = {
     "TABLES_WRITE",
     "ORDERS_READ",
     "ORDERS_WRITE",
+    "BUDGETS_READ",
+    "BUDGETS_WRITE",
+    "BUDGETS_CONVERT",
   ],
   BUYER: [
     "SUPPLIERS_READ",

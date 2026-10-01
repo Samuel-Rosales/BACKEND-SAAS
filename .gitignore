@@ -8,3 +8,9 @@ dist
 ERD.svg
 .vscode
 logs
+
+# AI Agent Skills
+.agents
+.claude
+.windsurf
+skills-lock.json
