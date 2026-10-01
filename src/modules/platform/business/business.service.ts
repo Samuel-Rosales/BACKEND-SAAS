@@ -413,7 +413,17 @@ export class BusinessService {
 
           newCurrentRate = data.manualRate;
 
-          // 1.1 Crear el registro histórico de auditoría
+          // 1.1 Desactivar tasas manuales activas anteriores del negocio
+          await tx.exchangeRate.updateMany({
+            where: {
+              businessId: businessId,
+              source: ExchangeRateStrategy.MANUAL,
+              isActive: true
+            },
+            data: { isActive: false }
+          });
+
+          // 1.2 Crear el registro histórico de auditoría
           await tx.exchangeRate.create({
             data: {
               businessId: businessId, // Es privado de este negocio

@@ -48,6 +48,14 @@ export const permissions: { code: string; name: string; module: PermissionModule
   { code: "TABLES_WRITE", name: "Gestionar mesas", module: "RESTAURANT" },
   { code: "ORDERS_READ", name: "Ver pedidos", module: "RESTAURANT" },
   { code: "ORDERS_WRITE", name: "Gestionar pedidos", module: "RESTAURANT" },
+  { code: "EXPENSES_READ", name: "Ver gastos del negocio", module: "EXPENSES" },
+  { code: "EXPENSES_WRITE", name: "Registrar y editar gastos", module: "EXPENSES" },
+  { code: "EXPENSES_DELETE", name: "Eliminar gastos", module: "EXPENSES" },
+  { code: "EXPENSES_CATEGORIES_MANAGE", name: "Gestionar categorías de gastos", module: "EXPENSES" },
+  { code: "BUDGETS_READ", name: "Ver presupuestos", module: "BUDGETS" },
+  { code: "BUDGETS_WRITE", name: "Crear y editar presupuestos", module: "BUDGETS" },
+  { code: "BUDGETS_DELETE", name: "Anular presupuestos", module: "BUDGETS" },
+  { code: "BUDGETS_CONVERT", name: "Convertir presupuesto a venta", module: "BUDGETS" },
 ];
 
 export const rolePermissions: Record<string, string[]> = {
@@ -100,6 +108,14 @@ export const rolePermissions: Record<string, string[]> = {
     "TABLES_WRITE",
     "ORDERS_READ",
     "ORDERS_WRITE",
+    "EXPENSES_READ",
+    "EXPENSES_WRITE",
+    "EXPENSES_DELETE",
+    "EXPENSES_CATEGORIES_MANAGE",
+    "BUDGETS_READ",
+    "BUDGETS_WRITE",
+    "BUDGETS_DELETE",
+    "BUDGETS_CONVERT",
   ],
   OPERATOR: [
     "CLIENTS_READ",
@@ -199,6 +215,14 @@ export const rolePermissions: Record<string, string[]> = {
     "TABLES_WRITE",
     "ORDERS_READ",
     "ORDERS_WRITE",
+    "EXPENSES_READ",
+    "EXPENSES_WRITE",
+    "EXPENSES_DELETE",
+    "EXPENSES_CATEGORIES_MANAGE",
+    "BUDGETS_READ",
+    "BUDGETS_WRITE",
+    "BUDGETS_DELETE",
+    "BUDGETS_CONVERT",
   ],
   CASHIER: [
     "BUSINESS_SETTINGS_VIEW",
@@ -223,6 +247,9 @@ export const rolePermissions: Record<string, string[]> = {
     "TABLES_WRITE",
     "ORDERS_READ",
     "ORDERS_WRITE",
+    "BUDGETS_READ",
+    "BUDGETS_WRITE",
+    "BUDGETS_CONVERT",
   ],
   SELLER: [
     "CLIENTS_READ",
@@ -236,6 +263,9 @@ export const rolePermissions: Record<string, string[]> = {
     "TABLES_WRITE",
     "ORDERS_READ",
     "ORDERS_WRITE",
+    "BUDGETS_READ",
+    "BUDGETS_WRITE",
+    "BUDGETS_CONVERT",
   ],
   BUYER: [
     "SUPPLIERS_READ",
@@ -286,6 +316,8 @@ export const rolePermissions: Record<string, string[]> = {
     "REPORTS_FINANCIAL_VIEW",
     "REPORTS_DEPOSITS_VIEW",
     "REPORTS_CREDITS_VIEW",
+    "EXPENSES_READ",
+    "EXPENSES_WRITE",
   ],
 };
 

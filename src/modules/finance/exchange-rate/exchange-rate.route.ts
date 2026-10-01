@@ -29,6 +29,12 @@ router.get(
 );
 
 router.get(
+    '/active',
+  requireBusinessPermission('FINANCE_READ'),
+    controller.findLatest
+);
+
+router.get(
     '/:id', 
   requireBusinessPermission('FINANCE_READ'),
     validator.validateId,

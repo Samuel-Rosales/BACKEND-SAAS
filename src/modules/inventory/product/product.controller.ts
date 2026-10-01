@@ -266,4 +266,44 @@ export class ProductController {
             });
         }
     }
+
+    // 6. IMPORTACIÓN MASIVA POR LOTES (EXCEL)
+    async batchImport(req: Request, res: Response) {
+        try {
+            const { businessId, id: userId, membershipId } = (req as any).user;
+
+            if (!businessId) {
+                return res.status(400).json({
+                    message: 'El ID del negocio es obligatorio',
+                    status: 400,
+                    data: null
+                });
+            }
+
+            const { products, defaultDepotId, defaultCategoryId } = req.body;
+
+            if (!products || !Array.isArray(products) || products.length === 0) {
+                return res.status(400).json({
+                    message: 'Se requiere una lista de productos para importar',
+                    status: 400,
+                    data: null
+                });
+            }
+
+            const result = await service.batchImport(Number(businessId), Number(userId), Number(membershipId), {
+                products,
+                defaultDepotId: defaultDepotId ? Number(defaultDepotId) : undefined,
+                defaultCategoryId: defaultCategoryId ? Number(defaultCategoryId) : undefined
+            });
+
+            return res.status(result.status).json(result);
+        } catch (error) {
+            console.error('Error en ProductController.batchImport:', error);
+            return res.status(500).json({
+                message: 'Error interno al procesar la importación masiva',
+                status: 500,
+                data: null
+            });
+        }
+    }
 }

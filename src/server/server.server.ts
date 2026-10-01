@@ -9,11 +9,11 @@ import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPa
 
 import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
 
-import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute } from '../modules/finance';
+import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute, ExpenseRoute, ExpenseCategoryRoute } from '../modules/finance';
 
 import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
 
-import { ClientRoute, SaleRoute, CreditNoteRoute } from '@/modules/sales';
+import { ClientRoute, SaleRoute, CreditNoteRoute, BudgetRoute } from '@/modules/sales';
 
 import { TableRoute, OrderRoute } from '@/modules/restaurant';
 
@@ -76,6 +76,8 @@ export class Server {
             cashRegisters: `${this.prefix}/finance/cash-register`,
             cashCounts: `${this.prefix}/finance/cash-count`,
             taxes: `${this.prefix}/finance/tax`,
+            expenses: `${this.prefix}/finance/expense`,
+            expenseCategories: `${this.prefix}/finance/expense-category`,
 
             // MÓDULO PROCUREMENT
             suppliers: `${this.prefix}/procurement/supplier`,
@@ -87,6 +89,7 @@ export class Server {
             clients: `${this.prefix}/sales/client`,
             sales: `${this.prefix}/sales/sale`,
             creditNotes: `${this.prefix}/sales/credit-note`,
+            budgets: `${this.prefix}/sales/budget`,
 
             // MÓDULO RESTAURANT
             tables: `${this.prefix}/restaurant/table`,
@@ -124,7 +127,8 @@ export class Server {
             allowedHeaders: ['Content-Type', 'Authorization', 'x-business-id'],
             credentials: false,
         }));
-        this.app.use(express.json());
+        this.app.use(express.json({ limit: '25mb' }));
+        this.app.use(express.urlencoded({ limit: '25mb', extended: true }));
         this.app.use(express.static("src/public"));
         this.app.use(morgan('dev', { stream }));
     }
@@ -165,6 +169,8 @@ export class Server {
         this.app.use(this.paths.cashRegisters, CashRegisterRoute);
         this.app.use(this.paths.cashCounts, CashCountRoute);
         this.app.use(this.paths.taxes, TaxRoute);
+        this.app.use(this.paths.expenses, ExpenseRoute);
+        this.app.use(this.paths.expenseCategories, ExpenseCategoryRoute);
         this.app.use(this.paths.suppliers, SupplierRoute);
         this.app.use(this.paths.purchases, PurchaseRoute);
         this.app.use(this.paths.purchasePayments, PurchasePaymentRoute);
@@ -172,6 +178,7 @@ export class Server {
         this.app.use(this.paths.clients, ClientRoute);
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
+        this.app.use(this.paths.budgets, BudgetRoute);
         this.app.use(this.paths.tables, TableRoute);
         this.app.use(this.paths.orders, OrderRoute);
         this.app.use(this.paths.dashboardReports, DashboardRoute);
@@ -192,6 +199,17 @@ export class Server {
                 requestedPath: req.originalUrl,
                 validPrefix: this.prefix
             });
+        });
+
+        this.app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+            if (err) {
+                console.error('[SERVER ERROR]:', err);
+                return res.status(err.status || 500).json({
+                    ok: false,
+                    message: err.message || 'Error interno del servidor'
+                });
+            }
+            next();
         });
     }
 

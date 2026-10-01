@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { CreateProductInterface, DepotInterface, StockLotInterface, UpdateProductInterface } from './interfaces';
+import { CreateProductInterface, DepotInterface, StockLotInterface, UpdateProductInterface, BatchImportDTO } from './interfaces';
 import { ProductType, Prisma } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -1002,6 +1002,305 @@ export class ProductService {
         } catch (error) {
             console.error('Error al eliminar producto:', error);
             return { message: 'Error interno al procesar la eliminación', status: 500, data: null };
+        }
+    }
+
+    // 8. IMPORTACIÓN MASIVA POR LOTES (EXCEL / CSV)
+    async batchImport(businessId: number, userId: number, membershipId: number, dto: BatchImportDTO) {
+        try {
+            if (!dto.products || !Array.isArray(dto.products) || dto.products.length === 0) {
+                return {
+                    status: 400,
+                    message: 'No se enviaron productos para importar',
+                    data: null
+                };
+            }
+
+            const [business, taxes, units, depots, existingCategories] = await Promise.all([
+                prisma.business.findUnique({ where: { id: businessId } }),
+                prisma.tax.findMany({ where: { isActive: true } }),
+                prisma.measurementUnit.findMany({ where: { isActive: true } }),
+                prisma.depot.findMany({ where: { businessId, isActive: true } }),
+                prisma.category.findMany({ where: { businessId, isActive: true } })
+            ]);
+
+            if (!business) {
+                return { status: 404, message: 'Negocio no encontrado', data: null };
+            }
+
+            // Impuesto por defecto (preferir 16% o el primero disponible)
+            const defaultTax = taxes.find(t => Number(t.rate) === 0.16) || taxes[0];
+            if (!defaultTax) {
+                return { status: 400, message: 'No hay impuestos configurados en el sistema', data: null };
+            }
+
+            // Unidad por defecto (preferir "und" o "unidad" o la primera disponible)
+            const defaultUnit = units.find(u => 
+                u.symbol.toLowerCase() === 'und' || 
+                u.name.toLowerCase().includes('unidad')
+            ) || units[0];
+
+            if (!defaultUnit) {
+                return { status: 400, message: 'No hay unidades de medida configuradas en el sistema', data: null };
+            }
+
+            // Depósito por defecto
+            let defaultDepot = depots.find(d => d.id === dto.defaultDepotId) || depots[0] || null;
+
+            // Mapa de categorías para resolución rápida
+            const categoryMap = new Map<string, number>();
+            existingCategories.forEach(c => categoryMap.set(c.name.trim().toLowerCase(), c.id));
+
+            // Mapa de unidades por símbolo y por nombre
+            const unitMap = new Map<string, number>();
+            units.forEach(u => {
+                unitMap.set(u.symbol.trim().toLowerCase(), u.id);
+                unitMap.set(u.name.trim().toLowerCase(), u.id);
+            });
+
+            // Mapa de depósitos por nombre
+            const depotNameMap = new Map<string, number>();
+            depots.forEach(d => depotNameMap.set(d.name.trim().toLowerCase(), d.id));
+
+            // Mapa de productos existentes por SKU y por Nombre para actualizar si ya existen
+            const existingProducts = await prisma.product.findMany({
+                where: { businessId },
+                select: {
+                    id: true,
+                    sku: true,
+                    name: true,
+                    costPrice: true,
+                    salePrice: true,
+                    profitMargin: true,
+                    categoryId: true,
+                    unitId: true,
+                    minStock: true
+                }
+            });
+            const skuMap = new Map<string, any>();
+            const nameMap = new Map<string, any>();
+            existingProducts.forEach(p => {
+                if (p.sku) skuMap.set(p.sku.trim().toLowerCase(), p);
+                if (p.name) nameMap.set(p.name.trim().toLowerCase(), p);
+            });
+
+            let createdCount = 0;
+            let updatedCount = 0;
+            const errors: { row: number; name?: string; error: string }[] = [];
+
+            // Procesamos fila a fila dentro de una transacción o por batches seguros
+            await prisma.$transaction(async (tx) => {
+                for (let i = 0; i < dto.products.length; i++) {
+                    const rowNum = i + 1;
+                    const item = dto.products[i];
+
+                    const rawSku = item.sku ? String(item.sku).trim() : '';
+                    const rawName = item.name ? String(item.name).trim() : '';
+                    const skuKey = rawSku ? rawSku.toLowerCase() : null;
+                    const nameKey = rawName ? rawName.toLowerCase() : null;
+
+                    // Buscar producto existente por SKU o por Nombre
+                    const existingProduct = (skuKey ? skuMap.get(skuKey) : null) || (nameKey ? nameMap.get(nameKey) : null);
+
+                    // Si no existe y no tiene nombre, no se puede crear
+                    if (!existingProduct && !rawName) {
+                        errors.push({
+                            row: rowNum,
+                            name: rawSku || `Fila ${rowNum}`,
+                            error: `Artículo con código "${rawSku || '-'}" no existe en Guardián para actualizar precio (requiere nombre para registrarse como nuevo).`
+                        });
+                        continue;
+                    }
+
+                    // Resolver o crear categoría (solo si vino en el archivo o si es creación nueva)
+                    let categoryId: number | undefined = undefined;
+                    if (item.categoryName && String(item.categoryName).trim()) {
+                        const catKey = String(item.categoryName).trim().toLowerCase();
+                        if (categoryMap.has(catKey)) {
+                            categoryId = categoryMap.get(catKey)!;
+                        } else {
+                            const newCat = await tx.category.create({
+                                data: {
+                                    businessId,
+                                    name: String(item.categoryName).trim(),
+                                    description: 'Creada por importación de Excel'
+                                }
+                            });
+                            categoryId = newCat.id;
+                            categoryMap.set(catKey, newCat.id);
+                        }
+                    } else if (!existingProduct) {
+                        categoryId = dto.defaultCategoryId || (existingCategories.length > 0 ? existingCategories[0].id : undefined);
+                        if (!categoryId) {
+                            const generalCat = await tx.category.create({
+                                data: {
+                                    businessId,
+                                    name: 'General',
+                                    description: 'Categoría general creada automáticamente'
+                                }
+                            });
+                            categoryId = generalCat.id;
+                            categoryMap.set('general', generalCat.id);
+                        }
+                    }
+
+                    // Resolver unidad (solo si vino en el archivo o si es creación nueva)
+                    let unitId: number | undefined = undefined;
+                    if (item.unitSymbolOrName && String(item.unitSymbolOrName).trim()) {
+                        const unitKey = String(item.unitSymbolOrName).trim().toLowerCase();
+                        if (unitMap.has(unitKey)) {
+                            unitId = unitMap.get(unitKey)!;
+                        }
+                    } else if (!existingProduct) {
+                        unitId = defaultUnit.id;
+                    }
+
+                    // Precios
+                    const hasSalePrice = item.salePrice !== undefined && item.salePrice !== null && !isNaN(Number(item.salePrice)) && Number(item.salePrice) > 0;
+                    const hasCostPrice = item.costPrice !== undefined && item.costPrice !== null && !isNaN(Number(item.costPrice)) && Number(item.costPrice) > 0;
+
+                    const initialStock = Math.max(0, Math.floor(Number(item.stockInitial) || 0));
+                    const sku = rawSku || null;
+
+                    // Resolver depósito si hay stock inicial
+                    let targetDepotId: number | null = null;
+                    if (initialStock > 0) {
+                        if (item.depotNameOrId) {
+                            if (typeof item.depotNameOrId === 'number' && depots.some(d => d.id === item.depotNameOrId)) {
+                                targetDepotId = item.depotNameOrId;
+                            } else if (typeof item.depotNameOrId === 'string' && depotNameMap.has(item.depotNameOrId.trim().toLowerCase())) {
+                                targetDepotId = depotNameMap.get(item.depotNameOrId.trim().toLowerCase())!;
+                            }
+                        }
+                        if (!targetDepotId && defaultDepot) {
+                            targetDepotId = defaultDepot.id;
+                        }
+                    }
+
+                    const costPrice = hasCostPrice ? Number(item.costPrice) : (existingProduct ? Number(existingProduct.costPrice || 0) : 0);
+                    const salePrice = hasSalePrice ? Number(item.salePrice) : (existingProduct ? Number(existingProduct.salePrice || 0) : 0);
+
+                    let productId: number;
+
+                    if (existingProduct) {
+                        const existingId = existingProduct.id;
+                        const updateData: any = {
+                            updatedById: userId,
+                            isActive: true
+                        };
+
+                        // Actualizar nombre solo si vino explícito
+                        if (rawName) updateData.name = rawName;
+                        if (item.description && String(item.description).trim()) updateData.description = String(item.description).trim();
+                        if (categoryId) updateData.categoryId = categoryId;
+                        if (unitId) updateData.unitId = unitId;
+
+                        if (hasSalePrice) updateData.salePrice = salePrice;
+                        if (hasCostPrice) updateData.costPrice = costPrice;
+
+                        if (item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin)) && Number(item.profitMargin) > 0) {
+                            updateData.profitMargin = Number(item.profitMargin);
+                        } else if (hasSalePrice || hasCostPrice) {
+                            if (costPrice > 0 && salePrice > costPrice) {
+                                updateData.profitMargin = ((salePrice - costPrice) / costPrice) * 100;
+                            }
+                        }
+
+                        if (item.minStock !== undefined && item.minStock !== null && !isNaN(Number(item.minStock)) && Number(item.minStock) > 0) {
+                            updateData.minStock = Math.floor(Number(item.minStock));
+                        }
+
+                        await tx.product.update({
+                            where: { id: existingId },
+                            data: updateData
+                        });
+
+                        // Actualizar en memoria para filas siguientes
+                        if (hasSalePrice) existingProduct.salePrice = salePrice;
+                        if (hasCostPrice) existingProduct.costPrice = costPrice;
+
+                        productId = existingId;
+                        updatedCount++;
+                    } else {
+                        // Crear nuevo producto
+                        const profitMargin = item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin))
+                            ? Number(item.profitMargin)
+                            : (costPrice > 0 && salePrice > costPrice ? ((salePrice - costPrice) / costPrice) * 100 : 0);
+                        const minStock = Math.max(0, Math.floor(Number(item.minStock) || 0));
+
+                        const newProduct = await tx.product.create({
+                            data: {
+                                businessId,
+                                updatedById: userId,
+                                name: rawName,
+                                sku,
+                                description: item.description || '',
+                                categoryId: categoryId!,
+                                unitId: unitId!,
+                                taxId: defaultTax.id,
+                                type: item.type || ProductType.SIMPLE,
+                                isPerishable: item.isPerishable || false,
+                                costPrice,
+                                profitMargin,
+                                salePrice,
+                                minStock
+                            }
+                        });
+                        productId = newProduct.id;
+                        if (skuKey) skuMap.set(skuKey, newProduct);
+                        if (nameKey) nameMap.set(nameKey, newProduct);
+                        createdCount++;
+                    }
+
+                    // Registrar stock inicial si aplica
+                    if (initialStock > 0 && targetDepotId) {
+                        const stockLot = await tx.stockLot.create({
+                            data: {
+                                productId,
+                                depotId: targetDepotId,
+                                quantity: initialStock,
+                                expirationDate: new Date('2099-12-31'),
+                                lotCost: costPrice
+                            }
+                        });
+
+                        await tx.stockMovement.create({
+                            data: {
+                                businessId,
+                                depotId: targetDepotId,
+                                productId,
+                                quantity: initialStock,
+                                type: 'IN',
+                                reason: 'Stock inicial por importación de Excel',
+                                memberId: membershipId,
+                                historicalCost: costPrice,
+                                stockLotId: stockLot.id
+                            }
+                        });
+                    }
+                }
+            }, {
+                maxWait: 15000,
+                timeout: 60000
+            });
+
+            return {
+                status: 200,
+                message: `Importación completada: ${createdCount} creados, ${updatedCount} actualizados.`,
+                data: {
+                    createdCount,
+                    updatedCount,
+                    totalProcessed: dto.products.length,
+                    errors
+                }
+            };
+        } catch (error: any) {
+            console.error('Error en batchImport:', error);
+            return {
+                status: 500,
+                message: error?.message || 'Error al procesar la importación por lotes',
+                data: null
+            };
         }
     }
 }

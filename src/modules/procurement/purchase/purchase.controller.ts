@@ -198,4 +198,41 @@ export class PurchaseController {
             });
         }
     }
+
+    async cancel(req: Request, res: Response) {
+        try {
+            const { businessId, membershipId } = req.user;
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            const purchaseId = Number(req.params.id);
+
+            if (!purchaseId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El ID de la compra es inválido.',
+                    data: null
+                });
+            }
+
+            const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+
+            const {data, status, message} = await service.cancelPurchase(businessId, purchaseId, Number(membershipId), reason);
+
+            return res.status(status).json({ data, status, message });
+        } catch (error) {
+            console.error('Error en PurchaseController.cancel:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al anular la compra',
+                data: null
+            });
+        }
+    }
 }
