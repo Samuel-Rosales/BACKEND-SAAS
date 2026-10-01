@@ -1177,6 +1177,9 @@ export class ProductService {
                         }
                     }
 
+                    const costPrice = hasCostPrice ? Number(item.costPrice) : (existingProduct ? Number(existingProduct.costPrice || 0) : 0);
+                    const salePrice = hasSalePrice ? Number(item.salePrice) : (existingProduct ? Number(existingProduct.salePrice || 0) : 0);
+
                     let productId: number;
 
                     if (existingProduct) {
@@ -1192,17 +1195,14 @@ export class ProductService {
                         if (categoryId) updateData.categoryId = categoryId;
                         if (unitId) updateData.unitId = unitId;
 
-                        const currentCost = hasCostPrice ? Number(item.costPrice) : Number(existingProduct.costPrice || 0);
-                        const currentSale = hasSalePrice ? Number(item.salePrice) : Number(existingProduct.salePrice || 0);
-
-                        if (hasSalePrice) updateData.salePrice = currentSale;
-                        if (hasCostPrice) updateData.costPrice = currentCost;
+                        if (hasSalePrice) updateData.salePrice = salePrice;
+                        if (hasCostPrice) updateData.costPrice = costPrice;
 
                         if (item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin)) && Number(item.profitMargin) > 0) {
                             updateData.profitMargin = Number(item.profitMargin);
                         } else if (hasSalePrice || hasCostPrice) {
-                            if (currentCost > 0 && currentSale > currentCost) {
-                                updateData.profitMargin = ((currentSale - currentCost) / currentCost) * 100;
+                            if (costPrice > 0 && salePrice > costPrice) {
+                                updateData.profitMargin = ((salePrice - costPrice) / costPrice) * 100;
                             }
                         }
 
@@ -1216,15 +1216,13 @@ export class ProductService {
                         });
 
                         // Actualizar en memoria para filas siguientes
-                        if (hasSalePrice) existingProduct.salePrice = currentSale;
-                        if (hasCostPrice) existingProduct.costPrice = currentCost;
+                        if (hasSalePrice) existingProduct.salePrice = salePrice;
+                        if (hasCostPrice) existingProduct.costPrice = costPrice;
 
                         productId = existingId;
                         updatedCount++;
                     } else {
                         // Crear nuevo producto
-                        const costPrice = hasCostPrice ? Number(item.costPrice) : 0;
-                        const salePrice = hasSalePrice ? Number(item.salePrice) : 0;
                         const profitMargin = item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin))
                             ? Number(item.profitMargin)
                             : (costPrice > 0 && salePrice > costPrice ? ((salePrice - costPrice) / costPrice) * 100 : 0);
