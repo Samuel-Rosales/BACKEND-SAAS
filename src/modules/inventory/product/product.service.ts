@@ -199,7 +199,14 @@ export class ProductService {
                         // USAMOS EL COSTO CALCULADO O EL MANUAL
                         costPrice: finalCostPrice,
 
-                        profitMargin: data.profitMargin,
+                        profitMargin: (() => {
+                            if (data.profitMargin !== undefined && data.profitMargin !== null && !isNaN(Number(data.profitMargin))) {
+                                let m = Number(data.profitMargin);
+                                if (m > 1) m = m / 100;
+                                return Number(Math.max(0, Math.min(9.9999, m)).toFixed(4));
+                            }
+                            return 0;
+                        })(),
                         salePrice: data.salePrice,
                         minStock: data.minStock || 0,
 
@@ -769,6 +776,13 @@ export class ProductService {
             // Si el costo cambió, ¿Debemos actualizar el precio de venta?
             // Generalmente SÍ, para mantener el margen de ganancia.
 
+            // Normalizar y blindar margen de ganancia si vino en la petición
+            if (rest.profitMargin !== undefined && rest.profitMargin !== null && !isNaN(Number(rest.profitMargin))) {
+                let m = Number(rest.profitMargin);
+                if (m > 1) m = m / 100;
+                rest.profitMargin = Number(Math.max(0, Math.min(9.9999, m)).toFixed(4));
+            }
+
             let newSalePrice = rest.salePrice; // Por defecto mantenemos el que envían o el que estaba
 
             // Si no enviaron precio manual, recalculamos basado en el margen actual
@@ -1199,10 +1213,15 @@ export class ProductService {
                         if (hasCostPrice) updateData.costPrice = costPrice;
 
                         if (item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin)) && Number(item.profitMargin) > 0) {
-                            updateData.profitMargin = Number(item.profitMargin);
+                            let margin = Number(item.profitMargin);
+                            if (margin > 1) margin = margin / 100;
+                            updateData.profitMargin = Number(Math.max(0, Math.min(9.9999, margin)).toFixed(4));
                         } else if (hasSalePrice || hasCostPrice) {
                             if (costPrice > 0 && salePrice > costPrice) {
-                                updateData.profitMargin = ((salePrice - costPrice) / costPrice) * 100;
+                                const margin = (salePrice - costPrice) / costPrice;
+                                updateData.profitMargin = Number(Math.max(0, Math.min(9.9999, margin)).toFixed(4));
+                            } else {
+                                updateData.profitMargin = 0;
                             }
                         }
 
@@ -1223,9 +1242,15 @@ export class ProductService {
                         updatedCount++;
                     } else {
                         // Crear nuevo producto
-                        const profitMargin = item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin))
-                            ? Number(item.profitMargin)
-                            : (costPrice > 0 && salePrice > costPrice ? ((salePrice - costPrice) / costPrice) * 100 : 0);
+                        let safeProfitMargin = 0;
+                        if (item.profitMargin !== undefined && item.profitMargin !== null && !isNaN(Number(item.profitMargin)) && Number(item.profitMargin) > 0) {
+                            let margin = Number(item.profitMargin);
+                            if (margin > 1) margin = margin / 100;
+                            safeProfitMargin = Number(Math.max(0, Math.min(9.9999, margin)).toFixed(4));
+                        } else if (costPrice > 0 && salePrice > costPrice) {
+                            const margin = (salePrice - costPrice) / costPrice;
+                            safeProfitMargin = Number(Math.max(0, Math.min(9.9999, margin)).toFixed(4));
+                        }
                         const minStock = Math.max(0, Math.floor(Number(item.minStock) || 0));
 
                         const newProduct = await tx.product.create({
@@ -1241,7 +1266,7 @@ export class ProductService {
                                 type: item.type || ProductType.SIMPLE,
                                 isPerishable: item.isPerishable || false,
                                 costPrice,
-                                profitMargin,
+                                profitMargin: safeProfitMargin,
                                 salePrice,
                                 minStock
                             }
