@@ -347,6 +347,7 @@ export class ProductService {
                             include: {
                                 child: { // El producto "Ingrediente"
                                     select: {
+                                        type: true,
                                         // Necesitamos sumar sus lotes para saber cuánto hay
                                         stockLots: { select: { quantity: true } }
                                     }
@@ -382,21 +383,27 @@ export class ProductService {
                     if (!product.components || product.components.length === 0) {
                         calculatedStockBase = new Decimal(0);
                     } else {
-                        const possibleQuantities = product.components.map(component => {
-                            const requiredQty = new Decimal(component.quantity);
-                            if (requiredQty.isZero() || requiredQty.isNegative()) return new Decimal(0);
+                        // Ignorar servicios del cálculo físico (los servicios no limitan el stock físico)
+                        const physicalComponents = product.components.filter(c => c.child?.type !== 'SERVICE');
+                        if (physicalComponents.length === 0) {
+                            calculatedStockBase = new Decimal(0);
+                        } else {
+                            const possibleQuantities = physicalComponents.map(component => {
+                                const requiredQty = new Decimal(component.quantity);
+                                if (requiredQty.isZero() || requiredQty.isNegative()) return new Decimal(0);
 
-                            const ingredientTotalStock = component.child.stockLots.reduce(
-                                (acc, lot) => acc.add(new Decimal(lot.quantity)),
-                                new Decimal(0)
-                            );
+                                const ingredientTotalStock = component.child.stockLots.reduce(
+                                    (acc, lot) => acc.add(new Decimal(lot.quantity)),
+                                    new Decimal(0)
+                                );
 
-                            return ingredientTotalStock.div(requiredQty).floor();
-                        });
+                                return ingredientTotalStock.div(requiredQty).floor();
+                            });
 
-                        calculatedStockBase = possibleQuantities.length > 0
-                            ? possibleQuantities.reduce((min, current) => (current.lessThan(min) ? current : min))
-                            : new Decimal(0);
+                            calculatedStockBase = possibleQuantities.length > 0
+                                ? possibleQuantities.reduce((min, current) => (current.lessThan(min) ? current : min))
+                                : new Decimal(0);
+                        }
                     }
                 }
 
@@ -485,7 +492,7 @@ export class ProductService {
                     components: {
                         include: {
                             child: {
-                                select: { id: true, name: true, sku: true, unit: { select: { symbol: true } }, stockLots: { select: { quantity: true } } }
+                                select: { id: true, name: true, sku: true, type: true, unit: { select: { symbol: true } }, stockLots: { select: { quantity: true } } }
                             }
                         }
                     },
@@ -526,34 +533,40 @@ export class ProductService {
                 if (!product.components || product.components.length === 0) {
                     calculatedStock = new Decimal(0);
                 } else {
-                    // Mapeamos a un array de Decimals con la cantidad posible por ingrediente
-                    const possibleQuantities = product.components.map(component => {
-                        const requiredQty = new Decimal(component.quantity);
-
-                        // Evitar división por cero
-                        if (requiredQty.isZero() || requiredQty.isNegative()) return new Decimal(0);
-
-                        // 1. Sumamos el stock del ingrediente (child)
-                        const ingredientTotalStock = component.child.stockLots.reduce(
-                            (acc, lot) => acc.add(new Decimal(lot.quantity)),
-                            new Decimal(0)
-                        );
-
-                        // 2. División precisa: StockDisponible / CantidadRequerida
-                        // Ej: 1000g Harina / 250g Receta = 4 Pasteles
-                        // Usamos .floor() porque no podemos hacer 3.9 pasteles completos
-                        return ingredientTotalStock.div(requiredQty).floor();
-                    });
-
-                    // 3. Encontrar el Mínimo (Cuello de botella)
-                    // Decimal.min(...array) funciona si usas la librería directa, 
-                    // pero para mayor compatibilidad con Prisma iteramos:
-                    if (possibleQuantities.length > 0) {
-                        calculatedStock = possibleQuantities.reduce((min, current) =>
-                            current.lessThan(min) ? current : min
-                        );
-                    } else {
+                    // Ignorar servicios del cálculo físico (los servicios no limitan el stock físico)
+                    const physicalComponents = product.components.filter(c => c.child?.type !== 'SERVICE');
+                    if (physicalComponents.length === 0) {
                         calculatedStock = new Decimal(0);
+                    } else {
+                        // Mapeamos a un array de Decimals con la cantidad posible por ingrediente
+                        const possibleQuantities = physicalComponents.map(component => {
+                            const requiredQty = new Decimal(component.quantity);
+
+                            // Evitar división por cero
+                            if (requiredQty.isZero() || requiredQty.isNegative()) return new Decimal(0);
+
+                            // 1. Sumamos el stock del ingrediente (child)
+                            const ingredientTotalStock = component.child.stockLots.reduce(
+                                (acc, lot) => acc.add(new Decimal(lot.quantity)),
+                                new Decimal(0)
+                            );
+
+                            // 2. División precisa: StockDisponible / CantidadRequerida
+                            // Ej: 1000g Harina / 250g Receta = 4 Pasteles
+                            // Usamos .floor() porque no podemos hacer 3.9 pasteles completos
+                            return ingredientTotalStock.div(requiredQty).floor();
+                        });
+
+                        // 3. Encontrar el Mínimo (Cuello de botella)
+                        // Decimal.min(...array) funciona si usas la librería directa, 
+                        // pero para mayor compatibilidad con Prisma iteramos:
+                        if (possibleQuantities.length > 0) {
+                            calculatedStock = possibleQuantities.reduce((min, current) =>
+                                current.lessThan(min) ? current : min
+                            );
+                        } else {
+                            calculatedStock = new Decimal(0);
+                        }
                     }
                 }
             }
