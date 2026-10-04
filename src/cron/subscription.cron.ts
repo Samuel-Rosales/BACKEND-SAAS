@@ -10,9 +10,13 @@ export const checkSubscriptionsDaily = async (): Promise<number> => {
         const now = new Date();
 
         // Buscamos suscripciones que siguen como ACTIVE pero cuya fecha endDate ya pasó
+        // Excluyendo cuentas propias del propietario (ID 6 y 11) que son exentas
         const expiredSubs = await prisma.subscription.findMany({
             where: {
                 status: SubStatus.ACTIVE,
+                businessId: {
+                    notIn: [6, 11]
+                },
                 endDate: {
                     lt: now
                 }

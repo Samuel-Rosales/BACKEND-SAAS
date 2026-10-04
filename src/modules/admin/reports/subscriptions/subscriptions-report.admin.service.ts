@@ -1,6 +1,16 @@
 import { prisma } from '@/configs';
 import { SubStatus } from '@prisma/client';
 
+/**
+ * Negocios propios del propietario del SaaS (exentos de pago y no computables en reportes financieros)
+ */
+export const isExemptOwnerBusiness = (businessId?: number | null, businessName?: string | null): boolean => {
+  if (businessId === 6 || businessId === 11) return true;
+  const name = (businessName || '').toLowerCase().trim();
+  if (name === 'el guardian' || name.includes('guardian satelital')) return true;
+  return false;
+};
+
 export class AdminSubscriptionsReportService {
   async getOverview(windowDays: number = 7) {
     try {
@@ -11,11 +21,22 @@ export class AdminSubscriptionsReportService {
       const endExclusiveUtc = new Date(startUtc.getTime() + (safeWindowDays + 1) * 24 * 60 * 60 * 1000);
 
       const [activeCount, cancelledCount, expiringSoonCount] = await Promise.all([
-        prisma.subscription.count({ where: { status: SubStatus.ACTIVE } }),
-        prisma.subscription.count({ where: { status: SubStatus.CANCELLED } }),
         prisma.subscription.count({
           where: {
             status: SubStatus.ACTIVE,
+            businessId: { notIn: [6, 11] },
+          },
+        }),
+        prisma.subscription.count({
+          where: {
+            status: SubStatus.CANCELLED,
+            businessId: { notIn: [6, 11] },
+          },
+        }),
+        prisma.subscription.count({
+          where: {
+            status: SubStatus.ACTIVE,
+            businessId: { notIn: [6, 11] },
             endDate: {
               gte: startUtc,
               lt: endExclusiveUtc,
@@ -51,9 +72,10 @@ export class AdminSubscriptionsReportService {
       const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
       const endExclusiveUtc = new Date(todayUtc + (safeWindowDays + 1) * 24 * 60 * 60 * 1000);
 
-      // Buscamos suscripciones activas por vencer o ya vencidas/past_due
-      const subscriptions = await prisma.subscription.findMany({
+      // Buscamos suscripciones activas por vencer o ya vencidas/past_due (excluyendo cuentas propias del dueño)
+      const rawSubscriptions = await prisma.subscription.findMany({
         where: {
+          businessId: { notIn: [6, 11] },
           OR: [
             {
               status: SubStatus.ACTIVE,
@@ -103,6 +125,8 @@ export class AdminSubscriptionsReportService {
           endDate: 'asc',
         },
       });
+
+      const subscriptions = rawSubscriptions.filter((s) => !isExemptOwnerBusiness(s.business.id, s.business.name));
 
       const reminders = subscriptions.map((sub) => {
         const endDate = new Date(sub.endDate);
@@ -240,8 +264,11 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
       const monthLabel = `${monthNames[targetMonth]} ${targetYear}`;
       const monthCode = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
 
-      // Consultamos todas las suscripciones
-      const subscriptions = await prisma.subscription.findMany({
+      // Consultamos todas las suscripciones excluyendo cuentas propias del propietario
+      const rawSubscriptions = await prisma.subscription.findMany({
+        where: {
+          businessId: { notIn: [6, 11] },
+        },
         include: {
           plan: true,
           business: {
@@ -288,6 +315,8 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
           { endDate: 'asc' },
         ],
       });
+
+      const subscriptions = rawSubscriptions.filter((sub) => !isExemptOwnerBusiness(sub.business.id, sub.business.name));
 
       let totalSubscriptions = subscriptions.length;
       let payingSubscriptions = 0;
