@@ -175,60 +175,49 @@ export class TesoroPagosService {
         }
       }
 
-      // Probar credenciales: Caja 04 principal (Guardian) y Caja 03 secundaria (Respaldo)
-      const credentials = [
-        {
-          caja: process.env.TESORO_CAJA || this.defaultCaja,
-          password: process.env.TESORO_PASSWORD || this.defaultPassword,
+      // Caja exclusiva para Guardian (Caja 04). La Caja 03 queda 100% dedicada a Pericon sin interferencias.
+      const caja = process.env.TESORO_CAJA || this.defaultCaja;
+      const password = process.env.TESORO_PASSWORD || this.defaultPassword;
+
+      console.log(`[TesoroPagos] Conectando a Banco del Tesoro (Sucursal ${this.defaultSucursal}, Caja ${caja})...`);
+
+      // Obtener CSRF token fresco desde /login
+      const getRes = await this.request({ path: '/login', method: 'GET' });
+      const tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/);
+      if (!tokenMatch) {
+        console.warn('[TesoroPagos] No se encontró CSRF token en /login');
+        return false;
+      }
+      const csrfToken = tokenMatch[1];
+
+      const postBody = new URLSearchParams({
+        _token: csrfToken,
+        security_code: process.env.TESORO_SUCURSAL || this.defaultSucursal,
+        box_number: caja,
+        password: password,
+      }).toString();
+
+      const postRes = await this.request({
+        path: '/login',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': String(Buffer.byteLength(postBody)),
+          Referer: `https://${this.baseUrl}/login`,
+          Origin: `https://${this.baseUrl}`,
         },
-        {
-          caja: this.fallbackCaja,
-          password: this.fallbackPassword,
-        },
-      ];
+        body: postBody,
+      });
 
-      for (const cred of credentials) {
-        console.log(`[TesoroPagos] Conectando a Banco del Tesoro (Sucursal ${this.defaultSucursal}, Caja ${cred.caja})...`);
-
-        // Obtener CSRF token fresco desde /login
-        const getRes = await this.request({ path: '/login', method: 'GET' });
-        const tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/);
-        if (!tokenMatch) {
-          console.warn('[TesoroPagos] No se encontró CSRF token en /login');
-          continue;
-        }
-        const csrfToken = tokenMatch[1];
-
-        const postBody = new URLSearchParams({
-          _token: csrfToken,
-          security_code: process.env.TESORO_SUCURSAL || this.defaultSucursal,
-          box_number: cred.caja,
-          password: cred.password,
-        }).toString();
-
-        const postRes = await this.request({
-          path: '/login',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Content-Length': String(Buffer.byteLength(postBody)),
-            Referer: `https://${this.baseUrl}/login`,
-            Origin: `https://${this.baseUrl}`,
-          },
-          body: postBody,
-        });
-
-        const location = postRes.headers.location || '';
-        if (location.includes('dashboard') || location.includes('pago-movil')) {
-          console.log(`[TesoroPagos] ¡Sesión iniciada con éxito en Caja ${cred.caja}!`);
-          this.isAuthenticated = true;
-          this.lastSessionTime = Date.now();
-          return true;
-        }
-
-        console.warn(`[TesoroPagos] Caja ${cred.caja} no disponible (Status ${postRes.statusCode}, Location: ${location}).`);
+      const location = postRes.headers.location || '';
+      if (location.includes('dashboard') || location.includes('pago-movil')) {
+        console.log(`[TesoroPagos] ¡Sesión iniciada con éxito en Caja ${caja}!`);
+        this.isAuthenticated = true;
+        this.lastSessionTime = Date.now();
+        return true;
       }
 
+      console.warn(`[TesoroPagos] Caja ${caja} no disponible (Status ${postRes.statusCode}, Location: ${location}).`);
       return false;
     } catch (error) {
       console.error('[TesoroPagos] Error en ensureAuthenticated:', error);
