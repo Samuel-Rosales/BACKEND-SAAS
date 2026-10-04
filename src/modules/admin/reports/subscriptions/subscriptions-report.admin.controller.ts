@@ -25,4 +25,14 @@ export class AdminSubscriptionsReportController {
     const result = await reportService.getReminders(windowDays);
     return res.status(result.status).json(result);
   }
+
+  /**
+   * GET /api/v1/admin/reports/subscriptions/financial
+   */
+  async financial(req: Request, res: Response) {
+    const month = typeof req.query.month === 'string' ? req.query.month : undefined;
+    const result = await reportService.getFinancialReport(month);
+    return res.status(result.status).json(result);
+  }
 }
+

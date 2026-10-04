@@ -206,4 +206,279 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
       };
     }
   }
+
+  /**
+   * GET /api/v1/admin/reports/subscriptions/financial
+   * Reporte financiero mensual: total a recoger, cobrado, pendiente y estado por cliente (pagó / no ha pagado)
+   */
+  async getFinancialReport(monthStr?: string) {
+    try {
+      const now = new Date();
+      let targetYear = now.getUTCFullYear();
+      let targetMonth = now.getUTCMonth(); // 0-indexed (0 = Jan, 9 = Oct)
+
+      if (monthStr && /^\d{4}-\d{2}$/.test(monthStr)) {
+        const [y, m] = monthStr.split('-').map(Number);
+        if (y >= 2020 && y <= 2040 && m >= 1 && m <= 12) {
+          targetYear = y;
+          targetMonth = m - 1;
+        }
+      }
+
+      const startOfMonth = new Date(Date.UTC(targetYear, targetMonth, 1, 0, 0, 0, 0));
+      const nextMonthYear = targetMonth === 11 ? targetYear + 1 : targetYear;
+      const nextMonth = targetMonth === 11 ? 0 : targetMonth + 1;
+      const endOfMonth = new Date(Date.UTC(nextMonthYear, nextMonth, 1, 0, 0, 0, 0));
+
+      const monthNames = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+      ];
+      const monthLabel = `${monthNames[targetMonth]} ${targetYear}`;
+      const monthCode = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
+
+      // Consultamos todas las suscripciones
+      const subscriptions = await prisma.subscription.findMany({
+        include: {
+          plan: true,
+          business: {
+            select: {
+              id: true,
+              name: true,
+              closingNotificationPhone: true,
+              members: {
+                where: { isActive: true },
+                select: {
+                  role: { select: { code: true, name: true } },
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      ci: true,
+                      contacts: {
+                        select: {
+                          phone: true,
+                          email: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          payments: {
+            where: {
+              createdAt: {
+                gte: startOfMonth,
+                lt: endOfMonth,
+              },
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 3,
+          },
+        },
+        orderBy: [
+          { status: 'asc' },
+          { endDate: 'asc' },
+        ],
+      });
+
+      let totalSubscriptions = subscriptions.length;
+      let projectedRevenue = 0;
+      let collectedRevenue = 0;
+      let pendingRevenue = 0;
+      let paidCount = 0;
+      let pendingCount = 0;
+      let overdueCount = 0;
+
+      const items = subscriptions.map((sub) => {
+        // Determinar precio mensual ($)
+        let monthlyPrice = 0;
+        if (sub.plan && Number(sub.plan.priceMonthly) > 0) {
+          monthlyPrice = Number(sub.plan.priceMonthly);
+        } else {
+          // Precios por defecto según tipo de plan si priceMonthly no está seteado
+          if (sub.planType === 'BASIC') monthlyPrice = 15;
+          else if (sub.planType === 'PREMIUM' || (sub.planType as string) === 'PRO') monthlyPrice = 20;
+          else if (sub.planType === 'ENTERPRISE') monthlyPrice = 50;
+          else monthlyPrice = 0;
+        }
+
+        projectedRevenue += monthlyPrice;
+
+        // Dueño y datos de contacto
+        const ownerMember =
+          sub.business.members.find((m) => m.role?.code === 'OWNER') ||
+          sub.business.members[0];
+
+        const ownerName = ownerMember?.user?.name || 'Cliente';
+        const ownerCi = ownerMember?.user?.ci || '';
+        const rawPhone =
+          ownerMember?.user?.contacts?.phone ||
+          sub.business.closingNotificationPhone ||
+          '';
+
+        let cleanPhone = rawPhone.replace(/\D/g, '');
+        if (cleanPhone.startsWith('0') && cleanPhone.length === 11) {
+          cleanPhone = '58' + cleanPhone.substring(1);
+        }
+
+        const endDate = new Date(sub.endDate);
+        const formattedEndDate = endDate.toLocaleDateString('es-ES', {
+          timeZone: 'UTC',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        });
+
+        // Buscar pagos en el mes
+        const approvedPayment = sub.payments.find((p) => p.status === 'APPROVED');
+        const underReviewPayment = sub.payments.find((p) => p.status === 'UNDER_REVIEW');
+
+        let paymentStatus: 'PAID' | 'UNDER_REVIEW' | 'PENDING' | 'OVERDUE' = 'PENDING';
+        let paymentStatusLabel = 'No ha pagado';
+        let paymentAmount = 0;
+        let paymentReference = '';
+        let paymentDate: string | null = null;
+
+        if (approvedPayment) {
+          paymentStatus = 'PAID';
+          paymentStatusLabel = 'Pagó';
+          paymentAmount = Number(approvedPayment.amount);
+          paymentReference = approvedPayment.reference;
+          paymentDate = approvedPayment.createdAt.toISOString();
+        } else if (underReviewPayment) {
+          paymentStatus = 'UNDER_REVIEW';
+          paymentStatusLabel = 'Pago en revisión';
+          paymentAmount = Number(underReviewPayment.amount);
+          paymentReference = underReviewPayment.reference;
+          paymentDate = underReviewPayment.createdAt.toISOString();
+        } else if (sub.status === 'ACTIVE' && endDate >= endOfMonth) {
+          // El negocio tiene suscripción activa que cubre todo este mes (al día / adelantado)
+          paymentStatus = 'PAID';
+          paymentStatusLabel = 'Pagó (Al día)';
+          paymentAmount = monthlyPrice;
+        } else if (sub.status === 'ACTIVE' && endDate >= now) {
+          // Su fecha de vencimiento es durante este mes y aún no ha renovado
+          paymentStatus = 'PENDING';
+          paymentStatusLabel = 'Por vencer (Pendiente)';
+        } else {
+          // Vencido o suspendido
+          paymentStatus = 'OVERDUE';
+          paymentStatusLabel = 'No ha pagado (Vencido)';
+        }
+
+        if (paymentStatus === 'PAID') {
+          collectedRevenue += monthlyPrice;
+          paidCount++;
+        } else if (paymentStatus === 'UNDER_REVIEW' || paymentStatus === 'PENDING') {
+          pendingRevenue += monthlyPrice;
+          pendingCount++;
+        } else {
+          pendingRevenue += monthlyPrice;
+          overdueCount++;
+        }
+
+        // Mensaje de WhatsApp
+        let whatsappMessage = '';
+        if (paymentStatus === 'PAID') {
+          whatsappMessage = 
+`*ESTADO DE SUSCRIPCIÓN AL DÍA - GUARDIÁN TECNOLÓGICO*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Hola *${ownerName}*, te saludamos desde *Guardián Tecnológico*.
+
+Confirmamos que tu suscripción para el negocio *${sub.business.name}* (Plan *${sub.plan?.name || sub.planType}*) se encuentra *AL DÍA* para el período *${monthLabel}*.
+
+📅 Tu próxima fecha de renovación es el *${formattedEndDate}*.
+
+¡Muchas gracias por preferirnos y confiar en nuestros servicios!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        } else {
+          whatsappMessage = 
+`*RECORDATORIO DE PAGO - GUARDIÁN TECNOLÓGICO*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Hola *${ownerName}*, te saludamos desde *Guardián Tecnológico*.
+
+Te escribimos para recordarte el pago de la suscripción de tu negocio *${sub.business.name}* correspondiente a *${monthLabel}*.
+
+📋 *Plan:* ${sub.plan?.name || sub.planType}
+💰 *Monto mensual:* $${monthlyPrice.toFixed(2)}
+📅 *Vencimiento:* ${formattedEndDate}
+📌 *Estado:* ${paymentStatusLabel}
+
+🔗 Puedes reportar tu pago directamente aquí:
+https://guardian.com.ve/subscription
+
+Si ya realizaste tu pago, por favor haznos llegar tu comprobante o haz caso omiso. ¡Estamos a tu orden!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        }
+
+        const whatsappUrl = cleanPhone
+          ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`
+          : null;
+
+        return {
+          businessId: sub.business.id,
+          businessName: sub.business.name,
+          planType: sub.planType,
+          planName: sub.plan?.name || sub.planType,
+          monthlyPrice,
+          subscriptionStatus: sub.status,
+          endDate: sub.endDate,
+          formattedEndDate,
+          paymentStatus,
+          paymentStatusLabel,
+          paymentAmount,
+          paymentReference,
+          paymentDate,
+          owner: {
+            name: ownerName,
+            ci: ownerCi,
+            phone: rawPhone,
+            cleanPhone,
+          },
+          whatsappMessage,
+          whatsappUrl,
+        };
+      });
+
+      const collectionRate = projectedRevenue > 0
+        ? Math.round((collectedRevenue / projectedRevenue) * 100)
+        : 0;
+
+      return {
+        message: 'Reporte financiero de suscripciones obtenido exitosamente',
+        status: 200,
+        data: {
+          period: {
+            monthCode,
+            monthLabel,
+            year: targetYear,
+            month: targetMonth + 1,
+          },
+          summary: {
+            totalSubscriptions,
+            projectedRevenue,
+            collectedRevenue,
+            pendingRevenue,
+            paidCount,
+            pendingCount,
+            overdueCount,
+            collectionRate,
+          },
+          items,
+        },
+      };
+    } catch (error) {
+      console.error('AdminSubscriptionsReportService.getFinancialReport error:', error);
+      return {
+        message: 'Error al obtener reporte financiero de suscripciones',
+        status: 500,
+        data: null,
+      };
+    }
+  }
 }
