@@ -75,4 +75,20 @@ export class SubscriptionPaymentController {
     const result = await this.service.findOneMy(businessId, id);
     return res.status(result.status).json(result);
   };
+
+  getDeliveryNote = async (req: Request, res: Response) => {
+    const businessId = req.user?.businessId;
+    const id = Number(req.params.id);
+
+    if (!businessId) {
+      return res.status(400).json({
+        status: 400,
+        message: 'Falta el header x-business-id',
+        data: null,
+      });
+    }
+
+    const result = await this.service.getDeliveryNote(businessId, id);
+    return res.status(result.status).json(result);
+  };
 }

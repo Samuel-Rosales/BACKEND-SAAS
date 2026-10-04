@@ -2,6 +2,7 @@ import { prisma } from '@/configs';
 import { PlanType, SubStatus, SubscriptionPaymentStatus } from '@prisma/client';
 import { addMonths } from 'date-fns';
 import { CreateSubscriptionPaymentInterface } from './interfaces';
+import { tesoroPagosService } from './tesoro-pagos.service';
 
 export class SubscriptionPaymentService {
 
@@ -40,10 +41,16 @@ export class SubscriptionPaymentService {
 
   async create(businessId: number, userId: number, data: CreateSubscriptionPaymentInterface) {
     try {
-      const subscription = await prisma.subscription.findUnique({
-        where: { businessId },
-        select: { id: true, planId: true, planType: true, endDate: true },
-      });
+      const [subscription, business] = await Promise.all([
+        prisma.subscription.findUnique({
+          where: { businessId },
+          select: { id: true, planId: true, planType: true, endDate: true },
+        }),
+        prisma.business.findUnique({
+          where: { id: businessId },
+          select: { id: true, name: true, closingNotificationPhone: true },
+        }),
+      ]);
 
       if (!subscription) {
         return {
@@ -74,6 +81,51 @@ export class SubscriptionPaymentService {
         };
       }
 
+      // ─── Validación automática con Banco del Tesoro si es VES (Pago Móvil) ───
+      let autoApproved = false;
+      let bankMessage = '';
+      const now = new Date();
+
+      if (data.currency === 'VES' && data.reference) {
+        try {
+          const valResult = await tesoroPagosService.validatePayment({
+            amountBs: Number(data.amount),
+            originBank: data.originBank,
+            originPhone: data.originPhone,
+            reference: data.reference,
+          });
+
+          bankMessage = valResult.message;
+          if (valResult.approved) {
+            autoApproved = true;
+          } else if (!data.forceUnderReview) {
+            // El banco respondió que el pago no fue encontrado y no se forzó revisión
+            return {
+              status: 400,
+              message:
+                valResult.message ||
+                'Pago no encontrado en Banco del Tesoro. Verifica el monto, banco emisor y referencia.',
+              data: {
+                autoApproved: false,
+                bankMessage: valResult.message,
+                canForceReview: true,
+              },
+            };
+          }
+        } catch (err: any) {
+          console.error('[SubscriptionPaymentService] Error consultando Banco del Tesoro:', err);
+          bankMessage = err?.message || 'Error técnico al consultar el banco';
+        }
+      }
+
+      const initialStatus = autoApproved
+        ? SubscriptionPaymentStatus.APPROVED
+        : SubscriptionPaymentStatus.UNDER_REVIEW;
+
+      const reviewNote = autoApproved
+        ? `Aprobado automáticamente por integración Tesoro Pagos (Caja 04). Banco: ${data.originBank || '0102'}`
+        : data.reviewNote;
+
       const payment = await prisma.subscriptionPayment.create({
         data: {
           businessId,
@@ -86,8 +138,10 @@ export class SubscriptionPaymentService {
           currency: data.currency,
           reference: data.reference,
           proofUrl: data.proofUrl,
-          reviewNote: data.reviewNote,
-          status: SubscriptionPaymentStatus.UNDER_REVIEW,
+          reviewNote: reviewNote,
+          status: initialStatus,
+          reviewedAt: autoApproved ? now : undefined,
+          reviewedById: autoApproved ? userId : undefined,
         },
         include: {
           subscription: {
@@ -104,10 +158,67 @@ export class SubscriptionPaymentService {
         },
       });
 
+      let updatedSubscription = payment.subscription;
+      let newEndDate = subscription.endDate;
+
+      if (autoApproved) {
+        const baseDate =
+          subscription.endDate && new Date(subscription.endDate) > now
+            ? new Date(subscription.endDate)
+            : now;
+        newEndDate = addMonths(baseDate, data.monthsPurchased);
+
+        updatedSubscription = await prisma.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            status: SubStatus.ACTIVE,
+            planId: resolvedPlan.planId,
+            planType: resolvedPlan.planType,
+            endDate: newEndDate,
+          },
+          select: {
+            id: true,
+            planId: true,
+            planType: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+          },
+        });
+      }
+
+      const deliveryNote = {
+        number: `NE-SUB-${String(payment.id).padStart(6, '0')}`,
+        paymentId: payment.id,
+        businessId,
+        businessName: business?.name || 'Mi Negocio',
+        businessPhone: business?.closingNotificationPhone || data.originPhone || '—',
+        planName: resolvedPlan.planType,
+        monthsPurchased: data.monthsPurchased,
+        amount: Number(data.amount),
+        currency: data.currency,
+        reference: data.reference,
+        originBank: data.originBank || '—',
+        originPhone: data.originPhone || '—',
+        validUntil: newEndDate,
+        paidAt: now,
+        status: autoApproved ? 'PAGADO / ACTIVO' : 'EN REVISIÓN',
+        autoApproved,
+        verifiedBy: autoApproved ? 'Banco del Tesoro (Caja 04)' : 'Pendiente por Administrador',
+      };
+
       return {
         status: 201,
-        message: 'Pago registrado y enviado a revisión',
-        data: payment,
+        message: autoApproved
+          ? '¡Pago verificado automáticamente por Banco del Tesoro! Tu suscripción fue activada con éxito.'
+          : 'Pago registrado y enviado a revisión',
+        data: {
+          ...payment,
+          subscription: updatedSubscription,
+          autoApproved,
+          bankMessage,
+          deliveryNote,
+        },
       };
     } catch (error: any) {
       // Unique constraint on (businessId, reference)
@@ -125,6 +236,48 @@ export class SubscriptionPaymentService {
         message: 'Error interno al registrar el pago',
         data: null,
       };
+    }
+  }
+
+  async getDeliveryNote(businessId: number, paymentId: number) {
+    try {
+      const payment = await prisma.subscriptionPayment.findFirst({
+        where: { id: paymentId, businessId },
+        include: {
+          business: { select: { id: true, name: true, closingNotificationPhone: true } },
+          subscription: true,
+          plan: true,
+        },
+      });
+
+      if (!payment) {
+        return { status: 404, message: 'Pago no encontrado', data: null };
+      }
+
+      const isApproved = payment.status === SubscriptionPaymentStatus.APPROVED;
+      const deliveryNote = {
+        number: `NE-SUB-${String(payment.id).padStart(6, '0')}`,
+        paymentId: payment.id,
+        businessId: payment.businessId,
+        businessName: payment.business?.name || 'Mi Negocio',
+        businessPhone: payment.business?.closingNotificationPhone || '—',
+        planName: payment.plan?.name || String(payment.planType),
+        monthsPurchased: payment.monthsPurchased,
+        amount: Number(payment.amount),
+        currency: payment.currency,
+        reference: payment.reference,
+        status: isApproved ? 'PAGADO / ACTIVO' : 'EN REVISIÓN',
+        createdAt: payment.createdAt,
+        reviewedAt: payment.reviewedAt,
+        validUntil: payment.subscription?.endDate,
+        isApproved,
+        verifiedBy: isApproved ? 'Banco del Tesoro / Sistema' : 'Pendiente por Administrador',
+      };
+
+      return { status: 200, message: 'Nota de entrega obtenida', data: deliveryNote };
+    } catch (error) {
+      console.error('getDeliveryNote error:', error);
+      return { status: 500, message: 'Error al generar la nota de entrega', data: null };
     }
   }
 

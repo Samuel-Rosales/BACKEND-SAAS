@@ -61,5 +61,19 @@ export class SubscriptionPaymentValidator {
       .trim()
       .isString().withMessage('reviewNote debe ser texto')
       .isLength({ max: 500 }).withMessage('reviewNote máximo 500 caracteres'),
+
+    body('originBank')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isString().withMessage('originBank debe ser texto'),
+
+    body('originPhone')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isString().withMessage('originPhone debe ser texto'),
+
+    body('forceUnderReview')
+      .optional()
+      .isBoolean().withMessage('forceUnderReview debe ser booleano'),
   ];
 }
