@@ -229,6 +229,9 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
       const nextMonthYear = targetMonth === 11 ? targetYear + 1 : targetYear;
       const nextMonth = targetMonth === 11 ? 0 : targetMonth + 1;
       const endOfMonth = new Date(Date.UTC(nextMonthYear, nextMonth, 1, 0, 0, 0, 0));
+      // Ventana de 10 días previos para capturar pagos realizados a fin del mes anterior para este ciclo
+      const paymentLookback = new Date(startOfMonth.getTime() - 10 * 24 * 60 * 60 * 1000);
+      const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 
       const monthNames = [
         'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -270,14 +273,14 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
           payments: {
             where: {
               createdAt: {
-                gte: startOfMonth,
+                gte: paymentLookback,
                 lt: endOfMonth,
               },
             },
             orderBy: {
               createdAt: 'desc',
             },
-            take: 3,
+            take: 5,
           },
         },
         orderBy: [
@@ -287,6 +290,7 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
       });
 
       let totalSubscriptions = subscriptions.length;
+      let payingSubscriptions = 0;
       let projectedRevenue = 0;
       let collectedRevenue = 0;
       let pendingRevenue = 0;
@@ -296,8 +300,12 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
 
       const items = subscriptions.map((sub) => {
         // Determinar precio mensual ($)
+        const isTrial = sub.planType === 'TRIAL' || Boolean(sub.plan?.name?.toUpperCase()?.includes('TRIAL'));
         let monthlyPrice = 0;
-        if (sub.plan && Number(sub.plan.priceMonthly) > 0) {
+
+        if (isTrial) {
+          monthlyPrice = 0;
+        } else if (sub.plan && sub.plan.priceMonthly !== null && sub.plan.priceMonthly !== undefined) {
           monthlyPrice = Number(sub.plan.priceMonthly);
         } else {
           // Precios por defecto según tipo de plan si priceMonthly no está seteado
@@ -306,8 +314,6 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
           else if (sub.planType === 'ENTERPRISE') monthlyPrice = 50;
           else monthlyPrice = 0;
         }
-
-        projectedRevenue += monthlyPrice;
 
         // Dueño y datos de contacto
         const ownerMember =
@@ -327,6 +333,8 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
         }
 
         const endDate = new Date(sub.endDate);
+        const endUtc = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
+        const daysRemaining = Math.round((endUtc - todayUtc) / (24 * 60 * 60 * 1000));
         const formattedEndDate = endDate.toLocaleDateString('es-ES', {
           timeZone: 'UTC',
           day: '2-digit',
@@ -334,57 +342,96 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
           year: 'numeric',
         });
 
-        // Buscar pagos en el mes
+        // Buscar pagos en el ciclo correspondiente
         const approvedPayment = sub.payments.find((p) => p.status === 'APPROVED');
         const underReviewPayment = sub.payments.find((p) => p.status === 'UNDER_REVIEW');
 
-        let paymentStatus: 'PAID' | 'UNDER_REVIEW' | 'PENDING' | 'OVERDUE' = 'PENDING';
+        let paymentStatus: 'PAID' | 'UNDER_REVIEW' | 'PENDING' | 'OVERDUE' | 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED' | 'EXEMPT' = 'PENDING';
         let paymentStatusLabel = 'No ha pagado';
         let paymentAmount = 0;
         let paymentReference = '';
         let paymentDate: string | null = null;
 
-        if (approvedPayment) {
-          paymentStatus = 'PAID';
-          paymentStatusLabel = 'Pagó';
-          paymentAmount = Number(approvedPayment.amount);
-          paymentReference = approvedPayment.reference;
-          paymentDate = approvedPayment.createdAt.toISOString();
-        } else if (underReviewPayment) {
-          paymentStatus = 'UNDER_REVIEW';
-          paymentStatusLabel = 'Pago en revisión';
-          paymentAmount = Number(underReviewPayment.amount);
-          paymentReference = underReviewPayment.reference;
-          paymentDate = underReviewPayment.createdAt.toISOString();
-        } else if (sub.status === 'ACTIVE' && endDate >= endOfMonth) {
-          // El negocio tiene suscripción activa que cubre todo este mes (al día / adelantado)
-          paymentStatus = 'PAID';
-          paymentStatusLabel = 'Pagó (Al día)';
-          paymentAmount = monthlyPrice;
-        } else if (sub.status === 'ACTIVE' && endDate >= now) {
-          // Su fecha de vencimiento es durante este mes y aún no ha renovado
-          paymentStatus = 'PENDING';
-          paymentStatusLabel = 'Por vencer (Pendiente)';
+        if (monthlyPrice === 0) {
+          if (isTrial) {
+            if (sub.status === 'ACTIVE' && endUtc >= todayUtc) {
+              paymentStatus = 'TRIAL_ACTIVE';
+              paymentStatusLabel = 'Prueba activa ($0)';
+            } else {
+              paymentStatus = 'TRIAL_EXPIRED';
+              paymentStatusLabel = 'Prueba finalizada ($0)';
+            }
+          } else {
+            paymentStatus = 'EXEMPT';
+            paymentStatusLabel = 'Cuenta Exenta ($0)';
+          }
         } else {
-          // Vencido o suspendido
-          paymentStatus = 'OVERDUE';
-          paymentStatusLabel = 'No ha pagado (Vencido)';
-        }
+          payingSubscriptions++;
+          projectedRevenue += monthlyPrice;
 
-        if (paymentStatus === 'PAID') {
-          collectedRevenue += monthlyPrice;
-          paidCount++;
-        } else if (paymentStatus === 'UNDER_REVIEW' || paymentStatus === 'PENDING') {
-          pendingRevenue += monthlyPrice;
-          pendingCount++;
-        } else {
-          pendingRevenue += monthlyPrice;
-          overdueCount++;
+          if (approvedPayment) {
+            paymentStatus = 'PAID';
+            paymentStatusLabel = 'Pagó';
+            paymentAmount = Number(approvedPayment.amount);
+            paymentReference = approvedPayment.reference;
+            paymentDate = approvedPayment.createdAt.toISOString();
+            collectedRevenue += monthlyPrice;
+            paidCount++;
+          } else if (underReviewPayment) {
+            paymentStatus = 'UNDER_REVIEW';
+            paymentStatusLabel = 'Pago en revisión';
+            paymentAmount = Number(underReviewPayment.amount);
+            paymentReference = underReviewPayment.reference;
+            paymentDate = underReviewPayment.createdAt.toISOString();
+            pendingRevenue += monthlyPrice;
+            pendingCount++;
+          } else if (sub.status === 'ACTIVE' && endDate >= endOfMonth) {
+            // El negocio tiene suscripción activa que cubre todo este mes (al día / adelantado)
+            paymentStatus = 'PAID';
+            paymentStatusLabel = 'Pagó (Al día)';
+            paymentAmount = monthlyPrice;
+            collectedRevenue += monthlyPrice;
+            paidCount++;
+          } else if (sub.status === 'ACTIVE' && endUtc >= todayUtc) {
+            // Su fecha de vencimiento es durante este mes y aún no ha renovado
+            paymentStatus = 'PENDING';
+            paymentStatusLabel = daysRemaining === 0 ? 'Vence HOY' : daysRemaining === 1 ? 'Vence MAÑANA' : `Por vencer (${daysRemaining} días)`;
+            pendingRevenue += monthlyPrice;
+            pendingCount++;
+          } else {
+            // Vencido o suspendido
+            paymentStatus = 'OVERDUE';
+            paymentStatusLabel = 'No ha pagado (Vencido)';
+            pendingRevenue += monthlyPrice;
+            overdueCount++;
+          }
         }
 
         // Mensaje de WhatsApp
         let whatsappMessage = '';
-        if (paymentStatus === 'PAID') {
+        if (monthlyPrice === 0) {
+          if (isTrial && sub.status === 'ACTIVE') {
+            whatsappMessage =
+`*PERÍODO DE PRUEBA - GUARDIÁN TECNOLÓGICO*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Hola *${ownerName}*, te saludamos desde *Guardián Tecnológico*.
+
+Esperamos que la plataforma te esté siendo de gran provecho para *${sub.business.name}*.
+
+📅 Te recordamos que tu período de prueba finaliza el *${formattedEndDate}*.
+
+💡 Si deseas continuar disfrutando de todas las funciones sin interrupciones, contáctanos para activar tu suscripción. ¡Estamos a tu completa orden!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+          } else {
+            whatsappMessage =
+`*INFORMACIÓN DE CUENTA - GUARDIÁN TECNOLÓGICO*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Hola *${ownerName}*, te saludamos desde *Guardián Tecnológico*.
+
+Te escribimos con respecto a tu cuenta para el negocio *${sub.business.name}*. Estamos atentos ante cualquier requerimiento o consulta sobre la plataforma.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+          }
+        } else if (paymentStatus === 'PAID') {
           whatsappMessage = 
 `*ESTADO DE SUSCRIPCIÓN AL DÍA - GUARDIÁN TECNOLÓGICO*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -461,6 +508,7 @@ Si ya realizaste tu pago, por favor haznos llegar tu comprobante o haz caso omis
           },
           summary: {
             totalSubscriptions,
+            payingSubscriptions,
             projectedRevenue,
             collectedRevenue,
             pendingRevenue,
