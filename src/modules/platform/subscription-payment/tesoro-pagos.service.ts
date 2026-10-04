@@ -21,6 +21,8 @@ export class TesoroPagosService {
   private readonly defaultSucursal = '01597001';
   private readonly defaultCaja = '04';
   private readonly defaultPassword = '654321';
+  private readonly fallbackCaja = '03';
+  private readonly fallbackPassword = '0000';
 
   private cookieJar: string[] = [];
   private isAuthenticated = false;
@@ -68,18 +70,21 @@ export class TesoroPagosService {
     if (!newCookies || newCookies.length === 0) return;
     const cookieMap = new Map<string, string>();
 
-    // Cargar existentes
+    // Cargar existentes preservando el '=' en valores base64
     for (const c of this.cookieJar) {
-      const [nameVal] = c.split(';');
-      const [k, v] = nameVal.split('=');
-      if (k && v !== undefined) cookieMap.set(k.trim(), v.trim());
+      const eqIdx = c.indexOf('=');
+      if (eqIdx !== -1) {
+        cookieMap.set(c.slice(0, eqIdx).trim(), c.slice(eqIdx + 1).trim());
+      }
     }
 
-    // Agregar o sobreescribir nuevas
+    // Agregar o sobreescribir nuevas respetando '=' en valores base64
     for (const c of newCookies) {
       const [nameVal] = c.split(';');
-      const [k, v] = nameVal.split('=');
-      if (k && v !== undefined) cookieMap.set(k.trim(), v.trim());
+      const eqIdx = nameVal.indexOf('=');
+      if (eqIdx !== -1) {
+        cookieMap.set(nameVal.slice(0, eqIdx).trim(), nameVal.slice(eqIdx + 1).trim());
+      }
     }
 
     this.cookieJar = Array.from(cookieMap.entries()).map(([k, v]) => `${k}=${v}`);
@@ -96,6 +101,11 @@ export class TesoroPagosService {
     body?: string;
   }): Promise<{ statusCode: number; headers: Record<string, any>; body: string }> {
     return new Promise((resolve, reject) => {
+      let p = options.path;
+      if (p.startsWith(`https://${this.baseUrl}`)) {
+        p = p.replace(`https://${this.baseUrl}`, '');
+      }
+
       const reqHeaders = {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -108,7 +118,7 @@ export class TesoroPagosService {
       const req = https.request(
         {
           hostname: this.baseUrl,
-          path: options.path,
+          path: p,
           method: options.method,
           headers: reqHeaders,
           timeout: 25000,
@@ -142,73 +152,83 @@ export class TesoroPagosService {
 
   private async ensureAuthenticated(): Promise<boolean> {
     const now = Date.now();
-    // Reutilizar sesión si tiene menos de 2.5 minutos
+    // Reutilizar sesión si tiene menos de 2.5 minutos y ya está autenticado
     if (this.isAuthenticated && now - this.lastSessionTime < 150000) {
       return true;
     }
 
     if (this.isAuthenticating) {
-      // Esperar si ya hay una autenticación en curso
       await new Promise((r) => setTimeout(r, 1200));
       return this.isAuthenticated;
     }
 
     this.isAuthenticating = true;
     try {
-      console.log('[TesoroPagos] Iniciando sesión para Sucursal', this.defaultSucursal, 'Caja', this.defaultCaja);
-
-      // 1. Obtener CSRF token fresco desde /login
-      const getRes = await this.request({ path: '/login', method: 'GET' });
-      const tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/);
-      if (!tokenMatch) {
-        console.error('[TesoroPagos] No se encontró CSRF token en /login');
-        return false;
-      }
-      const csrfToken = tokenMatch[1];
-
-      // 2. Enviar POST login
-      const postBody = new URLSearchParams({
-        _token: csrfToken,
-        security_code: process.env.TESORO_SUCURSAL || this.defaultSucursal,
-        box_number: process.env.TESORO_CAJA || this.defaultCaja,
-        password: process.env.TESORO_PASSWORD || this.defaultPassword,
-      }).toString();
-
-      const postRes = await this.request({
-        path: '/login',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Content-Length': String(Buffer.byteLength(postBody)),
-          Referer: `https://${this.baseUrl}/login`,
-          Origin: `https://${this.baseUrl}`,
-        },
-        body: postBody,
-      });
-
-      if (
-        postRes.statusCode === 302 ||
-        postRes.body.includes('form-confirmacion-pago') ||
-        postRes.body.includes('dashboard') ||
-        postRes.body.includes('pago-movil')
-      ) {
-        console.log('[TesoroPagos] Sesión iniciada con éxito en Banco del Tesoro');
-        this.isAuthenticated = true;
-        this.lastSessionTime = Date.now();
-        return true;
-      }
-
-      if (postRes.body.includes('La caja ya tiene una sesión activa')) {
-        console.log('[TesoroPagos] La caja ya tiene sesión activa. Verificando acceso directo...');
+      // 1. Si tenemos cookies previas, probamos si /pago-movil sigue activo sin re-loguear
+      if (this.cookieJar.length > 0) {
         const checkPm = await this.request({ path: '/pago-movil', method: 'GET' });
         if (checkPm.body.includes('form-confirmacion-pago') || checkPm.body.includes('btn-validar-pago')) {
+          console.log('[TesoroPagos] Sesión existente aún válida en /pago-movil');
           this.isAuthenticated = true;
           this.lastSessionTime = Date.now();
           return true;
         }
       }
 
-      console.warn('[TesoroPagos] Respuesta inesperada tras login:', postRes.statusCode);
+      // Probar credenciales: Caja 04 principal (Guardian) y Caja 03 secundaria (Respaldo)
+      const credentials = [
+        {
+          caja: process.env.TESORO_CAJA || this.defaultCaja,
+          password: process.env.TESORO_PASSWORD || this.defaultPassword,
+        },
+        {
+          caja: this.fallbackCaja,
+          password: this.fallbackPassword,
+        },
+      ];
+
+      for (const cred of credentials) {
+        console.log(`[TesoroPagos] Conectando a Banco del Tesoro (Sucursal ${this.defaultSucursal}, Caja ${cred.caja})...`);
+
+        // Obtener CSRF token fresco desde /login
+        const getRes = await this.request({ path: '/login', method: 'GET' });
+        const tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/);
+        if (!tokenMatch) {
+          console.warn('[TesoroPagos] No se encontró CSRF token en /login');
+          continue;
+        }
+        const csrfToken = tokenMatch[1];
+
+        const postBody = new URLSearchParams({
+          _token: csrfToken,
+          security_code: process.env.TESORO_SUCURSAL || this.defaultSucursal,
+          box_number: cred.caja,
+          password: cred.password,
+        }).toString();
+
+        const postRes = await this.request({
+          path: '/login',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': String(Buffer.byteLength(postBody)),
+            Referer: `https://${this.baseUrl}/login`,
+            Origin: `https://${this.baseUrl}`,
+          },
+          body: postBody,
+        });
+
+        const location = postRes.headers.location || '';
+        if (location.includes('dashboard') || location.includes('pago-movil')) {
+          console.log(`[TesoroPagos] ¡Sesión iniciada con éxito en Caja ${cred.caja}!`);
+          this.isAuthenticated = true;
+          this.lastSessionTime = Date.now();
+          return true;
+        }
+
+        console.warn(`[TesoroPagos] Caja ${cred.caja} no disponible (Status ${postRes.statusCode}, Location: ${location}).`);
+      }
+
       return false;
     } catch (error) {
       console.error('[TesoroPagos] Error en ensureAuthenticated:', error);
@@ -244,13 +264,30 @@ export class TesoroPagosService {
       );
 
       // 1. Obtener CSRF token de la página /pago-movil
-      const pmPage = await this.request({ path: '/pago-movil', method: 'GET' });
+      let pmPage = await this.request({ path: '/pago-movil', method: 'GET' });
       let formTokenMatch = pmPage.body.match(/id="form-confirmacion-pago"[^>]*>.*?name="_token"\s+value="([^"]+)"/s);
       let formToken = formTokenMatch ? formTokenMatch[1] : '';
 
       if (!formToken) {
         const metaMatch = pmPage.body.match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/i);
         if (metaMatch) formToken = metaMatch[1];
+      }
+
+      // Si la página redirigió a /login o no tiene token, la sesión expiró; re-autenticar y reintentar una vez
+      if (!formToken || pmPage.statusCode === 302 || pmPage.headers.location?.includes('login')) {
+        console.warn('[TesoroPagos] Sesión no válida en /pago-movil. Re-autenticando...');
+        this.isAuthenticated = false;
+        this.cookieJar = [];
+        const reAuth = await this.ensureAuthenticated();
+        if (reAuth) {
+          pmPage = await this.request({ path: '/pago-movil', method: 'GET' });
+          formTokenMatch = pmPage.body.match(/id="form-confirmacion-pago"[^>]*>.*?name="_token"\s+value="([^"]+)"/s);
+          formToken = formTokenMatch ? formTokenMatch[1] : '';
+          if (!formToken) {
+            const metaMatch = pmPage.body.match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/i);
+            if (metaMatch) formToken = metaMatch[1];
+          }
+        }
       }
 
       if (!formToken) {
@@ -283,8 +320,21 @@ export class TesoroPagosService {
         body: postData,
       });
 
-      const body = valRes.body;
-      console.log(`[TesoroPagos] Respuesta HTTP: ${valRes.statusCode}, longitud ${body.length}`);
+      let body = valRes.body;
+      if ([301, 302, 303, 307].includes(valRes.statusCode)) {
+        const nextLoc = valRes.headers.location || '/pago-movil';
+        console.log(`[TesoroPagos] Siguiendo redirección de validación a ${nextLoc}...`);
+        const redirectedRes = await this.request({
+          path: nextLoc,
+          method: 'GET',
+          headers: {
+            Referer: `https://${this.baseUrl}/pago-movil`,
+          },
+        });
+        body = redirectedRes.body;
+      }
+
+      console.log(`[TesoroPagos] Respuesta HTTP: ${valRes.statusCode}, longitud procesada ${body.length}`);
 
       // 3. Analizar respuesta bancaria
       if (
