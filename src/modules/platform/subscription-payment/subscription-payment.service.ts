@@ -123,7 +123,7 @@ export class SubscriptionPaymentService {
         : SubscriptionPaymentStatus.UNDER_REVIEW;
 
       const reviewNote = autoApproved
-        ? `Aprobado automáticamente por integración Tesoro Pagos (Caja 04). Banco: ${data.originBank || '0102'}`
+        ? `Aprobado automáticamente por verificación en línea. Banco: ${data.originBank || '0102'}`
         : data.reviewNote;
 
       const payment = await prisma.subscriptionPayment.create({
@@ -204,13 +204,13 @@ export class SubscriptionPaymentService {
         paidAt: now,
         status: autoApproved ? 'PAGADO / ACTIVO' : 'EN REVISIÓN',
         autoApproved,
-        verifiedBy: autoApproved ? 'Banco del Tesoro (Caja 04)' : 'Pendiente por Administrador',
+        verifiedBy: autoApproved ? 'Acreditación y Verificación Automática en Línea' : 'Pendiente por Administrador',
       };
 
       return {
         status: 201,
         message: autoApproved
-          ? '¡Pago verificado automáticamente por Banco del Tesoro! Tu suscripción fue activada con éxito.'
+          ? '¡Pago verificado y acreditado automáticamente! Tu suscripción fue activada con los meses correspondientes.'
           : 'Pago registrado y enviado a revisión',
         data: {
           ...payment,
@@ -271,7 +271,7 @@ export class SubscriptionPaymentService {
         reviewedAt: payment.reviewedAt,
         validUntil: payment.subscription?.endDate,
         isApproved,
-        verifiedBy: isApproved ? 'Banco del Tesoro / Sistema' : 'Pendiente por Administrador',
+        verifiedBy: isApproved ? 'Acreditación y Verificación Automática en Línea' : 'Pendiente por Administrador',
       };
 
       return { status: 200, message: 'Nota de entrega obtenida', data: deliveryNote };
