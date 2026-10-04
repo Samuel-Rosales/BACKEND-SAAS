@@ -5,6 +5,7 @@ const router = Router();
 const controller = new AdminSubscriptionsReportController();
 
 router.get('/overview', controller.overview.bind(controller));
+router.get('/reminders', controller.reminders.bind(controller));
 
 export const AdminSubscriptionReportRoute = router;
 export default router;

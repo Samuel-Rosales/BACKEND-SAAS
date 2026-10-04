@@ -14,4 +14,15 @@ export class AdminSubscriptionsReportController {
     const result = await reportService.getOverview(windowDays);
     return res.status(result.status).json(result);
   }
+
+  /**
+   * GET /api/v1/admin/reports/subscriptions/reminders
+   */
+  async reminders(req: Request, res: Response) {
+    const windowDaysRaw = req.query.windowDays;
+    const windowDays = windowDaysRaw === undefined ? 7 : Number(windowDaysRaw);
+
+    const result = await reportService.getReminders(windowDays);
+    return res.status(result.status).json(result);
+  }
 }

@@ -162,6 +162,24 @@ export class BusinessService {
         };
       }
 
+      // Desactivación automática al vuelo: si alguna suscripción activa ya expiró, marcarla PAST_DUE
+      const now = new Date();
+      const expiredBizIds = businesses
+        .filter(b => b.subscription && b.subscription.status === 'ACTIVE' && new Date(b.subscription.endDate) < now)
+        .map(b => b.id);
+
+      if (expiredBizIds.length > 0) {
+        await prisma.subscription.updateMany({
+          where: { businessId: { in: expiredBizIds } },
+          data: { status: 'PAST_DUE' }
+        });
+        businesses.forEach(b => {
+          if (b.subscription && expiredBizIds.includes(b.id)) {
+            b.subscription.status = 'PAST_DUE';
+          }
+        });
+      }
+
       const formattedBusinesses = businesses.map(business => {
         const memberRole = business.members[0]?.role?.name || 'Miembro';
         const hashId = new HashId();
@@ -223,6 +241,15 @@ export class BusinessService {
                   status: 404,
                   data: null
               };
+          }
+
+          // Desactivación al vuelo si la fecha ya expiró
+          if (business.subscription && business.subscription.status === 'ACTIVE' && new Date(business.subscription.endDate) < new Date()) {
+              await prisma.subscription.update({
+                  where: { businessId: business.id },
+                  data: { status: 'PAST_DUE' }
+              });
+              business.subscription.status = 'PAST_DUE';
           }
 
           // 2. Resolvemos la tasa REAL usando tu función inteligente
