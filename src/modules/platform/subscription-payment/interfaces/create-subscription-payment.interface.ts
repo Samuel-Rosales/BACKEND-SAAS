@@ -10,4 +10,8 @@ export interface CreateSubscriptionPaymentInterface {
   reference: string;
   proofUrl?: string;
   reviewNote?: string;
+  originBank?: string;
+  originPhone?: string;
+  forceUnderReview?: boolean;
 }
+
