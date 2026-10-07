@@ -103,6 +103,9 @@ model BusinessMember {
   isActive   Boolean  @default(true) // Si se despide al empleado, se pasa a false
   joinedAt   DateTime @default(now())
 
+  // Comisiones de venta (Exclusivo Plan PREMIUM)
+  commissionPercentage Decimal @default(0) @db.Decimal(5, 2)
+
   user     User     @relation(fields: [userId], references: [id])
   business Business @relation(fields: [businessId], references: [id])
   role     Role     @relation(fields: [roleId], references: [id])
@@ -587,6 +590,10 @@ model Sale {
   fiscalPrinterSerial String?
   fiscalStatus        FiscalStatus @default(NOT_PRINTED)
   fiscalPrintedAt     DateTime?
+
+  // --- COMISIÓN POR VENTA (Exclusivo Plan PREMIUM) ---
+  commissionPercentage Decimal?  @db.Decimal(5, 2)
+  commissionAmount     Decimal?  @db.Decimal(15, 2)
 
   // Auditoría
   createdAt DateTime  @default(now())

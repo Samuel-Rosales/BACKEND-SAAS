@@ -409,6 +409,33 @@ export class SaleService {
                 // A. Generar Número de Factura
                 const nextReceipt = await this.generateNextReceiptNumber(tx, businessId);
 
+                // Cálculo de Comisión de Venta (Exclusivo Plan PREMIUM)
+                let saleCommissionPct: Decimal | null = null;
+                let saleCommissionAmt: Decimal | null = null;
+                const memberCommPct = Number((member as any).commissionPercentage || 0);
+
+                if (memberCommPct > 0) {
+                    const subscription = await tx.subscription.findUnique({
+                        where: { businessId },
+                        include: { plan: true }
+                    });
+                    const isPremium = subscription && (
+                        subscription.planType === 'PREMIUM' ||
+                        subscription.planType === 'ENTERPRISE' ||
+                        subscription.plan?.name?.toUpperCase().includes('PREMIUM') ||
+                        subscription.plan?.name?.toUpperCase().includes('ENTERPRISE')
+                    );
+                    if (isPremium) {
+                        saleCommissionPct = new Decimal(memberCommPct);
+                        const netBase = rawSubTotal.sub(discountAmount);
+                        if (netBase.gt(0)) {
+                            saleCommissionAmt = netBase.mul(saleCommissionPct).div(100).toDecimalPlaces(2);
+                        } else {
+                            saleCommissionAmt = new Decimal(0);
+                        }
+                    }
+                }
+
                 // B. Crear Venta
                 const sale = await tx.sale.create({
                     data: {
@@ -436,7 +463,11 @@ export class SaleService {
                         // Usamos el estado calculado arriba
                         paymentStatus: derivedPaymentStatus,
 
-                        paymentDueDate: data.paymentDueDate ? new Date(data.paymentDueDate) : new Date()
+                        paymentDueDate: data.paymentDueDate ? new Date(data.paymentDueDate) : new Date(),
+
+                        // Snapshots de comisión
+                        commissionPercentage: saleCommissionPct,
+                        commissionAmount: saleCommissionAmt
                     }
                 });
 

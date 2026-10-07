@@ -44,12 +44,36 @@ export class MemberService {
                     };
                 }
 
+                // Validación de Plan PREMIUM para comisiones
+                let commissionValue = 0;
+                if (data.commissionPercentage && Number(data.commissionPercentage) > 0) {
+                    const subscription = await tx.subscription.findUnique({
+                        where: { businessId },
+                        include: { plan: true }
+                    });
+                    const isPremiumOrEnterprise = subscription && (
+                        subscription.planType === 'PREMIUM' ||
+                        subscription.planType === 'ENTERPRISE' ||
+                        subscription.plan?.name?.toUpperCase().includes('PREMIUM') ||
+                        subscription.plan?.name?.toUpperCase().includes('ENTERPRISE')
+                    );
+                    if (!isPremiumOrEnterprise) {
+                        return {
+                            status: 403,
+                            message: 'La asignación de comisiones de venta es una función exclusiva del Plan PREMIUM.',
+                            data: null
+                        };
+                    }
+                    commissionValue = Number(data.commissionPercentage);
+                }
+
                 const newMember = await tx.businessMember.create({
                     data: {
                         businessId,
                         userId: user.id,
                         roleId: data.roleId,
-                        isActive: true
+                        isActive: true,
+                        commissionPercentage: commissionValue
                     },
                     include: {
                         user: { select: { id: true, name: true, ci: true } },
@@ -136,6 +160,26 @@ export class MemberService {
 
     async update(businessId: number, memberId: number, data: UpdateMemberInterface) {
         try {
+            if (data.commissionPercentage !== undefined && Number(data.commissionPercentage) > 0) {
+                const subscription = await prisma.subscription.findUnique({
+                    where: { businessId },
+                    include: { plan: true }
+                });
+                const isPremiumOrEnterprise = subscription && (
+                    subscription.planType === 'PREMIUM' ||
+                    subscription.planType === 'ENTERPRISE' ||
+                    subscription.plan?.name?.toUpperCase().includes('PREMIUM') ||
+                    subscription.plan?.name?.toUpperCase().includes('ENTERPRISE')
+                );
+                if (!isPremiumOrEnterprise) {
+                    return {
+                        status: 403,
+                        message: 'La asignación de comisiones de venta es una función exclusiva del Plan PREMIUM.',
+                        data: null
+                    };
+                }
+            }
+
             const updatedMember = await prisma.businessMember.update({
                 where: { id: memberId, businessId },
                 data

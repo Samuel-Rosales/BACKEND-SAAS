@@ -25,7 +25,13 @@ export class MemberValidator {
             const role = await prisma.role.findUnique({ where: { id: roleId } });
             if (!role) throw new Error('El rol especificado no existe.');
             return true;
-        })
+        }),
+
+        // 5. COMISIÓN POR VENTA (Exclusivo PREMIUM)
+        body('commissionPercentage')
+        .optional({ nullable: true, checkFalsy: true })
+        .isFloat({ min: 0, max: 100 }).withMessage('El porcentaje de comisión debe estar entre 0% y 100%')
+        .toFloat()
     ];
 
     public validateUpdate: ValidationChain[] = [
@@ -34,6 +40,8 @@ export class MemberValidator {
         // 2. ROL
         body('roleId').optional().isInt().toInt().withMessage('El Rol debe ser un número entero'),
         body('isActive').optional().isBoolean().withMessage('El estado debe ser un booleano'),
+        // 3. COMISIÓN POR VENTA (Exclusivo PREMIUM)
+        body('commissionPercentage').optional({ nullable: true, checkFalsy: true }).isFloat({ min: 0, max: 100 }).withMessage('El porcentaje de comisión debe estar entre 0% y 100%').toFloat(),
     ];
 
     public validateId: ValidationChain[] = [

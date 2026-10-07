@@ -3,4 +3,5 @@ export interface AddMemberInterface {
     name: string;   // Nuevo: Necesario por si hay que crearlo
     password: string;
     roleId: number;
+    commissionPercentage?: number;
 }
