@@ -343,7 +343,8 @@ export class QuotationService {
                 APPROVED: 'aprobada',
                 REJECTED: 'rechazada',
                 PENDING: 'puesta en pendiente',
-                EXPIRED: 'marcada como vencida'
+                EXPIRED: 'marcada como vencida',
+                CONVERTED: 'facturada y convertida en venta'
             };
 
             return {

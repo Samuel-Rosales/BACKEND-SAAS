@@ -1,6 +1,6 @@
 import { prisma } from '@/configs';
 import { CreateSaleInterface, CreateSalePaymentDto, UpdateSaleInterface } from './interfaces';
-import { PaymentStatus, Conditions, SaleStatus, SaleType, ProductType, Prisma, MovementType, Currency, InstallmentStatus } from '@prisma/client';
+import { PaymentStatus, Conditions, SaleStatus, SaleType, ProductType, Prisma, MovementType, Currency, InstallmentStatus, QuotationStatus } from '@prisma/client';
 import { BusinessError } from '@/utils/catch-errors.util';
 import { computeClientDebt, resolveBusinessExchangeRate } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -569,6 +569,21 @@ export class SaleService {
                         // Logging pero no revierte la venta
                         console.error(`Error al marcar pedido ${orderId} como pagado:`, orderErr);
                     }
+                }
+            }
+
+            // Marcar cotización como facturada / convertida si viene de una cotización
+            if (data.quotationId) {
+                try {
+                    await prisma.quotation.update({
+                        where: { id: Number(data.quotationId), businessId },
+                        data: {
+                            saleId: result.id,
+                            status: QuotationStatus.CONVERTED,
+                        }
+                    });
+                } catch (quoteErr) {
+                    console.error(`Error al vincular cotización ${data.quotationId} con la venta:`, quoteErr);
                 }
             }
 

@@ -64,6 +64,11 @@ body('installments')
          return true;
       }),
 
+    body('quotationId')
+      .optional()
+      .isInt({ min: 1 }).withMessage('ID de cotización inválido')
+      .toInt(),
+
     // -----------------------------------------------------
     // 2. ITEMS
     // -----------------------------------------------------
