@@ -291,12 +291,47 @@ export class CashRegisterService {
                 orderBy: { date: 'desc' }
             });
 
+            // === CALCULO DE CONCILIACIÓN DUAL (FISCAL SENIAT vs NOTA DE ENTREGA) ===
+            let fiscalTotalUSD = 0;
+            let fiscalTotalVES = 0;
+            let nonFiscalTotalUSD = 0;
+            let nonFiscalTotalVES = 0;
+
+            transactions.forEach(t => {
+                const isFiscal = (t.sale as any)?.fiscalStatus === 'PRINTED';
+                const amt = Number(t.amount || 0);
+                const curr = t.paymentMethod?.currency || 'USD';
+                if (isFiscal) {
+                    if (curr === 'USD') fiscalTotalUSD += amt;
+                    else fiscalTotalVES += amt;
+                } else {
+                    if (curr === 'USD') nonFiscalTotalUSD += amt;
+                    else nonFiscalTotalVES += amt;
+                }
+            });
+
+            const dualReconciliation = {
+                fiscal: {
+                    totalUSD: fiscalTotalUSD,
+                    totalVES: fiscalTotalVES,
+                    count: transactions.filter(t => (t.sale as any)?.fiscalStatus === 'PRINTED').length,
+                    description: 'Ventas con Factura Fiscal SENIAT (Devtech DTP-80i / Cuadra con Reporte Z)'
+                },
+                nonFiscal: {
+                    totalUSD: nonFiscalTotalUSD,
+                    totalVES: nonFiscalTotalVES,
+                    count: transactions.filter(t => (t.sale as any)?.fiscalStatus !== 'PRINTED').length,
+                    description: 'Ventas por Nota de Entrega (POS-80C / No entra en Reporte Z)'
+                }
+            };
+
             return {
                 status: 200,
                 message: 'Detalle de caja obtenido',
                 data: {
                     ...register,
                     systemSummary: systemTotals,
+                    dualReconciliation,
                     transactions
                 }
             };

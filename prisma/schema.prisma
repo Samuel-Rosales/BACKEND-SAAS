@@ -582,6 +582,12 @@ model Sale {
   remainingBalance Decimal   @default(0) @db.Decimal(15, 2)
   paymentDueDate   DateTime?
 
+  // --- FACTURACIÓN FISCAL SENIAT (Exclusivo Planes PREMIUM / ENTERPRISE) ---
+  fiscalInvoiceNumber String?
+  fiscalPrinterSerial String?
+  fiscalStatus        FiscalStatus @default(NOT_PRINTED)
+  fiscalPrintedAt     DateTime?
+
   // Auditoría
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1026,6 +1032,12 @@ enum SaleStatus {
   DRAFT // Aún editando (carrito)
   COMPLETED // Venta cerrada y stock descontado
   CANCELLED // Venta anulada (requiere devolver stock)
+}
+
+enum FiscalStatus {
+  NOT_PRINTED
+  PRINTED
+  FAILED
 }
 
 enum InstallmentStatus {

@@ -292,4 +292,54 @@ export class SaleController {
             });
         }
     }
+
+    async confirmFiscalPrint(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user;
+            const saleId = Number(req.params.id);
+            const { fiscalInvoiceNumber, printerSerial } = req.body;
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            if (isNaN(saleId)) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El ID de la venta debe ser un número válido',
+                    data: null
+                });
+            }
+
+            if (!fiscalInvoiceNumber || String(fiscalInvoiceNumber).trim() === '') {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El número de factura fiscal SENIAT es obligatorio',
+                    data: null
+                });
+            }
+
+            const { data, message, status } = await service.confirmFiscalPrint(businessId, saleId, {
+                fiscalInvoiceNumber: String(fiscalInvoiceNumber).trim(),
+                fiscalPrinterSerial: printerSerial ? String(printerSerial).trim() : undefined
+            });
+
+            return res.status(status).json({
+                data,
+                message
+            });
+
+        } catch (error) {
+            console.error('Error en SaleController.confirmFiscalPrint:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al confirmar factura fiscal',
+                data: null
+            });
+        }
+    }
 }

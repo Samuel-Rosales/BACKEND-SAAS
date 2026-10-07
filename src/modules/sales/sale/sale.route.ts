@@ -80,6 +80,15 @@ router.post(
     controller.cancel
 );
 
+// 6. Confirmación de Emisión Fiscal SENIAT (Planes PREMIUM / ENTERPRISE)
+router.post(
+    '/:id/fiscal-confirmation',
+    requireBusinessPermission('SALES_WRITE'),
+    validator.validateId,
+    handleValidationErrors,
+    controller.confirmFiscalPrint
+);
+
 export const SaleRoute = router;
 
 export default router;

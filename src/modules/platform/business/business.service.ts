@@ -534,7 +534,8 @@ export class BusinessService {
           members: { some: { userId: userId, isActive: true } }
         },
         include: {
-            businessCategory: true // Para mostrar la categoría actual en el select
+            businessCategory: true, // Para mostrar la categoría actual en el select
+            subscription: true
         }
       });
 
@@ -558,7 +559,12 @@ export class BusinessService {
           policies: {
               enableGlobalCredit: business.enableGlobalCredit,
               defaultCreditLimit: business.defaultCreditLimit.toNumber()
-          }
+          },
+          subscription: business.subscription ? {
+              planType: business.subscription.planType,
+              status: business.subscription.status,
+              endDate: business.subscription.endDate
+          } : null
       };
 
       return {

@@ -1007,6 +1007,12 @@ export class SaleService {
                 createdAt: sale.createdAt,
                 status: sale.status, // PAID, PENDING, CANCELLED
 
+                // --- Facturación Fiscal SENIAT ---
+                fiscalInvoiceNumber: sale.fiscalInvoiceNumber,
+                fiscalPrinterSerial: sale.fiscalPrinterSerial,
+                fiscalStatus: sale.fiscalStatus,
+                fiscalPrintedAt: sale.fiscalPrintedAt ? sale.fiscalPrintedAt.toISOString() : null,
+
                 // --- Financiero (CONVERSIÓN DE DECIMAL A NUMBER) ---
                 subTotal: Number(sale.subTotal),
                 taxAmount: Number(sale.taxAmount),
@@ -1675,6 +1681,94 @@ export class SaleService {
                 return { status: error.status, message: error.message, data: null };
             }
             return { status: 500, message: 'Error interno al anular la venta', data: null };
+        }
+    }
+
+    /**
+     * Confirma la emisión fiscal SENIAT de una venta.
+     * Exclusivo para empresas con plan PREMIUM o ENTERPRISE.
+     * Previene duplicación de facturas fiscales ante el SENIAT.
+     */
+    async confirmFiscalPrint(
+        businessId: number,
+        saleId: number,
+        data: { fiscalInvoiceNumber: string; fiscalPrinterSerial?: string }
+    ) {
+        try {
+            // 1. Validar suscripción PREMIUM o ENTERPRISE de la empresa
+            const subscription = await prisma.subscription.findUnique({
+                where: { businessId },
+                include: { plan: true }
+            });
+
+            const isPremiumOrEnterprise = subscription && (
+                subscription.planType === 'PREMIUM' ||
+                subscription.planType === 'ENTERPRISE' ||
+                subscription.plan?.name?.toUpperCase().includes('PREMIUM') ||
+                subscription.plan?.name?.toUpperCase().includes('ENTERPRISE')
+            );
+
+            if (!isPremiumOrEnterprise) {
+                return {
+                    status: 403,
+                    message: 'La emisión de facturación fiscal SENIAT está reservada exclusivamente para planes PREMIUM o ENTERPRISE.',
+                    data: null
+                };
+            }
+
+            // 2. Verificar existencia de la venta
+            const sale = await prisma.sale.findFirst({
+                where: { id: saleId, businessId }
+            });
+
+            if (!sale) {
+                return { status: 404, message: 'Venta no encontrada', data: null };
+            }
+
+            if (sale.status === SaleStatus.CANCELLED) {
+                return { status: 400, message: 'No se puede emitir factura fiscal para una venta anulada', data: null };
+            }
+
+            // 3. Blindaje Anti-Duplicados (Idempotencia Fiscal SENIAT)
+            if (sale.fiscalStatus === 'PRINTED') {
+                return {
+                    status: 409,
+                    message: `Esta venta ya posee la Factura Fiscal #${sale.fiscalInvoiceNumber} emitida previamente. No se permite duplicar facturación ante el SENIAT.`,
+                    data: {
+                        id: sale.id,
+                        fiscalInvoiceNumber: sale.fiscalInvoiceNumber,
+                        fiscalPrinterSerial: sale.fiscalPrinterSerial,
+                        fiscalStatus: sale.fiscalStatus,
+                        fiscalPrintedAt: sale.fiscalPrintedAt
+                    }
+                };
+            }
+
+            // 4. Actualizar estado fiscal
+            const updatedSale = await prisma.sale.update({
+                where: { id: saleId },
+                data: {
+                    fiscalInvoiceNumber: data.fiscalInvoiceNumber,
+                    fiscalPrinterSerial: data.fiscalPrinterSerial || null,
+                    fiscalStatus: 'PRINTED',
+                    fiscalPrintedAt: new Date()
+                }
+            });
+
+            return {
+                status: 200,
+                message: `Factura Fiscal SENIAT #${data.fiscalInvoiceNumber} registrada exitosamente`,
+                data: {
+                    id: updatedSale.id,
+                    fiscalInvoiceNumber: updatedSale.fiscalInvoiceNumber,
+                    fiscalPrinterSerial: updatedSale.fiscalPrinterSerial,
+                    fiscalStatus: updatedSale.fiscalStatus,
+                    fiscalPrintedAt: updatedSale.fiscalPrintedAt
+                }
+            };
+        } catch (error) {
+            console.error('Error al registrar confirmación fiscal:', error);
+            return { status: 500, message: 'Error interno al registrar confirmación fiscal', data: null };
         }
     }
 }
