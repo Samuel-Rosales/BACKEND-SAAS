@@ -22,6 +22,13 @@ router.post(
 
 router.get('/', requireBusinessPermission('CLIENTS_READ'), controller.findAll);
 
+// Consulta de RIF (Plan PREMIUM / ENTERPRISE)
+router.get(
+  '/lookup-rif/:document',
+  requireBusinessPermission('CLIENTS_READ'),
+  controller.lookupRif
+);
+
 router.get(
   '/:id/history',
   requireBusinessPermission('CLIENTS_READ'),

@@ -107,4 +107,25 @@ export class ClientController {
             data
         });
     };
+
+    lookupRif = async (req: Request, res: Response) => {
+        const businessId = req.user!.businessId;
+        const document = req.params.document || (req.query.document as string);
+
+        if (!businessId) {
+            return res.status(400).json({ message: 'Falta el ID de la empresa en el header.' });
+        }
+
+        if (!document) {
+            return res.status(400).json({ message: 'Debe proporcionar un número de documento para consultar.' });
+        }
+
+        const { status, data, message } = await this.service.lookupRif(businessId, document);
+
+        return res.status(status).json({
+            message,
+            data
+        });
+    };
 }
+

@@ -1,5 +1,6 @@
 import { prisma } from '@/configs';
 import { CreateClientInterface, UpdateClientInterface } from './interfaces';
+import { TaxpayerLookupService } from './services/taxpayer-lookup.service';
 
 export class ClientService {
 
@@ -339,4 +340,11 @@ export class ClientService {
       };
     }
   }
+
+  // 7. CONSULTAR RIF (Algoritmo Módulo 11 + Caché Local + Resiliente SENIAT)
+  async lookupRif(businessId: number, document: string) {
+    const lookupService = new TaxpayerLookupService();
+    return lookupService.lookup(businessId, document);
+  }
 }
+
