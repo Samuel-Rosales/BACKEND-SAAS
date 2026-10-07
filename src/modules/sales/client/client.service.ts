@@ -14,6 +14,19 @@ export class ClientService {
         }
       });
 
+      if (client && client.ci && client.name) {
+        const cleanCi = client.ci.replace(/\D/g, '');
+        if (cleanCi.length >= 4) {
+          prisma.$executeRawUnsafe(
+            `INSERT INTO "TaxpayerCache" (ci, name, "taxpayerType")
+             VALUES ($1, $2, 'ORDINARIO')
+             ON CONFLICT (ci) DO UPDATE SET name = EXCLUDED.name`,
+            cleanCi,
+            client.name
+          ).catch(() => {});
+        }
+      }
+
       return {
         status: 201,
         message: 'Cliente registrado exitosamente',
@@ -152,6 +165,19 @@ export class ClientService {
         where: { id },
         data: data
       });
+
+      if (updatedClient && updatedClient.ci && updatedClient.name) {
+        const cleanCi = updatedClient.ci.replace(/\D/g, '');
+        if (cleanCi.length >= 4) {
+          prisma.$executeRawUnsafe(
+            `INSERT INTO "TaxpayerCache" (ci, name, "taxpayerType")
+             VALUES ($1, $2, 'ORDINARIO')
+             ON CONFLICT (ci) DO UPDATE SET name = EXCLUDED.name`,
+            cleanCi,
+            updatedClient.name
+          ).catch(() => {});
+        }
+      }
 
       return {
         status: 200,
@@ -345,6 +371,18 @@ export class ClientService {
   async lookupRif(businessId: number, document: string) {
     const lookupService = new TaxpayerLookupService();
     return lookupService.lookup(businessId, document);
+  }
+
+  // 8. VERIFICAR CAPTCHA SENIAT
+  async verifyRifCaptcha(businessId: number, payload: {
+    sessionId: string;
+    captchaCode: string;
+    docType?: string;
+    docNumber?: string;
+    checkDigit?: number;
+  }) {
+    const lookupService = new TaxpayerLookupService();
+    return lookupService.verifyCaptcha(businessId, payload);
   }
 }
 

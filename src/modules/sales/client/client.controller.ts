@@ -127,5 +127,31 @@ export class ClientController {
             data
         });
     };
+
+    verifyCaptcha = async (req: Request, res: Response) => {
+        const businessId = req.user!.businessId;
+        const { sessionId, captchaCode, docType, docNumber, checkDigit } = req.body;
+
+        if (!businessId) {
+            return res.status(400).json({ message: 'Falta el ID de la empresa en el header.' });
+        }
+
+        if (!sessionId || !captchaCode) {
+            return res.status(400).json({ message: 'Se requiere el ID de sesión y el código de seguridad de la imagen.' });
+        }
+
+        const { status, data, message } = await this.service.verifyRifCaptcha(businessId, {
+            sessionId,
+            captchaCode,
+            docType,
+            docNumber,
+            checkDigit
+        });
+
+        return res.status(status).json({
+            message,
+            data
+        });
+    };
 }
 

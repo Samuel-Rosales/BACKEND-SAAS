@@ -12,8 +12,31 @@ export interface TaxpayerLookupResult {
     taxpayerType: 'ORDINARIO' | 'ESPECIAL' | 'FORMAL';
     isRetentionAgent: boolean;
     retentionPercentage: number;
+    requiresCaptcha?: boolean;
+    sessionId?: string;
+    captchaImage?: string;
     source: 'LOCAL_CACHE' | 'SENIAT' | 'ALGORITHM_MOD11';
 }
+
+interface SeniatSessionRecord {
+    cookies: string;
+    docType: string;
+    docNumber: string;
+    checkDigit: number;
+    createdAt: number;
+}
+
+// Caché en memoria para sesiones activas de consulta SENIAT (TTL: 5 minutos)
+const seniatSessions = new Map<string, SeniatSessionRecord>();
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, session] of seniatSessions.entries()) {
+        if (now - session.createdAt > 5 * 60 * 1000) {
+            seniatSessions.delete(key);
+        }
+    }
+}, 60 * 1000);
 
 export class TaxpayerLookupService {
 
@@ -62,7 +85,8 @@ export class TaxpayerLookupService {
     }
 
     /**
-     * Consulta integral de RIF con validación de Plan Premium, búsqueda en caché local y fallback inteligente.
+     * Consulta integral de RIF con validación de Plan Premium, búsqueda en caché local (TaxpayerCache + Client)
+     * y sesión interactiva en SENIAT si no está registrado.
      */
     public async lookup(businessId: number, rawInput: string): Promise<{
         status: number;
@@ -91,7 +115,7 @@ export class TaxpayerLookupService {
                 };
             }
 
-            // 2. Parsear el documento ingresado (ej: "V14245074", "V-14245074-3", "14245074", "J000063729")
+            // 2. Parsear el documento ingresado (ej: "V15848341", "V-15848341-2", "15848341", "J000063729")
             const cleaned = rawInput.trim().toUpperCase().replace(/[\s\.\-]/g, '');
             if (!cleaned || cleaned.length < 3) {
                 return {
@@ -116,7 +140,6 @@ export class TaxpayerLookupService {
                 providedCheckDigit = parseInt(docNumber.slice(-1), 10);
                 docNumber = docNumber.slice(0, 8);
             } else if (docNumber.length > 9) {
-                // Si tiene más de 9 dígitos, tomar los últimos dígitos según convención
                 docNumber = docNumber.slice(0, 8);
             }
 
@@ -124,8 +147,47 @@ export class TaxpayerLookupService {
             const checkDigit = providedCheckDigit !== null ? providedCheckDigit : calculatedCheckDigit;
             const formattedRif = `${docType}-${docNumber}-${checkDigit}`;
 
-            // 3. TIER 1: Búsqueda en caché local (Base de Datos Guardian)
-            // Buscar coincidencias en la tabla Client por documento o RIF
+            // 3. TIER 1: Búsqueda instantánea en TaxpayerCache (Base de Datos Tributaria de Guardian)
+            const fullRawNumber = `${docNumber}${checkDigit}`;
+            const cachedTaxpayers = await prisma.$queryRawUnsafe<any[]>(
+                `SELECT * FROM "TaxpayerCache" 
+                 WHERE ci = $1 OR ci = $2 OR ci = $3 OR ci = $4 OR ci = $5 OR ci = $6 
+                 LIMIT 1`,
+                docNumber,
+                docNumber.replace(/^0+/, ''),
+                docNumber.padStart(8, '0'),
+                fullRawNumber,
+                fullRawNumber.replace(/^0+/, ''),
+                fullRawNumber.padStart(9, '0')
+            ).catch((err) => {
+                console.warn('[TaxpayerLookup] Error querying TaxpayerCache:', err.message);
+                return [];
+            });
+
+            if (cachedTaxpayers && cachedTaxpayers.length > 0 && cachedTaxpayers[0].name) {
+                const t = cachedTaxpayers[0];
+                return {
+                    status: 200,
+                    message: 'Contribuyente encontrado exitosamente en el registro.',
+                    data: {
+                        documentType: docType,
+                        documentNumber: docNumber,
+                        checkDigit,
+                        rif: formattedRif,
+                        name: t.name,
+                        phone: null,
+                        email: null,
+                        address: null,
+                        taxpayerType: t.taxpayerType || 'ORDINARIO',
+                        isRetentionAgent: !!t.isRetentionAgent,
+                        retentionPercentage: Number(t.retentionPercentage || 0),
+                        requiresCaptcha: false,
+                        source: 'LOCAL_CACHE'
+                    }
+                };
+            }
+
+            // 4. TIER 2: Búsqueda en historial de Clientes de la plataforma
             const cachedClient = await prisma.client.findFirst({
                 where: {
                     OR: [
@@ -138,6 +200,13 @@ export class TaxpayerLookupService {
             });
 
             if (cachedClient && cachedClient.name) {
+                // Indexar en TaxpayerCache en segundo plano para optimizar futuras búsquedas
+                prisma.$executeRawUnsafe(
+                    `INSERT INTO "TaxpayerCache" (ci, name, "taxpayerType") VALUES ($1, $2, 'ORDINARIO') ON CONFLICT (ci) DO NOTHING`,
+                    docNumber,
+                    cachedClient.name
+                ).catch(() => {});
+
                 return {
                     status: 200,
                     message: 'Contribuyente encontrado en la base de datos local.',
@@ -153,38 +222,40 @@ export class TaxpayerLookupService {
                         taxpayerType: 'ORDINARIO',
                         isRetentionAgent: false,
                         retentionPercentage: 0,
+                        requiresCaptcha: false,
                         source: 'LOCAL_CACHE'
                     }
                 };
             }
 
-            // 4. TIER 2: Intento de consulta en línea con timeout seguro (AbortController)
+            // 5. TIER 3: Si no está en caché, iniciar sesión SENIAT con Captcha
             try {
-                const onlineResult = await this.queryOnlineTaxpayer(docType, docNumber, checkDigit);
-                if (onlineResult && onlineResult.name) {
+                const sessionData = await this.startSeniatSession(docType, docNumber, checkDigit);
+                if (sessionData) {
                     return {
                         status: 200,
-                        message: 'Contribuyente consultado exitosamente del registro tributario.',
+                        message: 'Validación de seguridad SENIAT requerida para consultar este contribuyente por primera vez.',
                         data: {
                             documentType: docType,
                             documentNumber: docNumber,
                             checkDigit,
                             rif: formattedRif,
-                            name: onlineResult.name,
-                            taxpayerType: onlineResult.taxpayerType || 'ORDINARIO',
-                            isRetentionAgent: onlineResult.isRetentionAgent || false,
-                            retentionPercentage: onlineResult.retentionPercentage || 0,
+                            name: null,
+                            requiresCaptcha: true,
+                            sessionId: sessionData.sessionId,
+                            captchaImage: sessionData.captchaImage,
+                            taxpayerType: 'ORDINARIO',
+                            isRetentionAgent: false,
+                            retentionPercentage: 0,
                             source: 'SENIAT'
                         }
                     };
                 }
-            } catch (netErr) {
-                // Silenciosamente continuar al Tier 3 sin bloquear la experiencia de usuario
-                console.warn('[TaxpayerLookup] Consulta en línea omitida o no disponible:', netErr);
+            } catch (seniatErr) {
+                console.warn('[TaxpayerLookup] Fallback to Modulo 11 due to SENIAT timeout/error:', seniatErr);
             }
 
-            // 5. TIER 3: Degeneración agraciada (Cálculo matemático Módulo 11)
-            // Devuelve el RIF debidamente formateado y validado matemáticamente para que el usuario complete el nombre
+            // 6. TIER 4: Degeneración agraciada (Cálculo matemático Módulo 11)
             return {
                 status: 200,
                 message: 'Dígito verificador calculado exitosamente (Módulo 11). Ingrese la razón social.',
@@ -194,6 +265,7 @@ export class TaxpayerLookupService {
                     checkDigit,
                     rif: formattedRif,
                     name: null,
+                    requiresCaptcha: false,
                     taxpayerType: 'ORDINARIO',
                     isRetentionAgent: false,
                     retentionPercentage: 0,
@@ -212,52 +284,237 @@ export class TaxpayerLookupService {
     }
 
     /**
-     * Consulta con límite estricto de tiempo a servicios en línea
+     * Inicia una sesión con el portal SENIAT y obtiene la imagen del captcha en Base64
      */
-    private async queryOnlineTaxpayer(docType: string, docNumber: string, checkDigit: number): Promise<{
-        name: string;
-        taxpayerType?: 'ORDINARIO' | 'ESPECIAL' | 'FORMAL';
-        isRetentionAgent?: boolean;
-        retentionPercentage?: number;
-    } | null> {
-        const paddedBody = docNumber.padStart(8, '0');
-        const fullRif = `${docType}${paddedBody}${checkDigit}`;
-
+    private async startSeniatSession(docType: string, docNumber: string, checkDigit: number): Promise<{ sessionId: string, captchaImage: string } | null> {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeout = setTimeout(() => controller.abort(), 4000);
 
         try {
-            const url = `https://contribuyente.seniat.gob.ve/BuscaRif/BuscaRif.jsp?p_rif=${encodeURIComponent(fullRif)}`;
-            const response = await fetch(url, {
+            const initRes = await fetch('https://contribuyente.seniat.gob.ve/BuscaRif/BuscaRif.jsp', {
                 signal: controller.signal,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 }
             });
 
-            clearTimeout(timeoutId);
+            const setCookies = (initRes.headers as any).getSetCookie 
+                ? (initRes.headers as any).getSetCookie() 
+                : [initRes.headers.get('set-cookie') || ''];
+            
+            const cookieHeader = setCookies.map((c: string) => c.split(';')[0]).filter(Boolean).join('; ');
 
-            if (!response.ok) return null;
-            const html = await response.text();
+            const captchaRes = await fetch('https://contribuyente.seniat.gob.ve/BuscaRif/Captcha.jpg', {
+                signal: controller.signal,
+                headers: {
+                    'Cookie': cookieHeader,
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Referer': 'https://contribuyente.seniat.gob.ve/BuscaRif/BuscaRif.jsp'
+                }
+            });
 
-            // Analizar posibles etiquetas donde el SENIAT ubica el nombre
-            const nameMatch = html.match(/<br><b>([^<]+)<\/b><br><br>/i);
-            if (nameMatch && nameMatch[1] && nameMatch[1].trim().length > 2) {
-                const rawName = nameMatch[1].trim();
-                const isSpecial = /retenci[oó]n|especial/i.test(html);
+            clearTimeout(timeout);
+
+            if (!captchaRes.ok) return null;
+
+            const arrayBuf = await captchaRes.arrayBuffer();
+            const base64 = Buffer.from(arrayBuf).toString('base64');
+            const captchaImage = `data:image/jpeg;base64,${base64}`;
+
+            const sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+            seniatSessions.set(sessionId, {
+                cookies: cookieHeader,
+                docType,
+                docNumber,
+                checkDigit,
+                createdAt: Date.now()
+            });
+
+            return { sessionId, captchaImage };
+        } catch {
+            clearTimeout(timeout);
+            return null;
+        }
+    }
+
+    /**
+     * Valida el código Captcha ante el SENIAT, extrae la razón social y la indexa permanentemente
+     */
+    public async verifyCaptcha(businessId: number, payload: {
+        sessionId: string;
+        captchaCode: string;
+        docType?: string;
+        docNumber?: string;
+        checkDigit?: number;
+    }): Promise<{
+        status: number;
+        message: string;
+        data: TaxpayerLookupResult | null;
+    }> {
+        // 1. Validar suscripción
+        const subscription = await prisma.subscription.findUnique({
+            where: { businessId },
+            include: { plan: true }
+        });
+        const isPremiumOrEnterprise = subscription && (
+            subscription.planType === 'PREMIUM' ||
+            subscription.planType === 'ENTERPRISE' ||
+            subscription.plan?.name?.toUpperCase().includes('PREMIUM') ||
+            subscription.plan?.name?.toUpperCase().includes('ENTERPRISE')
+        );
+        if (!isPremiumOrEnterprise) {
+            return {
+                status: 403,
+                message: 'La consulta automática de RIF es una función exclusiva de los Planes PREMIUM y ENTERPRISE.',
+                data: null
+            };
+        }
+
+        const { sessionId, captchaCode } = payload;
+        const session = seniatSessions.get(sessionId);
+
+        const docType = (session?.docType || payload.docType || 'V').toUpperCase();
+        const docNumber = session?.docNumber || payload.docNumber || '';
+        const checkDigit = session?.checkDigit !== undefined ? session.checkDigit : TaxpayerLookupService.calculateCheckDigit(docType, docNumber);
+        const formattedRif = `${docType}-${docNumber}-${checkDigit}`;
+
+        if (!session) {
+            return {
+                status: 400,
+                message: 'La sesión de consulta SENIAT ha expirado. Por favor presione Consultar RIF nuevamente.',
+                data: null
+            };
+        }
+
+        seniatSessions.delete(sessionId); // Un solo uso
+
+        const paddedNumber = docNumber.padStart(8, '0');
+        const fullRif = `${docType}${paddedNumber}${checkDigit}`;
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
+
+        try {
+            const postRes = await fetch('https://contribuyente.seniat.gob.ve/BuscaRif/BuscaRif.jsp', {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    'Cookie': session.cookies,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Referer': 'https://contribuyente.seniat.gob.ve/BuscaRif/BuscaRif.jsp'
+                },
+                body: `p_rif=${encodeURIComponent(fullRif)}&codigo=${encodeURIComponent(captchaCode.trim().toLowerCase())}`
+            });
+
+            clearTimeout(timeout);
+
+            if (!postRes.ok) {
                 return {
-                    name: rawName,
-                    taxpayerType: isSpecial ? 'ESPECIAL' : 'ORDINARIO',
-                    isRetentionAgent: isSpecial,
-                    retentionPercentage: isSpecial ? 75 : 0
+                    status: 502,
+                    message: 'El portal del SENIAT no respondió adecuadamente. Intente más tarde.',
+                    data: null
                 };
             }
 
-            return null;
-        } catch {
-            clearTimeout(timeoutId);
-            return null;
+            const html = await postRes.text();
+
+            if (html.includes('código de seguridad no coincide') || html.includes('Captcha.jpg')) {
+                return {
+                    status: 400,
+                    message: 'El código de seguridad ingresado es incorrecto o ha caducado. Intente nuevamente.',
+                    data: null
+                };
+            }
+
+            const cleanName = this.extractNameFromSeniatHtml(html);
+            if (!cleanName) {
+                return {
+                    status: 404,
+                    message: 'No se pudo obtener el nombre del contribuyente desde el SENIAT.',
+                    data: null
+                };
+            }
+
+            const isSpecial = /retenci[oó]n|especial/i.test(html);
+            const retentionPct = isSpecial ? 75 : 0;
+
+            // Guardar permanentemente en TaxpayerCache
+            await prisma.$executeRawUnsafe(
+                `INSERT INTO "TaxpayerCache" (ci, name, "taxpayerType", "isRetentionAgent", "retentionPercentage")
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (ci) DO UPDATE SET 
+                   name = EXCLUDED.name, 
+                   "taxpayerType" = EXCLUDED."taxpayerType",
+                   "isRetentionAgent" = EXCLUDED."isRetentionAgent",
+                   "retentionPercentage" = EXCLUDED."retentionPercentage"`,
+                docNumber,
+                cleanName,
+                isSpecial ? 'ESPECIAL' : 'ORDINARIO',
+                isSpecial,
+                retentionPct
+            ).catch((err) => {
+                console.warn('[TaxpayerLookup] Error caching verified taxpayer:', err.message);
+            });
+
+            return {
+                status: 200,
+                message: 'Contribuyente verificado exitosamente desde el SENIAT.',
+                data: {
+                    documentType: docType,
+                    documentNumber: docNumber,
+                    checkDigit,
+                    rif: formattedRif,
+                    name: cleanName,
+                    phone: null,
+                    email: null,
+                    address: null,
+                    taxpayerType: isSpecial ? 'ESPECIAL' : 'ORDINARIO',
+                    isRetentionAgent: isSpecial,
+                    retentionPercentage: retentionPct,
+                    requiresCaptcha: false,
+                    source: 'SENIAT'
+                }
+            };
+
+        } catch (err: any) {
+            clearTimeout(timeout);
+            return {
+                status: 500,
+                message: err?.message || 'Error de conexión con el SENIAT al verificar el código.',
+                data: null
+            };
         }
+    }
+
+    /**
+     * Parsea el nombre legal/razón social devuelto por el SENIAT
+     */
+    private extractNameFromSeniatHtml(html: string): string | null {
+        const regex1 = /<b>\s*<font[^>]*>([A-Z0-9]+)(?:&nbsp;|\s+)([^<]+)<\/b>\s*<\/font>/i;
+        const match1 = html.match(regex1);
+        if (match1 && match1[2] && match1[2].trim().length > 2) {
+            return match1[2].replace(/&nbsp;/g, ' ').trim();
+        }
+
+        const regex2 = /<font[^>]*face=["']?Verdana["']?[^>]*>([A-Z0-9]+)(?:&nbsp;|\s+)([^<]+)<\/b>/i;
+        const match2 = html.match(regex2);
+        if (match2 && match2[2] && match2[2].trim().length > 2) {
+            return match2[2].replace(/&nbsp;/g, ' ').trim();
+        }
+
+        const regex3 = />([VEJPGvejpg]\d{8,9})(?:&nbsp;|\s+)([A-ZÁÉÍÓÚÑ0-9\s\.\,\-]+)<\/b>/i;
+        const match3 = html.match(regex3);
+        if (match3 && match3[2] && match3[2].trim().length > 2) {
+            return match3[2].replace(/&nbsp;/g, ' ').trim();
+        }
+
+        const regex4 = /<br><b>([^<]+)<\/b><br><br>/i;
+        const match4 = html.match(regex4);
+        if (match4 && match4[1] && match4[1].trim().length > 2) {
+            return match4[1].replace(/&nbsp;/g, ' ').trim();
+        }
+
+        return null;
     }
 }

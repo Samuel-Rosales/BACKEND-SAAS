@@ -29,6 +29,12 @@ router.get(
   controller.lookupRif
 );
 
+router.post(
+  '/lookup-rif/verify',
+  requireBusinessPermission('CLIENTS_READ'),
+  controller.verifyCaptcha
+);
+
 router.get(
   '/:id/history',
   requireBusinessPermission('CLIENTS_READ'),
