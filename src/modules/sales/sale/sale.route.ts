@@ -89,6 +89,15 @@ router.post(
     controller.confirmFiscalPrint
 );
 
+// 7. Cambiar Método de Pago (Exclusivo Administradores)
+router.patch(
+    '/:id/change-payment-method',
+    requireBusinessPermission('SALES_WRITE'),
+    validator.validateChangePaymentMethod,
+    handleValidationErrors,
+    controller.changePaymentMethod
+);
+
 export const SaleRoute = router;
 
 export default router;

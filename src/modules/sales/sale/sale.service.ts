@@ -981,7 +981,7 @@ export class SaleService {
                     },
                     payments: {
                         include: {
-                            paymentMethod: { select: { name: true, type: true } },
+                            paymentMethod: { select: { id: true, name: true, type: true, currency: true } },
                             exchangeRate: { select: { rate: true } }
                         }
                     },
@@ -1071,11 +1071,15 @@ export class SaleService {
                 // --- PAGOS ASOCIADOS ---
                 payments: sale.payments.map(payment => ({
                     id: payment.id,
+                    paymentMethodId: payment.paymentMethod.id,
                     method: payment.paymentMethod.name,
+                    methodType: payment.paymentMethod.type,
+                    currency: payment.paymentMethod.currency,
                     date: payment.date,
                     amount: Number(payment.amount), // Monto en moneda (ej. USD o VES)
                     rateUsed: payment.exchangeRate ? Number(payment.exchangeRate.rate) : null,
-                    reference: payment.reference // Referencia bancaria
+                    reference: payment.reference, // Referencia bancaria
+                    cashRegisterId: payment.cashRegisterId
                 })),
 
                 creditNotes: sale.creditNotes.map(note => ({
@@ -1769,6 +1773,174 @@ export class SaleService {
         } catch (error) {
             console.error('Error al registrar confirmación fiscal:', error);
             return { status: 500, message: 'Error interno al registrar confirmación fiscal', data: null };
+        }
+    }
+
+    /**
+     * 💳 CAMBIAR MÉTODO DE PAGO (Exclusivo Administradores)
+     * Reclasifica el método de cobro en un SalePayment existente.
+     * Recalcula montos si cambia de divisa (USD ↔ VES) y actualiza automáticamente los reportes de caja.
+     */
+    async changePaymentMethod(
+        businessId: number,
+        saleId: number,
+        userId: number,
+        data: {
+            paymentId?: number;
+            newPaymentMethodId: number;
+            newReference?: string;
+            reason?: string;
+        }
+    ) {
+        try {
+            // 1. Verificar permisos de Administrador / Propietario
+            const member = await prisma.businessMember.findFirst({
+                where: { businessId, userId, isActive: true },
+                include: {
+                    role: { select: { code: true, name: true } },
+                    user: { select: { isSuperAdmin: true } }
+                }
+            });
+
+            const isSuperAdmin = Boolean(member?.user?.isSuperAdmin);
+            const roleCode = member?.role?.code || '';
+            const isAdmin = isSuperAdmin || roleCode === 'ADMIN' || roleCode === 'OWNER';
+
+            if (!isAdmin) {
+                return {
+                    status: 403,
+                    message: 'Operación denegada. Solo un Administrador o Propietario puede cambiar el método de pago.',
+                    data: null
+                };
+            }
+
+            // 2. Buscar la venta con sus pagos y método actual
+            const sale = await prisma.sale.findUnique({
+                where: { id: saleId },
+                include: {
+                    payments: {
+                        include: {
+                            paymentMethod: true,
+                            exchangeRate: true
+                        }
+                    },
+                    exchangeRate: true
+                }
+            });
+
+            if (!sale || sale.businessId !== businessId) {
+                return {
+                    status: 404,
+                    message: 'Venta no encontrada en este negocio.',
+                    data: null
+                };
+            }
+
+            if (sale.status === 'CANCELLED') {
+                return {
+                    status: 400,
+                    message: 'No se puede modificar el método de pago de una venta anulada.',
+                    data: null
+                };
+            }
+
+            if (!sale.payments || sale.payments.length === 0) {
+                return {
+                    status: 400,
+                    message: 'Esta venta no tiene cobros registrados.',
+                    data: null
+                };
+            }
+
+            // 3. Determinar el pago objetivo
+            let targetPayment = null;
+            if (data.paymentId) {
+                targetPayment = sale.payments.find(p => p.id === data.paymentId);
+                if (!targetPayment) {
+                    return {
+                        status: 404,
+                        message: `El cobro con ID ${data.paymentId} no pertenece a esta venta.`,
+                        data: null
+                    };
+                }
+            } else {
+                if (sale.payments.length === 1) {
+                    targetPayment = sale.payments[0];
+                } else {
+                    return {
+                        status: 400,
+                        message: 'La venta tiene múltiples pagos. Debes especificar el ID del cobro a modificar.',
+                        data: null
+                    };
+                }
+            }
+
+            // 4. Buscar el nuevo método de pago
+            const newMethod = await prisma.paymentMethod.findUnique({
+                where: { id: data.newPaymentMethodId }
+            });
+
+            if (!newMethod || !newMethod.isActive) {
+                return {
+                    status: 400,
+                    message: 'El nuevo método de pago seleccionado no existe o está inactivo.',
+                    data: null
+                };
+            }
+
+            // 5. Recalcular el monto si cambian las divisas
+            const oldMethod = targetPayment.paymentMethod;
+            let newAmount = new Decimal(targetPayment.amount);
+
+            // Tasa de cambio utilizada en este cobro o la venta
+            const rawRate = targetPayment.exchangeRate?.rate || sale.exchangeRate?.rate;
+            const rate = rawRate ? new Decimal(rawRate) : new Decimal(1);
+
+            if (oldMethod.currency !== newMethod.currency) {
+                if (rate.lte(0)) {
+                    return {
+                        status: 400,
+                        message: 'Tasa de cambio inválida para la conversión multidivisa.',
+                        data: null
+                    };
+                }
+
+                if (oldMethod.currency === 'VES' && newMethod.currency === 'USD') {
+                    // De Bolívares a Dólares
+                    newAmount = newAmount.div(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                } else if (oldMethod.currency === 'USD' && newMethod.currency === 'VES') {
+                    // De Dólares a Bolívares
+                    newAmount = newAmount.mul(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                }
+            }
+
+            // 6. Actualizar en Base de Datos de forma atómica
+            await prisma.$transaction(async (tx) => {
+                await tx.salePayment.update({
+                    where: { id: targetPayment.id },
+                    data: {
+                        paymentMethodId: newMethod.id,
+                        amount: newAmount,
+                        reference: data.newReference !== undefined ? data.newReference : targetPayment.reference
+                    }
+                });
+            });
+
+            // 7. Retornar venta actualizada
+            const refreshedSale = await this.findOne(businessId, saleId);
+            return {
+                status: 200,
+                message: `Método de pago actualizado exitosamente a "${newMethod.name}".`,
+                data: refreshedSale.data
+            };
+
+        } catch (error) {
+            console.error('Error en changePaymentMethod:', error);
+            return {
+                status: 500,
+                message: 'Error interno del servidor al actualizar método de pago de la venta.',
+                data: null
+            };
         }
     }
 }

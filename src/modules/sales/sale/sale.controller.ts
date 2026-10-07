@@ -342,4 +342,42 @@ export class SaleController {
             });
         }
     }
+
+    async changePaymentMethod(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user!;
+            const userId = req.user!.id;
+            const saleId = Number(req.params.id);
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            if (isNaN(saleId)) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El ID de la venta debe ser un número válido',
+                    data: null
+                });
+            }
+
+            const { data, message, status } = await service.changePaymentMethod(businessId, saleId, userId, req.body);
+
+            return res.status(status).json({
+                data,
+                message
+            });
+        } catch (error) {
+            console.error('Error en SaleController.changePaymentMethod:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno del servidor al cambiar método de pago',
+                data: null
+            });
+        }
+    }
 }

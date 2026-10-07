@@ -175,4 +175,21 @@ body('installments')
   public validateId: ValidationChain[] = [
     param('id').isInt().toInt().withMessage('ID inválido')
   ];
+
+  public validateChangePaymentMethod: ValidationChain[] = [
+    param('id').isInt().toInt().withMessage('ID de venta inválido'),
+    body('newPaymentMethodId')
+      .notEmpty().withMessage('El nuevo método de pago es obligatorio')
+      .isInt({ min: 1 }).withMessage('ID de método de pago inválido')
+      .toInt(),
+    body('paymentId')
+      .optional()
+      .isInt({ min: 1 }).withMessage('ID de cobro inválido')
+      .toInt(),
+    body('newReference')
+      .optional()
+      .trim()
+      .isString()
+      .isLength({ max: 200 }).withMessage('La referencia no puede exceder 200 caracteres')
+  ];
 }
