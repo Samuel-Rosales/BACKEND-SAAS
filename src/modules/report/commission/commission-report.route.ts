@@ -9,10 +9,10 @@ const controller = new CommissionReportController();
 // Todas las rutas requieren sesión autenticada
 router.use(authMiddleware);
 
-// GET /api/report/commissions
+// GET /api/report/commissions (Exclusivo Administradores y Propietarios)
 router.get(
     '/',
-    requireBusinessPermission('REPORTS_SALES_VIEW'),
+    requireBusinessPermission('REPORTS_FINANCIAL_VIEW'),
     controller.getCommissions
 );
 
