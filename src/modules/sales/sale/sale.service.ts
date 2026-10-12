@@ -75,16 +75,22 @@ export class SaleService {
             // FASE 1: CARGA DE DATOS Y VALIDACIONES
             // =================================================================
 
-            // 1. Cargar Cliente y Vendedor
-            const [client, member, business] = await Promise.all([
+            // 1. Cargar Cliente, Cajero y Vendedor Asignado
+            const targetSellerMemberId = (data.memberId || data.sellerMemberId) 
+                ? Number(data.memberId || data.sellerMemberId) 
+                : memberId;
+
+            const [client, cashierMember, sellerMember, business] = await Promise.all([
                 prisma.client.findFirst({ where: { id: data.clientId, businessId } }),
                 prisma.businessMember.findFirst({ where: { id: memberId, businessId } }),
+                prisma.businessMember.findFirst({ where: { id: targetSellerMemberId, businessId } }),
                 prisma.business.findUnique({ where: { id: businessId } })
             ]);
 
             if (!business) throw new BusinessError('Negocio no encontrado', 404);
             if (!client) throw new BusinessError('Cliente no encontrado o no pertenece al negocio', 404);
-            if (!member) throw new BusinessError('Vendedor no autorizado', 403);
+            if (!cashierMember) throw new BusinessError('Cajero no autorizado', 403);
+            if (!sellerMember) throw new BusinessError('Vendedor seleccionado no encontrado o no pertenece al negocio', 404);
 
             // 2. Cargar Productos (Con Impuestos, Recetas y Presentaciones)
             const productIds = [...new Set(data.items.map(i => i.productId))];
@@ -413,7 +419,7 @@ export class SaleService {
                 // Cálculo de Comisión de Venta (Exclusivo Plan PREMIUM)
                 let saleCommissionPct: Decimal | null = null;
                 let saleCommissionAmt: Decimal | null = null;
-                const memberCommPct = Number((member as any).commissionPercentage || 0);
+                const memberCommPct = Number((sellerMember as any).commissionPercentage || 0);
 
                 if (memberCommPct > 0) {
                     const subscription = await tx.subscription.findUnique({
@@ -441,7 +447,7 @@ export class SaleService {
                 const sale = await tx.sale.create({
                     data: {
                         businessId,
-                        memberId,
+                        memberId: targetSellerMemberId,
                         clientId: data.clientId,
                         exchangeRateId: currentRateRecord.id,
                         receiptNumber: nextReceipt,

@@ -28,6 +28,8 @@ export interface CreateSalePaymentDto {
 
 export interface CreateSaleInterface {
     clientId: number;
+    memberId?: number; // Vendedor seleccionado para asignar venta y comisión (Plan PREMIUM)
+    sellerMemberId?: number; // Alias para compatibilidad
     exchangeRateId: number;
     type: SaleType; // RETAIL / WHOLESALE
     depotId: number;
