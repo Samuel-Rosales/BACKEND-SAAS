@@ -14,8 +14,9 @@ export class ClientValidator {
       .trim()
       .notEmpty().withMessage('La cédula/RIF/DNI es obligatoria')
       .isString().withMessage('La cédula debe ser texto')
-      .matches(/^\d{6,10}$/).withMessage('La cédula debe contener solo números (entre 6 y 10 dígitos)')
-      .isLength({ min: 6, max: 10 }).withMessage('La cédula debe tener entre 6 y 10 caracteres')
+      .isLength({ min: 3, max: 30 }).withMessage('La cédula/RIF debe tener entre 3 y 30 caracteres')
+      .matches(/^[A-Za-z0-9\-\.\s]{3,30}$/).withMessage('La cédula/RIF solo puede contener letras, números, puntos y guiones')
+      .customSanitizer(value => typeof value === 'string' ? value.trim().toUpperCase() : value)
       .custom(async (ci, { req }) => {
         // Validar duplicados DENTRO de la misma empresa
         const businessId = req.user?.businessId;
@@ -32,19 +33,19 @@ export class ClientValidator {
       }),
 
     body('phone')
-        .optional()
+        .optional({ values: 'falsy' })
         .trim()
         .isString().withMessage('El teléfono debe ser texto')
         .isLength({ min: 1, max: 50 }).withMessage('El teléfono debe tener entre 1 y 50 caracteres'),
 
     body('email')
-        .optional()
+        .optional({ values: 'falsy' })
         .trim()
         .isEmail().withMessage('El email debe tener un formato válido')
         .isLength({ max: 255 }).withMessage('El email no puede exceder 255 caracteres')
         .custom(async (email, { req }) => {
           const businessId = req.user?.businessId;
-          if (!businessId) return true; // Si falla auth, esto no importa
+          if (!businessId || !email) return true; // Si falla auth o está vacío, continuar
           const exist = await prisma.client.findFirst({
               where: { 
                   email: email,
@@ -53,10 +54,10 @@ export class ClientValidator {
           });
           if (exist) throw new Error(`Ya tienes un cliente con el email "${email}".`);
           return true;
-        },),
+        }),
 
     body('address')
-        .optional()
+        .optional({ values: 'falsy' })
         .trim()
         .isString().withMessage('La dirección debe ser texto')
         .isLength({ max: 500 }).withMessage('La dirección no puede exceder 500 caracteres'),
@@ -76,7 +77,9 @@ export class ClientValidator {
       .trim()
       .notEmpty().withMessage('La cédula no puede estar vacía')
       .isString().withMessage('La cédula debe ser texto')
-      .isLength({ min: 3, max: 20 }).withMessage('La cédula debe tener entre 3 y 20 caracteres')
+      .isLength({ min: 3, max: 30 }).withMessage('La cédula/RIF debe tener entre 3 y 30 caracteres')
+      .matches(/^[A-Za-z0-9\-\.\s]{3,30}$/).withMessage('La cédula/RIF solo puede contener letras, números, puntos y guiones')
+      .customSanitizer(value => typeof value === 'string' ? value.trim().toUpperCase() : value)
       .custom(async (ci, { req }) => {
         const businessId = req.user?.businessId;
         const id = Number(req.params?.id);
@@ -95,19 +98,19 @@ export class ClientValidator {
       }),
 
     body('phone')
-        .optional()
+        .optional({ values: 'falsy' })
         .trim()
         .isString().withMessage('El teléfono debe ser texto')
         .isLength({ min: 1, max: 50 }).withMessage('El teléfono debe tener entre 1 y 50 caracteres'),
 
     body('email')
-        .optional()
+        .optional({ values: 'falsy' })
         .trim()
         .isEmail().withMessage('El email debe tener un formato válido')
         .isLength({ max: 255 }).withMessage('El email no puede exceder 255 caracteres'),
 
     body('address')
-        .optional()
+        .optional({ values: 'falsy' })
         .trim()
         .isString().withMessage('La dirección debe ser texto')
         .isLength({ max: 500 }).withMessage('La dirección no puede exceder 500 caracteres'),
