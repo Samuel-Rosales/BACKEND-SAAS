@@ -229,7 +229,7 @@ export class SalesStatsService {
 
         try {
             // Ejecutamos consultas en paralelo para no bloquear el hilo
-            const [salesStats, creditNotes] = await Promise.all([
+            const [salesStats, creditNotes, casheaStats] = await Promise.all([
                 // 1. Estadísticas de Ventas (Brutas y Deuda)
                 prisma.sale.aggregate({
                     where: {
@@ -253,6 +253,23 @@ export class SalesStatsService {
                         sale: { status: { not: 'CANCELLED' } } // Solo devoluciones de ventas válidas
                     },
                     _sum: { totalAmount: true }
+                }),
+
+                // 3. Cobros Financiados por CASHEA
+                prisma.salePayment.aggregate({
+                    where: {
+                        sale: {
+                            businessId,
+                            status: { not: 'CANCELLED' },
+                            createdAt: { gte: currentStart, lte: currentEnd },
+                            deletedAt: null
+                        },
+                        paymentMethod: {
+                            name: { contains: 'CASHEA', mode: 'insensitive' }
+                        }
+                    },
+                    _sum: { amount: true },
+                    _count: { id: true }
                 })
             ]);
 
@@ -274,6 +291,9 @@ export class SalesStatsService {
                 ? netSales.div(salesStats._count.id) 
                 : new Decimal(0);
 
+            const casheaIncome = Number(casheaStats?._sum?.amount || 0);
+            const casheaTransactions = Number(casheaStats?._count?.id || 0);
+
             return {
                 status: 200,
                 data: {
@@ -281,7 +301,9 @@ export class SalesStatsService {
                     totalIncome: totalIncome.toNumber(),    // Dinero en mano
                     pendingDebt: totalDebt.toNumber(),      // Lo que te deben
                     averageTicket: averageTicket.toNumber(),
-                    totalOrders: salesStats._count.id
+                    totalOrders: salesStats._count.id,
+                    casheaIncome,
+                    casheaTransactions
                 },
                 message: 'Reporte de ventas calculado exitosamente'
             };

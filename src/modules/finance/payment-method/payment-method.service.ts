@@ -95,6 +95,30 @@ export class PaymentMethodService {
     // 3. LISTAR SOLO ACTIVOS
     async findActive() {
         try {
+            // Asegurar que exista el método CASHEA de fábrica
+            const casheaExists = await prisma.paymentMethod.findFirst({
+                where: {
+                    name: {
+                        contains: 'CASHEA',
+                        mode: 'insensitive'
+                    }
+                }
+            });
+
+            if (!casheaExists) {
+                try {
+                    await prisma.paymentMethod.create({
+                        data: {
+                            name: 'CASHEA',
+                            type: 'OTHER',
+                            currency: 'USD',
+                            isActive: true
+                        }
+                    });
+                } catch (e) {
+                    // Silenciar si se creó concurrentemente
+                }
+            }
 
             const paymentMethods = await prisma.paymentMethod.findMany({
                 where: {

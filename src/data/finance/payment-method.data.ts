@@ -8,5 +8,6 @@ export const paymentMethods = [
   { name: "Punto de Venta (Bs)", type: "DEBIT_CARD", currency: "VES", isActive: true },
   { name: "Tarjeta de Crédito (Bs)", type: "CREDIT_CARD", currency: "VES", isActive: true },
   { name: "PayPal (US$)", type: "OTHER", currency: "USD", isActive: true },
+  { name: "CASHEA", type: "OTHER", currency: "USD", isActive: true },
   { name: "Zelle Antiguo (U$)", type: "ZELLE", currency: "USD", isActive: false }
 ];

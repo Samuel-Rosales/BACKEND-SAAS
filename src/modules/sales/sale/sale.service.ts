@@ -12,6 +12,7 @@ interface FindSalesQuery {
     limit?: number;
     search?: string;        // <--- NUEVO: Buscador de texto
     paymentStatus?: string; // <--- NUEVO: PENDING, PAID, PARTIAL
+    paymentMethod?: string; // <--- FILTRO POR MÉTODO: 'CASHEA', etc.
     fromDate?: string;
     toDate?: string;
     /**
@@ -921,6 +922,17 @@ export class SaleService {
                 whereClause.paymentStatus = query.paymentStatus;
             }
 
+            // 3.1 Filtro por Método de Pago (ej: CASHEA)
+            if (query.paymentMethod) {
+                whereClause.payments = {
+                    some: {
+                        paymentMethod: {
+                            name: { contains: String(query.paymentMethod), mode: 'insensitive' }
+                        }
+                    }
+                };
+            }
+
             // 4. BÚSQUEDA AVANZADA (La mejora clave)
             if (search) {
                 const searchAsNumber = Number(search);
@@ -951,6 +963,7 @@ export class SaleService {
                         client: { select: { name: true, ci: true } },
                         member: { include: { user: { select: { name: true } } } },
                         exchangeRate: { select: { rate: true } },
+                        payments: { select: { paymentMethod: { select: { name: true } } } },
                         _count: { select: { items: true } }
                     }
                 }),
@@ -964,11 +977,13 @@ export class SaleService {
                 taxAmount: Number(sale.taxAmount),
                 totalAmount: Number(sale.totalAmount),
                 remainingBalance: Number(sale.remainingBalance),
+                isCashea: sale.payments?.some(p => p.paymentMethod?.name?.toUpperCase().includes('CASHEA')) || false,
                 // Calculamos si está vencida (solo visual)
                 isOverdue: sale.conditions === 'CREDIT' &&
                     sale.paymentStatus !== 'PAID' &&
                     sale.paymentDueDate &&
-                    new Date(sale.paymentDueDate) < new Date()
+                    new Date(sale.paymentDueDate) < new Date(),
+                sellerName: sale.member?.user?.name || 'Sistema'
             }));
 
             return {
