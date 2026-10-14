@@ -91,6 +91,9 @@ export class FinancialReportService {
                 expensesCurrent,
                 purchasesCurrent,
                 cogsCurrentResult,
+                taxBreakdownResult,
+                receivablesCurrent,
+                paymentsByMethodRaw,
                 // Previous Period Data for comparison
                 salesPrev,
                 creditNotesPrev,
@@ -135,7 +138,7 @@ export class FinancialReportService {
                         status: { not: 'CANCELLED' },
                         createdAt: { gte: start, lte: end }
                     },
-                    _sum: { totalCost: true },
+                    _sum: { totalCost: true, subTotal: true, taxAmount: true },
                     _count: { id: true }
                 }),
                 // Cost of Goods Sold (Current)
@@ -149,6 +152,51 @@ export class FinancialReportService {
                       AND s."deletedAt" IS NULL
                       AND s."createdAt" >= ${start}
                       AND s."createdAt" <= ${end}
+                `,
+                // Segregación Ventas Gravadas vs Exentas
+                prisma.$queryRaw<[{ taxableRevenue: number; exemptRevenue: number }]>`
+                    SELECT
+                        COALESCE(SUM(CASE WHEN t.rate > 0 THEN si."subTotal" ELSE 0 END), 0)::numeric as "taxableRevenue",
+                        COALESCE(SUM(CASE WHEN t.rate = 0 OR t.rate IS NULL THEN si."subTotal" ELSE 0 END), 0)::numeric as "exemptRevenue"
+                    FROM "SaleItem" si
+                    INNER JOIN "Sale" s ON si."saleId" = s.id
+                    INNER JOIN "Product" p ON si."productId" = p.id
+                    LEFT JOIN "Tax" t ON p."taxId" = t.id
+                    WHERE s."businessId" = ${businessId}
+                      AND s.status = 'COMPLETED'
+                      AND s."deletedAt" IS NULL
+                      AND s."createdAt" >= ${start}
+                      AND s."createdAt" <= ${end}
+                `,
+                // Cuentas por Cobrar Originadas en el Período
+                prisma.sale.aggregate({
+                    where: {
+                        businessId,
+                        status: 'COMPLETED',
+                        deletedAt: null,
+                        createdAt: { gte: start, lte: end },
+                        remainingBalance: { gt: 0 }
+                    },
+                    _sum: { remainingBalance: true },
+                    _count: { id: true }
+                }),
+                // Pagos Cobrados Efectivamente por Método en el Período
+                prisma.$queryRaw<Array<{ methodName: string; paymentType: string; totalAmount: number; count: number }>>`
+                    SELECT 
+                        pm.name as "methodName",
+                        pm.type::text as "paymentType",
+                        COALESCE(SUM(sp.amount), 0)::numeric as "totalAmount",
+                        COUNT(sp.id)::int as "count"
+                    FROM "SalePayment" sp
+                    INNER JOIN "Sale" s ON sp."saleId" = s.id
+                    INNER JOIN "PaymentMethod" pm ON sp."paymentMethodId" = pm.id
+                    WHERE s."businessId" = ${businessId}
+                      AND s.status = 'COMPLETED'
+                      AND s."deletedAt" IS NULL
+                      AND sp.date >= ${start}
+                      AND sp.date <= ${end}
+                    GROUP BY pm.name, pm.type
+                    ORDER BY "totalAmount" DESC
                 `,
                 // Previous Sales
                 prisma.sale.aggregate({
@@ -186,7 +234,7 @@ export class FinancialReportService {
                         status: { not: 'CANCELLED' },
                         createdAt: { gte: prevStart, lte: prevEnd }
                     },
-                    _sum: { totalCost: true },
+                    _sum: { totalCost: true, subTotal: true, taxAmount: true },
                     _count: { id: true }
                 }),
                 // Previous Cost of Goods Sold
@@ -245,6 +293,42 @@ export class FinancialReportService {
             const profitVariation = calcPctChange(netProfit, netProfitPrev);
             const taxVariation = calcPctChange(taxAmount, taxAmountPrev);
 
+            // 1. Balance Fiscal SENIAT (Débito Fiscal vs Crédito Fiscal)
+            const taxDebit = taxAmount;
+            const taxCredit = Number(purchasesCurrent._sum.taxAmount || 0);
+            const taxCreditPrev = Number(purchasesPrev._sum.taxAmount || 0);
+            const taxBalance = taxDebit - taxCredit;
+            const taxCreditVariation = calcPctChange(taxCredit, taxCreditPrev);
+
+            // 2. Segregación Ventas Gravadas vs Exentas
+            const rawTaxable = Number(taxBreakdownResult[0]?.taxableRevenue || 0);
+            const rawExempt = Number(taxBreakdownResult[0]?.exemptRevenue || 0);
+            const totalBaseTax = rawTaxable + rawExempt;
+            const taxableRevenue = rawTaxable;
+            const exemptRevenue = rawExempt;
+            const taxablePct = totalBaseTax > 0 ? (rawTaxable / totalBaseTax) * 100 : 0;
+            const exemptPct = totalBaseTax > 0 ? (rawExempt / totalBaseTax) * 100 : 0;
+
+            // 3. Conciliación de Cobranza (Efectivo vs Por Cobrar / Cashea)
+            const collectedRevenue = paymentsByMethodRaw.reduce((acc, p) => acc + Number(p.totalAmount || 0), 0);
+            const receivableBalance = Number(receivablesCurrent._sum.remainingBalance || 0);
+            const receivableSalesCount = Number(receivablesCurrent._count.id || 0);
+            const totalCashFlowBase = collectedRevenue + receivableBalance;
+            const collectionRatePct = totalCashFlowBase > 0 ? (collectedRevenue / totalCashFlowBase) * 100 : 100;
+            const paymentsByMethod = paymentsByMethodRaw.map((p) => ({
+                methodName: p.methodName,
+                paymentType: p.paymentType,
+                totalAmount: Number(p.totalAmount || 0),
+                count: Number(p.count || 0)
+            }));
+
+            // 4. Punto de Equilibrio Operativo (Break-Even Point)
+            const grossMarginRatio = netRevenue > 0 ? (grossProfit / netRevenue) : 0;
+            const breakEvenRevenue = (grossMarginRatio > 0 && totalExpenses > 0) ? (totalExpenses / grossMarginRatio) : 0;
+            const breakEvenProgressPct = breakEvenRevenue > 0 ? (netRevenue / breakEvenRevenue) * 100 : (netRevenue > 0 ? 100 : 0);
+            const safetyMarginRevenue = netRevenue - breakEvenRevenue;
+            const safetyMarginPct = netRevenue > 0 ? (safetyMarginRevenue / netRevenue) * 100 : 0;
+
             return {
                 status: 200,
                 message: 'Overview financiero general calculado exitosamente',
@@ -272,7 +356,36 @@ export class FinancialReportService {
                     prevNetProfit: netProfitPrev,
                     revenueVariation,
                     expensesVariation,
-                    profitVariation
+                    profitVariation,
+
+                    // Módulos ERP adicionales:
+                    fiscal: {
+                        taxDebit,
+                        taxCredit,
+                        taxBalance,
+                        taxCreditVariation,
+                        purchasesTaxSubtotal: Number(purchasesCurrent._sum.subTotal || 0)
+                    },
+                    taxBreakdown: {
+                        taxableRevenue,
+                        exemptRevenue,
+                        taxablePct,
+                        exemptPct
+                    },
+                    cashFlow: {
+                        collectedRevenue,
+                        receivableBalance,
+                        receivableSalesCount,
+                        collectionRatePct,
+                        paymentsByMethod
+                    },
+                    breakEven: {
+                        breakEvenRevenue,
+                        breakEvenProgressPct,
+                        safetyMarginRevenue,
+                        safetyMarginPct,
+                        isProfitable: safetyMarginRevenue >= 0
+                    }
                 }
             };
 
