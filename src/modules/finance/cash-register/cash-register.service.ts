@@ -1,10 +1,72 @@
 import { prisma } from '@/configs';
 import { CreateCashRegisterInterface, CloseCashRegisterInterface } from './interfaces';
-import { CashStatus, CashCountType, PaymentStatus, Currency } from '@prisma/client';
+import { CashStatus, CashCountType, PaymentStatus, Currency, SaleStatus } from '@prisma/client';
 import { BusinessError } from '@/utils/catch-errors.util'; // Asumo que tienes esto
 import { Decimal } from '@prisma/client/runtime/client';
 
 export class CashRegisterService {
+
+    /**
+     * Calcula los totales reales de una caja registradora,
+     * excluyendo ventas anuladas y deduciendo reembolsos de notas de crédito.
+     */
+    private async calculateRegisterTotals(registerId: number) {
+        // Obtenemos los pagos de ventas NO anuladas
+        const validPayments = await prisma.salePayment.findMany({
+            where: {
+                cashRegisterId: registerId,
+                sale: { status: { not: SaleStatus.CANCELLED } }
+            },
+            select: { paymentMethodId: true, amount: true }
+        });
+
+        // Obtenemos reembolsos registrados contra esta caja
+        const refunds = await prisma.creditNotePayment.findMany({
+            where: { cashRegisterId: registerId },
+            select: { paymentMethodId: true, amount: true }
+        });
+
+        const totalsByMethod = new Map<number, Decimal>();
+        const countsByMethod = new Map<number, number>();
+
+        for (const p of validPayments) {
+            const current = totalsByMethod.get(p.paymentMethodId) || new Decimal(0);
+            totalsByMethod.set(p.paymentMethodId, current.add(new Decimal(p.amount)));
+            countsByMethod.set(p.paymentMethodId, (countsByMethod.get(p.paymentMethodId) || 0) + 1);
+        }
+
+        for (const r of refunds) {
+            const current = totalsByMethod.get(r.paymentMethodId) || new Decimal(0);
+            totalsByMethod.set(r.paymentMethodId, current.sub(new Decimal(r.amount)));
+        }
+
+        const methodIds = Array.from(totalsByMethod.keys());
+        const methods = await prisma.paymentMethod.findMany({
+            where: { id: { in: methodIds } }
+        });
+
+        const systemSummary = methodIds.map(mId => {
+            const method = methods.find(m => m.id === mId);
+            const netTotal = totalsByMethod.get(mId) || new Decimal(0);
+            return {
+                method: method?.name,
+                type: method?.type,
+                currency: method?.currency,
+                total: netTotal.toNumber(),
+                count: countsByMethod.get(mId) || 0
+            };
+        });
+
+        const paymentsSum = validPayments.reduce((sum, p) => sum.add(new Decimal(p.amount)), new Decimal(0));
+        const refundsSum = refunds.reduce((sum, r) => sum.add(new Decimal(r.amount)), new Decimal(0));
+        const netCashAmount = paymentsSum.sub(refundsSum);
+
+        return {
+            validPaymentsCount: validPayments.length,
+            systemSummary,
+            netCashAmount
+        };
+    }
 
     // 1. ABRIR CAJA (Con Transacción)
     async open(businessId: number, memberShipId: number, data: CreateCashRegisterInterface) {
@@ -101,34 +163,14 @@ export class CashRegisterService {
                 take: 50 // Paginación recomendada
             });
 
-            // Para cada caja, calculamos el resumen del sistema (totales por método de pago)
+            // Para cada caja, calculamos el resumen del sistema (totales por método de pago sin ventas anuladas)
             const registersWithSummary = await Promise.all(
                 registers.map(async (register) => {
-                    // Agrupar pagos por método de pago
-                    const paymentsGrouped = await prisma.salePayment.groupBy({
-                        by: ['paymentMethodId'],
-                        where: { cashRegisterId: register.id },
-                        _sum: { amount: true }
-                    });
-
-                    // Obtener información de los métodos de pago
-                    const methods = await prisma.paymentMethod.findMany({
-                        where: { id: { in: paymentsGrouped.map(p => p.paymentMethodId) } }
-                    });
-
-                    // Crear resumen del sistema
-                    const systemSummary = paymentsGrouped.map(pg => {
-                        const method = methods.find(m => m.id === pg.paymentMethodId);
-                        return {
-                            method: method?.name,
-                            type: method?.type,
-                            currency: method?.currency,
-                            total: pg._sum.amount
-                        };
-                    });
+                    const { validPaymentsCount, systemSummary } = await this.calculateRegisterTotals(register.id);
 
                     return {
                         ...register,
+                        _count: { payments: validPaymentsCount },
                         systemSummary
                     };
                 })
@@ -199,28 +241,8 @@ export class CashRegisterService {
 
             if (!register) return { status: 404, message: 'No tienes caja abierta', data: null };
 
-            // === AQUI VIENE LA MAGIA DEL SISTEMA ===
-            // Calculamos cuánto dinero debería haber según los pagos registrados
-            const paymentsGrouped = await prisma.salePayment.groupBy({
-                by: ['paymentMethodId'],
-                where: { cashRegisterId: register.id },
-                _sum: { amount: true }
-            });
-
-            // Enriquecemos con nombres de métodos
-            const methods = await prisma.paymentMethod.findMany({
-                where: { id: { in: paymentsGrouped.map(p => p.paymentMethodId) } }
-            });
-
-            const systemTotals = paymentsGrouped.map(pg => {
-                const method = methods.find(m => m.id === pg.paymentMethodId);
-                return {
-                    method: method?.name,
-                    type: method?.type, // CASH, ZELLE, ETC
-                    currency: method?.currency,
-                    total: pg._sum.amount
-                };
-            });
+            // Calculamos cuánto dinero debería haber según los pagos de ventas NO anuladas
+            const { systemSummary: systemTotals } = await this.calculateRegisterTotals(register.id);
 
             return {
                 status: 200,
@@ -249,32 +271,15 @@ export class CashRegisterService {
 
             if (!register) return { status: 404, message: 'Caja no encontrada', data: null };
 
-            // === CALCULO DE TOTALES REGISTRADOS POR EL SISTEMA ===
-            const paymentsGrouped = await prisma.salePayment.groupBy({
-                by: ['paymentMethodId'],
-                where: { cashRegisterId: register.id },
-                _sum: { amount: true },
-                _count: true
-            });
+            // === CALCULO DE TOTALES REGISTRADOS POR EL SISTEMA (VENTAS ACTIVAS) ===
+            const { systemSummary: systemTotals } = await this.calculateRegisterTotals(register.id);
 
-            const methods = await prisma.paymentMethod.findMany({
-                where: { id: { in: paymentsGrouped.map(p => p.paymentMethodId) } }
-            });
-
-            const systemTotals = paymentsGrouped.map(pg => {
-                const method = methods.find(m => m.id === pg.paymentMethodId);
-                return {
-                    method: method?.name,
-                    type: method?.type,
-                    currency: method?.currency,
-                    total: pg._sum.amount,
-                    count: pg._count
-                };
-            });
-
-            // === OBTENER TODAS LAS TRANSACCIONES INDIVIDUALES ===
+            // === OBTENER TODAS LAS TRANSACCIONES INDIVIDUALES (EXCLUYENDO VENTAS ANULADAS) ===
             const transactions = await prisma.salePayment.findMany({
-                where: { cashRegisterId: register.id },
+                where: {
+                    cashRegisterId: register.id,
+                    sale: { status: { not: SaleStatus.CANCELLED } }
+                },
                 include: {
                     paymentMethod: true,
                     sale: {
@@ -355,18 +360,14 @@ export class CashRegisterService {
             let finalAmount = data.finalAmount;
 
             if (!data.counts || data.counts.length === 0) {
-                // Auto-calculate from payments
-                const paymentsTotal = await prisma.salePayment.aggregate({
-                    where: { cashRegisterId: register.id },
-                    _sum: { amount: true }
-                });
+                // Auto-calculate from valid payments (ventas no anuladas) menos reembolsos
+                const { netCashAmount } = await this.calculateRegisterTotals(register.id);
 
                 // Convert initial amount to Decimal for safe arithmetic
                 const initialAmount = new Decimal(register.initialAmount);
-                const paymentsSum = new Decimal(paymentsTotal._sum.amount || 0);
 
-                // Final amount = initial + payments
-                finalAmount = initialAmount.add(paymentsSum).toNumber();
+                // Final amount = initial + net payments
+                finalAmount = initialAmount.add(netCashAmount).toNumber();
             }
 
             const result = await prisma.$transaction(async (tx) => {

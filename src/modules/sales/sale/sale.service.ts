@@ -1631,7 +1631,17 @@ export class SaleService {
                 const sale = await tx.sale.findUniqueOrThrow({
                     where: { id: saleId, businessId },
                     include: { 
-                        items: { include: { lotAllocations: { include: { stockLot: { select: { depotId: true, lotCost: true } } } } } },
+                        items: { 
+                            include: { 
+                                lotAllocations: { 
+                                    include: { 
+                                        stockLot: { select: { id: true, productId: true, depotId: true, lotCost: true } } 
+                                    } 
+                                },
+                                product: { select: { id: true, type: true } },
+                                productPresentation: { select: { factor: true } }
+                            } 
+                        },
                         creditNotes: true,
                         payments: true // Necesitamos saber cuánto devolvemos de dinero
                     }
@@ -1672,52 +1682,81 @@ export class SaleService {
                     }
                 });
 
-                // 4. Restaurar Inventario (Iteración simple, sin cálculos de ratio complejos)
+                // 4. Restaurar Inventario (Stock Físico y Kardex)
                 for (const item of sale.items) {
-                    // Ignorar servicios
+                    // Restauración por asignaciones de lotes registradas
                     if (item.lotAllocations.length > 0) {
                         for (const allocation of item.lotAllocations) {
-                            // Restaurar Stock Físico
+                            // Restaurar Stock Físico en el Lote
                             const updatedStockLot = await tx.stockLot.update({
                                 where: { id: allocation.stockLotId },
                                 data: { quantity: { increment: allocation.quantity } }
                             });
 
                             // Kardex: Entrada por Anulación
-                            // (Aquí deberías buscar info del lote como en tu servicio anterior)
+                            await tx.stockMovement.create({
+                                data: {
+                                    businessId,
+                                    memberId,
+                                    productId: allocation.stockLot?.productId || item.productId,
+                                    depotId: allocation.stockLot.depotId,
+                                    type: MovementType.IN,
+                                    quantity: allocation.quantity,
+                                    reason: `Anulación Venta #${sale.receiptNumber}`,
+                                    stockLotId: updatedStockLot.id,
+                                    historicalCost: updatedStockLot.lotCost
+                                }
+                            });
+                        }
+                    } else if (item.product && item.product.type !== ProductType.SERVICE) {
+                        // Respaldo de seguridad: si el producto físico no tenía asignaciones de lote explícitas
+                        const factor = item.productPresentation?.factor ? Number(item.productPresentation.factor) : 1;
+                        const totalUnits = new Decimal(item.quantity).mul(factor);
+
+                        const targetLot = await tx.stockLot.findFirst({
+                            where: { productId: item.productId, depot: { businessId } },
+                            orderBy: { id: 'desc' }
+                        });
+
+                        if (targetLot) {
+                            const updatedStockLot = await tx.stockLot.update({
+                                where: { id: targetLot.id },
+                                data: { quantity: { increment: totalUnits } }
+                            });
+
                             await tx.stockMovement.create({
                                 data: {
                                     businessId,
                                     memberId,
                                     productId: item.productId,
-                                    depotId: allocation.stockLot.depotId, // Ojo: Obtener del lote original
+                                    depotId: targetLot.depotId,
                                     type: MovementType.IN,
-                                    quantity: allocation.quantity,
-                                    reason: `Anulación Venta #${sale.receiptNumber}`,
-                                    stockLotId: updatedStockLot.id, // Asociamos al mismo lote para trazabilidad
-                                    historicalCost: updatedStockLot.lotCost // Usamos el costo original del lote para el movimiento
+                                    quantity: totalUnits,
+                                    reason: `Anulación Venta #${sale.receiptNumber} (Restauración de Stock)`,
+                                    stockLotId: updatedStockLot.id,
+                                    historicalCost: updatedStockLot.lotCost
                                 }
                             });
                         }
                     }
                 }
 
-                // 5. Reversar Pagos (Caja)
-                // Si la venta tuvo pagos, hay que registrar la salida del dinero
-                // Opcional: Esto depende de si anulas el día mismo o después.
-                // Si es el mismo día, a veces se eliminan los pagos. 
-                // Si es contabilidad estricta, se crea un egreso (CreditNotePayment).
-                
-                /* Lógica simplificada: Crear contra-movimientos para cada pago */
+                // 5. Reversar Pagos y Desvincular de la Caja Registradora
+                // Para que el cuadre de caja sea 100% exacto, se remueve el cashRegisterId de los cobros de la venta
+                await tx.salePayment.updateMany({
+                    where: { saleId: sale.id },
+                    data: { cashRegisterId: null }
+                });
+
                 for (const payment of sale.payments) {
                     await tx.creditNotePayment.create({
                         data: {
                             creditNoteId: creditNote.id,
                             paymentMethodId: payment.paymentMethodId,
-                            amount: payment.amount, // Devolvemos todo
+                            amount: payment.amount,
                             exchangeRateId: payment.exchangeRateId,
-                            cashRegisterId: payment.cashRegisterId, // Afecta la caja original si está abierta
-                            reference: `Reverso Ref: ${payment.reference}`
+                            cashRegisterId: null, // Desvinculado para no generar descuadres negativos dobles
+                            reference: `Reverso Anulación Venta #${sale.receiptNumber}`
                         }
                     });
                 }
@@ -1726,9 +1765,9 @@ export class SaleService {
                 await tx.sale.update({
                     where: { id: sale.id },
                     data: {
-                        status: SaleStatus.CANCELLED, // <--- Aquí está la clave
-                        remainingBalance: 0, // Ya no debe nada porque se anuló
-                        paymentStatus: PaymentStatus.REFUNDED // O el enum que uses
+                        status: SaleStatus.CANCELLED,
+                        remainingBalance: 0,
+                        paymentStatus: PaymentStatus.REFUNDED
                     }
                 });
 

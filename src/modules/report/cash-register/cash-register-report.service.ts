@@ -126,10 +126,13 @@ export class CashRegisterReportService {
 
             const registerIds = registers.map(r => r.id);
 
-            // Fetch all payments for these registers
+            // Fetch all payments for these registers (excluding cancelled sales)
             const payments = await prisma.salePayment.findMany({
                 where: {
-                    cashRegisterId: { in: registerIds }
+                    cashRegisterId: { in: registerIds },
+                    sale: {
+                        status: { not: 'CANCELLED' }
+                    }
                 },
                 include: {
                     paymentMethod: true,
@@ -379,6 +382,11 @@ export class CashRegisterReportService {
                 },
                 include: {
                     payments: {
+                        where: {
+                            sale: {
+                                status: { not: 'CANCELLED' }
+                            }
+                        },
                         include: {
                             paymentMethod: true,
                             exchangeRate: true
