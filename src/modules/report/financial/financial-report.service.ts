@@ -106,7 +106,7 @@ export class FinancialReportService {
                         createdAt: { gte: start, lte: end },
                         deletedAt: null
                     },
-                    _sum: { totalAmount: true },
+                    _sum: { totalAmount: true, subTotal: true, taxAmount: true, discount: true },
                     _count: { id: true }
                 }),
                 // Credit Notes (returns)
@@ -158,7 +158,7 @@ export class FinancialReportService {
                         createdAt: { gte: prevStart, lte: prevEnd },
                         deletedAt: null
                     },
-                    _sum: { totalAmount: true }
+                    _sum: { totalAmount: true, subTotal: true, taxAmount: true, discount: true }
                 }),
                 // Previous Credit Notes
                 prisma.creditNote.aggregate({
@@ -204,10 +204,14 @@ export class FinancialReportService {
             ]);
 
             // Math for Current Period
-            const grossRevenue = Number(salesCurrent._sum.totalAmount || 0);
+            const billedRevenue = Number(salesCurrent._sum.totalAmount || 0); // Facturado total con IVA
+            const taxAmount = Number(salesCurrent._sum.taxAmount || 0); // IVA recaudado (Débito fiscal)
+            const subTotalRevenue = Number(salesCurrent._sum.subTotal || 0); // Base imponible de ventas
             const salesCount = Number(salesCurrent._count.id || 0);
             const returns = Number(creditNotesCurrent._sum.totalAmount || 0);
-            const netRevenue = grossRevenue - returns;
+
+            // Ingresos Netos reales = Base imponible menos devoluciones (excluye el IVA para cálculo financiero fiel)
+            const netRevenue = Math.max(0, subTotalRevenue - returns);
             
             const costOfGoodsSold = Number(cogsCurrentResult[0]?.totalCost || 0);
             const grossProfit = netRevenue - costOfGoodsSold;
@@ -225,9 +229,11 @@ export class FinancialReportService {
             const avgTicket = salesCount > 0 ? netRevenue / salesCount : 0;
 
             // Math for Previous Period
-            const grossRevenuePrev = Number(salesPrev._sum.totalAmount || 0);
+            const billedRevenuePrev = Number(salesPrev._sum.totalAmount || 0);
+            const subTotalRevenuePrev = Number(salesPrev._sum.subTotal || 0);
+            const taxAmountPrev = Number(salesPrev._sum.taxAmount || 0);
             const returnsPrev = Number(creditNotesPrev._sum.totalAmount || 0);
-            const netRevenuePrev = grossRevenuePrev - returnsPrev;
+            const netRevenuePrev = Math.max(0, subTotalRevenuePrev - returnsPrev);
             const costOfGoodsSoldPrev = Number(cogsPrevResult[0]?.totalCost || 0);
             const grossProfitPrev = netRevenuePrev - costOfGoodsSoldPrev;
             const totalExpensesPrev = Number(expensesPrev._sum?.amountInUSD || 0);
@@ -237,12 +243,17 @@ export class FinancialReportService {
             const revenueVariation = calcPctChange(netRevenue, netRevenuePrev);
             const expensesVariation = calcPctChange(totalExpenses, totalExpensesPrev);
             const profitVariation = calcPctChange(netProfit, netProfitPrev);
+            const taxVariation = calcPctChange(taxAmount, taxAmountPrev);
 
             return {
                 status: 200,
                 message: 'Overview financiero general calculado exitosamente',
                 data: {
-                    grossRevenue,
+                    billedRevenue,
+                    taxAmount,
+                    taxVariation,
+                    grossRevenue: billedRevenue,
+                    subTotalRevenue,
                     returns,
                     netRevenue,
                     costOfGoodsSold,
