@@ -94,12 +94,14 @@ export class FinancialReportService {
                 taxBreakdownResult,
                 receivablesCurrent,
                 paymentsByMethodRaw,
+                commissionsCurrentResult,
                 // Previous Period Data for comparison
                 salesPrev,
                 creditNotesPrev,
                 expensesPrev,
                 purchasesPrev,
-                cogsPrevResult
+                cogsPrevResult,
+                commissionsPrevResult
             ] = await Promise.all([
                 // Sales
                 prisma.sale.aggregate({
@@ -109,7 +111,7 @@ export class FinancialReportService {
                         createdAt: { gte: start, lte: end },
                         deletedAt: null
                     },
-                    _sum: { totalAmount: true, subTotal: true, taxAmount: true, discount: true },
+                    _sum: { totalAmount: true, subTotal: true, taxAmount: true, discount: true, commissionAmount: true },
                     _count: { id: true }
                 }),
                 // Credit Notes (returns)
@@ -198,6 +200,24 @@ export class FinancialReportService {
                     GROUP BY pm.name, pm.type
                     ORDER BY "totalAmount" DESC
                 `,
+                // Comisiones por Venta del Período
+                prisma.$queryRaw<[{ totalCommissions: number; commissionedSalesCount: number }]>`
+                    SELECT 
+                        COALESCE(SUM(
+                            CASE 
+                                WHEN s."commissionAmount" IS NOT NULL THEN s."commissionAmount"
+                                WHEN s."commissionPercentage" IS NOT NULL AND s."commissionPercentage" > 0 THEN ((s."subTotal" - s."discount") * s."commissionPercentage" / 100)
+                                ELSE 0 
+                            END
+                        ), 0)::numeric as "totalCommissions",
+                        COUNT(CASE WHEN (s."commissionAmount" > 0 OR s."commissionPercentage" > 0) THEN 1 END)::int as "commissionedSalesCount"
+                    FROM "Sale" s
+                    WHERE s."businessId" = ${businessId}
+                      AND s.status = 'COMPLETED'
+                      AND s."deletedAt" IS NULL
+                      AND s."createdAt" >= ${start}
+                      AND s."createdAt" <= ${end}
+                `,
                 // Previous Sales
                 prisma.sale.aggregate({
                     where: {
@@ -206,7 +226,7 @@ export class FinancialReportService {
                         createdAt: { gte: prevStart, lte: prevEnd },
                         deletedAt: null
                     },
-                    _sum: { totalAmount: true, subTotal: true, taxAmount: true, discount: true }
+                    _sum: { totalAmount: true, subTotal: true, taxAmount: true, discount: true, commissionAmount: true }
                 }),
                 // Previous Credit Notes
                 prisma.creditNote.aggregate({
@@ -248,6 +268,23 @@ export class FinancialReportService {
                       AND s."deletedAt" IS NULL
                       AND s."createdAt" >= ${prevStart}
                       AND s."createdAt" <= ${prevEnd}
+                `,
+                // Previous Sales Commissions
+                prisma.$queryRaw<[{ totalCommissions: number }]>`
+                    SELECT 
+                        COALESCE(SUM(
+                            CASE 
+                                WHEN s."commissionAmount" IS NOT NULL THEN s."commissionAmount"
+                                WHEN s."commissionPercentage" IS NOT NULL AND s."commissionPercentage" > 0 THEN ((s."subTotal" - s."discount") * s."commissionPercentage" / 100)
+                                ELSE 0 
+                            END
+                        ), 0)::numeric as "totalCommissions"
+                    FROM "Sale" s
+                    WHERE s."businessId" = ${businessId}
+                      AND s.status = 'COMPLETED'
+                      AND s."deletedAt" IS NULL
+                      AND s."createdAt" >= ${prevStart}
+                      AND s."createdAt" <= ${prevEnd}
                 `
             ]);
 
@@ -265,12 +302,17 @@ export class FinancialReportService {
             const grossProfit = netRevenue - costOfGoodsSold;
             const grossMarginPct = netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0;
 
-            const totalExpenses = Number(expensesCurrent._sum?.amountInUSD || 0);
+            // Gastos Operativos y Comisiones de Venta
+            const directExpenses = Number(expensesCurrent._sum?.amountInUSD || 0);
+            const salesCommissions = Number(commissionsCurrentResult[0]?.totalCommissions || 0);
+            const commissionedSalesCount = Number(commissionsCurrentResult[0]?.commissionedSalesCount || 0);
+            const totalExpenses = directExpenses + salesCommissions; // Egresos operativos consolidados
             const expensesCount = Number(expensesCurrent._count?._all || 0);
 
             const inventoryPurchases = Number(purchasesCurrent._sum?.totalCost || 0);
             const purchasesCount = Number(purchasesCurrent._count?.id || 0);
 
+            // Utilidad Neta Real = Utilidad Bruta - Gastos Operativos - Comisiones
             const netProfit = grossProfit - totalExpenses;
             const netMarginPct = netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0;
 
@@ -284,12 +326,16 @@ export class FinancialReportService {
             const netRevenuePrev = Math.max(0, subTotalRevenuePrev - returnsPrev);
             const costOfGoodsSoldPrev = Number(cogsPrevResult[0]?.totalCost || 0);
             const grossProfitPrev = netRevenuePrev - costOfGoodsSoldPrev;
-            const totalExpensesPrev = Number(expensesPrev._sum?.amountInUSD || 0);
+            const directExpensesPrev = Number(expensesPrev._sum?.amountInUSD || 0);
+            const salesCommissionsPrev = Number(commissionsPrevResult[0]?.totalCommissions || 0);
+            const totalExpensesPrev = directExpensesPrev + salesCommissionsPrev;
             const netProfitPrev = grossProfitPrev - totalExpensesPrev;
 
             // Variations
             const revenueVariation = calcPctChange(netRevenue, netRevenuePrev);
             const expensesVariation = calcPctChange(totalExpenses, totalExpensesPrev);
+            const directExpensesVariation = calcPctChange(directExpenses, directExpensesPrev);
+            const commissionsVariation = calcPctChange(salesCommissions, salesCommissionsPrev);
             const profitVariation = calcPctChange(netProfit, netProfitPrev);
             const taxVariation = calcPctChange(taxAmount, taxAmountPrev);
 
@@ -323,6 +369,7 @@ export class FinancialReportService {
             }));
 
             // 4. Punto de Equilibrio Operativo (Break-Even Point)
+            // Considera TODOS los costos de operación: Gastos directos registrados + Comisiones por venta
             const grossMarginRatio = netRevenue > 0 ? (grossProfit / netRevenue) : 0;
             const breakEvenRevenue = (grossMarginRatio > 0 && totalExpenses > 0) ? (totalExpenses / grossMarginRatio) : 0;
             const breakEvenProgressPct = breakEvenRevenue > 0 ? (netRevenue / breakEvenRevenue) * 100 : (netRevenue > 0 ? 100 : 0);
@@ -343,7 +390,12 @@ export class FinancialReportService {
                     costOfGoodsSold,
                     grossProfit,
                     grossMarginPct,
-                    totalExpenses,
+                    totalExpenses, // Total de egresos operativos (Gastos + Comisiones)
+                    directExpenses, // Gastos operativos directos registrados
+                    directExpensesVariation,
+                    salesCommissions, // Comisiones de venta devengadas en el período
+                    commissionedSalesCount, // Cantidad de ventas que generaron comisión
+                    commissionsVariation,
                     expensesCount,
                     inventoryPurchases,
                     purchasesCount,
