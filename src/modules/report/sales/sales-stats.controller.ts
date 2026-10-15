@@ -102,4 +102,42 @@ export class SalesReportController {
             return res.status(500).json({ error: 'Error interno al generar PDF de ventas' });
         }
     };
+
+    exportData = async (req: Request, res: Response) => {
+        const { businessId } = req.user;
+        const fromDate = req.query.fromDate as string | undefined;
+        const toDate = req.query.toDate as string | undefined;
+        const tzOffset = req.query.tzOffset === undefined ? undefined : Number(req.query.tzOffset);
+        const search = req.query.search as string | undefined;
+        const paymentStatus = req.query.paymentStatus as string | undefined;
+        const paymentMethod = req.query.paymentMethod as string | undefined;
+
+        if (!businessId) {
+            return res.status(400).json({ message: 'Falta el header x-business-id' });
+        }
+
+        try {
+            const result = await salesStats.getSalesReportPDFData(businessId, {
+                fromDate,
+                toDate,
+                tzOffset,
+                search,
+                paymentStatus,
+                paymentMethod
+            });
+
+            if (result.status !== 200 || !result.data) {
+                return res.status(result.status).json({ error: result.message });
+            }
+
+            return res.status(200).json({
+                message: 'Datos de ventas obtenidos exitosamente',
+                data: result.data
+            });
+
+        } catch (error) {
+            console.error('Error obteniendo datos de exportación de ventas:', error);
+            return res.status(500).json({ error: 'Error interno al obtener datos de ventas' });
+        }
+    };
 }

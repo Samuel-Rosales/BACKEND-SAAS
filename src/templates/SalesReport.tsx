@@ -146,30 +146,27 @@ const styles = StyleSheet.create({
     },
     table: {
         width: '100%',
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        borderRadius: 2
+        borderLeftWidth: 1,
+        borderTopWidth: 1,
+        borderColor: '#d1d5db',
+        marginTop: 4
     },
     row: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-        minHeight: 18,
-        alignItems: 'center'
-    },
-    headRow: {
-        backgroundColor: '#1f2937',
-        borderBottomColor: '#111827'
+        flexDirection: 'row'
     },
     cell: {
-        paddingVertical: 3,
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: '#d1d5db',
+        paddingVertical: 3.5,
         paddingHorizontal: 3,
-        fontSize: 7.5
+        fontSize: 7
     },
     headCell: {
-        color: '#ffffff',
+        backgroundColor: '#f3f4f6',
+        color: '#111827',
         fontFamily: 'Helvetica-Bold',
-        fontSize: 7.5
+        fontSize: 7
     },
 
     // Columns
@@ -337,7 +334,7 @@ const SalesReportPDF: React.FC<SalesReportPDFProps> = ({
             </Text>
 
             <View style={styles.table}>
-                <View style={[styles.row, styles.headRow]}>
+                <View style={styles.row} fixed>
                     <Text style={[styles.cell, styles.headCell, styles.colIndex]}>#</Text>
                     <Text style={[styles.cell, styles.headCell, styles.colReceipt]}>Recibo</Text>
                     <Text style={[styles.cell, styles.headCell, styles.colDate]}>Fecha / Hora</Text>
@@ -350,7 +347,11 @@ const SalesReportPDF: React.FC<SalesReportPDFProps> = ({
                 </View>
 
                 {sales.map((s, idx) => (
-                    <View style={[styles.row, { backgroundColor: idx % 2 === 1 ? '#f9fafb' : '#ffffff' }]} key={s.id || idx}>
+                    <View 
+                        style={[styles.row, { backgroundColor: idx % 2 === 1 ? '#f9fafb' : '#ffffff' }]} 
+                        key={s.id || idx}
+                        wrap={false}
+                    >
                         <Text style={[styles.cell, styles.colIndex]}>{idx + 1}</Text>
                         <Text style={[styles.cell, styles.colReceipt]}>#{s.receiptNumber}</Text>
                         <Text style={[styles.cell, styles.colDate]}>{formatDate(s.createdAt)}</Text>
@@ -370,7 +371,7 @@ const SalesReportPDF: React.FC<SalesReportPDFProps> = ({
             </View>
 
             {/* Totals Summary */}
-            <View style={styles.totalBox}>
+            <View style={styles.totalBox} wrap={false}>
                 <View style={styles.totalGroup}>
                     <Text style={styles.totalGroupLabel}>Ventas Listadas</Text>
                     <Text style={styles.totalGroupValue}>{totals.count} transacciones</Text>

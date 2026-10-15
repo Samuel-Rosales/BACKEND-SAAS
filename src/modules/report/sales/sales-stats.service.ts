@@ -419,7 +419,7 @@ export class SalesStatsService {
 
             const salesRecords = await prisma.sale.findMany({
                 where: whereClause,
-                take: 500,
+                take: 2000,
                 orderBy: { createdAt: 'desc' },
                 include: {
                     client: { select: { name: true, ci: true } },
