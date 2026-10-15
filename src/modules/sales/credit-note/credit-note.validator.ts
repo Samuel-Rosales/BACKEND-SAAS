@@ -23,7 +23,7 @@ export class CreditNoteValidator {
             .toInt(),
 
         body('items.*.quantity')
-            .isFloat({ min: 0.0001 }).withMessage('La cantidad a devolver debe ser mayor a 0')
+            .isFloat({ min: 0.000001 }).withMessage('La cantidad a devolver debe ser mayor a 0')
             .toFloat(),
 
         // EL CAMPO CLAVE

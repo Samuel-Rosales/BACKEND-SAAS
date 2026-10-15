@@ -67,7 +67,7 @@ export class PurchaseItemValidator {
             }),
 
         body('quantity')
-            .isFloat({ min: 0.01 }).withMessage('La cantidad debe ser un número mayor a cero')
+            .isFloat({ min: 0.000001 }).withMessage('La cantidad debe ser un número mayor a cero')
             .toFloat(),
 
         body('unitCost')

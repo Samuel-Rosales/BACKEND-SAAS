@@ -82,7 +82,7 @@ body('installments')
     body('items.*.quantity')
       // Permitimos decimales si vendes por Kilo, o int si es unitario. 
       // isFloat es más seguro para ambos casos.
-      .isFloat({ min: 0.001 }).withMessage('Cantidad inválida')
+      .isFloat({ min: 0.000001 }).withMessage('Cantidad inválida')
       .toFloat(),
 
     // NOTA: unitPrice y subTotal son opcionales en el DTO de entrada 

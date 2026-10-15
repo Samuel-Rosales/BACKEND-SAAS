@@ -15,7 +15,7 @@ export class QuotationValidator {
             .withMessage('El ID del producto es obligatorio'),
 
         body('items.*.quantity')
-            .isFloat({ min: 0.0001 })
+            .isFloat({ min: 0.000001 })
             .withMessage('La cantidad debe ser mayor a 0'),
 
         body('items.*.productPresentationId')

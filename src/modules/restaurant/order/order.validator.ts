@@ -27,7 +27,7 @@ export class OrderValidator {
             .toInt(),
 
         body('items.*.quantity')
-            .isFloat({ min: 0.01 }).withMessage('La cantidad debe ser mayor a 0'),
+            .isFloat({ min: 0.000001 }).withMessage('La cantidad debe ser mayor a 0'),
 
         body('items.*.salePrice')
             .isFloat({ min: 0 }).withMessage('El precio unitario debe ser mayor o igual a 0'),
