@@ -17,4 +17,10 @@ router.get(
     controller.SalesMetrics
 );
 
+router.get(
+    '/pdf',
+    requireBusinessPermission('REPORTS_SALES_VIEW'),
+    controller.generatePDF
+);
+
 export const SalesReportRoute = router;

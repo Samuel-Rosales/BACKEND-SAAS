@@ -319,8 +319,165 @@ export class SalesStatsService {
                     totalIncome: 0,
                     pendingDebt: 0,
                     averageTicket: 0,
-                    totalOrders: 0
+                    totalOrders: 0,
+                    casheaIncome: 0,
+                    casheaTransactions: 0
                 }
+            };
+        }
+    }
+
+    async getSalesReportPDFData(businessId: number, params: {
+        fromDate?: string;
+        toDate?: string;
+        tzOffset?: number | string;
+        search?: string;
+        paymentStatus?: string;
+        paymentMethod?: string;
+    } = {}) {
+        try {
+            const now = new Date();
+            const tzOffsetMinutes = (() => {
+                if (!params || params.tzOffset === null || params.tzOffset === undefined) {
+                    return new Date().getTimezoneOffset();
+                }
+                const parsed = Number(params.tzOffset);
+                return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+            })();
+
+            const defaultMonthRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, 0);
+            let currentStart = defaultMonthRange.start;
+            let currentEnd = defaultMonthRange.end;
+
+            const formatYmd = (d: Date) => {
+                const local = new Date(d.getTime() - (tzOffsetMinutes * 60_000));
+                return local.toISOString().split('T')[0];
+            };
+
+            let fromStr = formatYmd(currentStart);
+            let toStr = formatYmd(currentEnd);
+
+            if (params.fromDate && params.toDate) {
+                currentStart = parseDateOnlyStart(params.fromDate, tzOffsetMinutes);
+                currentEnd = parseDateOnlyEnd(params.toDate, tzOffsetMinutes);
+                fromStr = params.fromDate;
+                toStr = params.toDate;
+            } else if (params.fromDate && !params.toDate) {
+                currentStart = parseDateOnlyStart(params.fromDate, tzOffsetMinutes);
+                currentEnd = now;
+                fromStr = params.fromDate;
+                toStr = formatYmd(now);
+            } else if (!params.fromDate && params.toDate) {
+                const base = parseDateOnlyStart(params.toDate, tzOffsetMinutes);
+                const monthRange = getLocalMonthRangeUtc(base, tzOffsetMinutes, 0);
+                currentStart = monthRange.start;
+                currentEnd = parseDateOnlyEnd(params.toDate, tzOffsetMinutes);
+                fromStr = formatYmd(monthRange.start);
+                toStr = params.toDate;
+            }
+
+            const [business, overviewRes] = await Promise.all([
+                prisma.business.findUnique({
+                    where: { id: businessId },
+                    select: { name: true, logoUrl: true }
+                }),
+                this.getDetailedReport(businessId, { fromDate: fromStr, toDate: toStr, tzOffset: tzOffsetMinutes })
+            ]);
+
+            const whereClause: any = {
+                businessId,
+                status: { not: 'CANCELLED' },
+                deletedAt: null,
+                createdAt: { gte: currentStart, lte: currentEnd }
+            };
+
+            if (params.paymentStatus) {
+                whereClause.paymentStatus = params.paymentStatus;
+            }
+
+            if (params.paymentMethod) {
+                whereClause.payments = {
+                    some: {
+                        paymentMethod: {
+                            name: { contains: String(params.paymentMethod), mode: 'insensitive' }
+                        }
+                    }
+                };
+            }
+
+            if (params.search) {
+                const searchAsNumber = Number(params.search);
+                const isNumeric = !isNaN(searchAsNumber);
+                whereClause.OR = [
+                    { client: { name: { contains: params.search, mode: 'insensitive' } } },
+                    { client: { ci: { contains: params.search, mode: 'insensitive' } } }
+                ];
+                if (isNumeric) {
+                    whereClause.OR.push({ receiptNumber: { equals: searchAsNumber } });
+                }
+            }
+
+            const salesRecords = await prisma.sale.findMany({
+                where: whereClause,
+                take: 500,
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    client: { select: { name: true, ci: true } },
+                    member: { include: { user: { select: { name: true } } } },
+                    payments: { select: { paymentMethod: { select: { name: true } } } }
+                }
+            });
+
+            let sumTotalAmount = 0;
+            let sumTotalPending = 0;
+
+            const sales = salesRecords.map(s => {
+                const total = Number(s.totalAmount);
+                const pending = Number(s.remainingBalance);
+                sumTotalAmount += total;
+                sumTotalPending += pending;
+
+                return {
+                    id: s.id,
+                    receiptNumber: s.receiptNumber,
+                    createdAt: s.createdAt.toISOString(),
+                    clientName: s.client?.name || 'Cliente Ocasional',
+                    clientCi: s.client?.ci || '',
+                    sellerName: s.member?.user?.name || 'Sistema',
+                    conditions: s.conditions,
+                    paymentStatus: s.paymentStatus,
+                    totalAmount: total,
+                    remainingBalance: pending,
+                    isCashea: s.payments?.some(p => p.paymentMethod?.name?.toUpperCase().includes('CASHEA')) || false
+                };
+            });
+
+            const totals = {
+                totalAmount: sumTotalAmount,
+                totalCollected: Math.max(0, sumTotalAmount - sumTotalPending),
+                totalPending: sumTotalPending,
+                count: sales.length
+            };
+
+            return {
+                status: 200,
+                message: 'Datos de PDF de ventas obtenidos exitosamente',
+                data: {
+                    businessName: business?.name || 'Mi Negocio',
+                    logoUrl: business?.logoUrl || null,
+                    fromDate: fromStr,
+                    toDate: toStr,
+                    overview: overviewRes.data,
+                    sales,
+                    totals
+                }
+            };
+        } catch (error) {
+            console.error('Error obteniendo datos para PDF de ventas:', error);
+            return {
+                status: 500,
+                message: 'Error interno obteniendo datos para PDF de ventas',
+                data: null
             };
         }
     }
