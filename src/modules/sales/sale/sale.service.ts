@@ -419,9 +419,14 @@ export class SaleService {
                 // Cálculo de Comisión de Venta (Exclusivo Plan PREMIUM)
                 let saleCommissionPct: Decimal | null = null;
                 let saleCommissionAmt: Decimal | null = null;
-                const memberCommPct = Number((sellerMember as any).commissionPercentage || 0);
+                let managerCommissionPct: Decimal | null = null;
+                let managerCommissionAmt: Decimal | null = null;
+                let managerMemberId: number | null = null;
 
-                if (memberCommPct > 0) {
+                const memberCommPct = Number((sellerMember as any).commissionPercentage || 0);
+                const hasManagerComm = !!(business?.enableManagerCommission && business?.managerMemberId && Number(business.managerCommissionPercentage) > 0);
+
+                if (memberCommPct > 0 || hasManagerComm) {
                     const subscription = await tx.subscription.findUnique({
                         where: { businessId },
                         include: { plan: true }
@@ -433,12 +438,25 @@ export class SaleService {
                         subscription.plan?.name?.toUpperCase().includes('ENTERPRISE')
                     );
                     if (isPremium) {
-                        saleCommissionPct = new Decimal(memberCommPct);
                         const netBase = rawSubTotal.sub(discountAmount);
-                        if (netBase.gt(0)) {
-                            saleCommissionAmt = netBase.mul(saleCommissionPct).div(100).toDecimalPlaces(2);
-                        } else {
-                            saleCommissionAmt = new Decimal(0);
+
+                        // 1. Comisión Gerencial Global (Override por tienda)
+                        if (hasManagerComm && business?.managerMemberId) {
+                            managerMemberId = business.managerMemberId;
+                            managerCommissionPct = new Decimal(business.managerCommissionPercentage);
+                            managerCommissionAmt = netBase.gt(0) 
+                                ? netBase.mul(managerCommissionPct).div(100).toDecimalPlaces(2) 
+                                : new Decimal(0);
+                        }
+
+                        // 2. Comisión Vendedor Directo
+                        // Si la gerente misma fue la vendedora directa, solo gana su 1.5% gerencial (no duplicar)
+                        const isSellerTheManager = hasManagerComm && targetSellerMemberId === business?.managerMemberId;
+                        if (memberCommPct > 0 && !isSellerTheManager) {
+                            saleCommissionPct = new Decimal(memberCommPct);
+                            saleCommissionAmt = netBase.gt(0) 
+                                ? netBase.mul(saleCommissionPct).div(100).toDecimalPlaces(2) 
+                                : new Decimal(0);
                         }
                     }
                 }
@@ -474,7 +492,10 @@ export class SaleService {
 
                         // Snapshots de comisión
                         commissionPercentage: saleCommissionPct,
-                        commissionAmount: saleCommissionAmt
+                        commissionAmount: saleCommissionAmt,
+                        managerCommissionPercentage: managerCommissionPct,
+                        managerCommissionAmount: managerCommissionAmt,
+                        managerMemberId: managerMemberId
                     }
                 });
 
@@ -1767,7 +1788,9 @@ export class SaleService {
                     data: {
                         status: SaleStatus.CANCELLED,
                         remainingBalance: 0,
-                        paymentStatus: PaymentStatus.REFUNDED
+                        paymentStatus: PaymentStatus.REFUNDED,
+                        commissionAmount: 0,
+                        managerCommissionAmount: 0
                     }
                 });
 

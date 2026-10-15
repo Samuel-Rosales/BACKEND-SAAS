@@ -200,7 +200,7 @@ export class FinancialReportService {
                     GROUP BY pm.name, pm.type
                     ORDER BY "totalAmount" DESC
                 `,
-                // Comisiones por Venta del Período
+                // Comisiones por Venta del Período (Directas + Gerenciales)
                 prisma.$queryRaw<[{ totalCommissions: number; commissionedSalesCount: number }]>`
                     SELECT 
                         COALESCE(SUM(
@@ -209,8 +209,10 @@ export class FinancialReportService {
                                 WHEN s."commissionPercentage" IS NOT NULL AND s."commissionPercentage" > 0 THEN ((s."subTotal" - s."discount") * s."commissionPercentage" / 100)
                                 ELSE 0 
                             END
+                            +
+                            COALESCE(s."managerCommissionAmount", 0)
                         ), 0)::numeric as "totalCommissions",
-                        COUNT(CASE WHEN (s."commissionAmount" > 0 OR s."commissionPercentage" > 0) THEN 1 END)::int as "commissionedSalesCount"
+                        COUNT(CASE WHEN (s."commissionAmount" > 0 OR s."commissionPercentage" > 0 OR s."managerCommissionAmount" > 0) THEN 1 END)::int as "commissionedSalesCount"
                     FROM "Sale" s
                     WHERE s."businessId" = ${businessId}
                       AND s.status = 'COMPLETED'
@@ -269,7 +271,7 @@ export class FinancialReportService {
                       AND s."createdAt" >= ${prevStart}
                       AND s."createdAt" <= ${prevEnd}
                 `,
-                // Previous Sales Commissions
+                // Previous Sales Commissions (Directas + Gerenciales)
                 prisma.$queryRaw<[{ totalCommissions: number }]>`
                     SELECT 
                         COALESCE(SUM(
@@ -278,6 +280,8 @@ export class FinancialReportService {
                                 WHEN s."commissionPercentage" IS NOT NULL AND s."commissionPercentage" > 0 THEN ((s."subTotal" - s."discount") * s."commissionPercentage" / 100)
                                 ELSE 0 
                             END
+                            +
+                            COALESCE(s."managerCommissionAmount", 0)
                         ), 0)::numeric as "totalCommissions"
                     FROM "Sale" s
                     WHERE s."businessId" = ${businessId}

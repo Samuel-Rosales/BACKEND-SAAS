@@ -81,6 +81,18 @@ export class BusinessValidator {
       .optional()
       .isFloat({ min: 0 }).withMessage('El límite de crédito no puede ser negativo')
       .toFloat(), // Convierte string "100" a number 100 automáticamente
+
+    body('enableManagerCommission')
+      .optional()
+      .isBoolean().withMessage('El campo comisión gerencial debe ser booleano'),
+
+    body('managerCommissionPercentage')
+      .optional()
+      .isFloat({ min: 0, max: 100 }).withMessage('El porcentaje de comisión debe estar entre 0 y 100')
+      .toFloat(),
+
+    body('managerMemberId')
+      .optional({ nullable: true })
   ];
 
   // --- C. ACTUALIZAR TASAS ---

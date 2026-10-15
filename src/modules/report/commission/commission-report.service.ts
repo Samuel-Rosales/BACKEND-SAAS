@@ -73,7 +73,11 @@ export class CommissionReportService {
             }
 
             if (filters.memberId) {
-                whereClause.memberId = Number(filters.memberId);
+                const targetMemberId = Number(filters.memberId);
+                whereClause.OR = [
+                    { memberId: targetMemberId },
+                    { managerMemberId: targetMemberId }
+                ];
             }
 
             // 4. Consulta de todas las ventas del período para agregados y cálculos
@@ -81,6 +85,12 @@ export class CommissionReportService {
                 where: whereClause,
                 include: {
                     member: {
+                        include: {
+                            user: { select: { id: true, name: true, ci: true } },
+                            role: { select: { code: true, name: true } }
+                        }
+                    },
+                    managerMember: {
                         include: {
                             user: { select: { id: true, name: true, ci: true } },
                             role: { select: { code: true, name: true } }
@@ -127,7 +137,7 @@ export class CommissionReportService {
                     ? Number(sale.commissionPercentage)
                     : memberConfigPct;
 
-                // Monto de comisión: prioridad al snapshot, fallback al cálculo proporcional sobre base neta ajustada
+                // Monto de comisión vendedor directo: prioridad al snapshot, fallback al cálculo proporcional sobre base neta ajustada
                 const adjustedNetBase = Math.max(0, netBase - refunds);
                 let commissionEarned = 0;
                 if (sale.commissionAmount !== null && sale.commissionAmount !== undefined) {
@@ -141,13 +151,26 @@ export class CommissionReportService {
                     commissionEarned = Number(((adjustedNetBase * commissionPct) / 100).toFixed(2));
                 }
 
+                // Comisión Gerencial Global (Override de Tienda)
+                const managerConfigPct = Number(sale.managerCommissionPercentage || 0);
+                let managerCommissionEarned = 0;
+                if (sale.managerCommissionAmount !== null && sale.managerCommissionAmount !== undefined) {
+                    managerCommissionEarned = Number(sale.managerCommissionAmount);
+                    if (refunds > 0 && netBase > 0) {
+                        const refundRatio = Math.min(1, refunds / netBase);
+                        managerCommissionEarned = Number((managerCommissionEarned * (1 - refundRatio)).toFixed(2));
+                    }
+                } else if (managerConfigPct > 0) {
+                    managerCommissionEarned = Number(((adjustedNetBase * managerConfigPct) / 100).toFixed(2));
+                }
+
                 // Acumulador global
                 globalTotalGross += totalAmount;
                 globalTotalNetBase += adjustedNetBase;
-                globalTotalCommissions += commissionEarned;
+                globalTotalCommissions += (commissionEarned + managerCommissionEarned);
                 globalTotalRefunds += refunds;
 
-                // Acumulador por empleado
+                // Acumulador por vendedor directo
                 const mId = sale.memberId;
                 if (!membersMap.has(mId)) {
                     membersMap.set(mId, {
@@ -172,6 +195,34 @@ export class CommissionReportService {
                 memberStats.totalCommissionEarned += commissionEarned;
                 memberStats.totalRefunds += refunds;
 
+                // Acumulador por Gerente (Comisión Global de Tienda)
+                if (sale.managerMember && sale.managerMemberId) {
+                    const mgrId = sale.managerMemberId;
+                    const managerMapKey = mgrId * 10000;
+                    if (!membersMap.has(managerMapKey)) {
+                        membersMap.set(managerMapKey, {
+                            memberId: mgrId,
+                            userId: sale.managerMember.userId,
+                            name: sale.managerMember.user.name,
+                            ci: sale.managerMember.user.ci,
+                            roleName: `${sale.managerMember.role.name} (Gerente de Tienda)`,
+                            configuredCommissionPct: managerConfigPct,
+                            totalInvoices: 0,
+                            totalSalesGross: 0,
+                            totalSalesNetBase: 0,
+                            totalCommissionEarned: 0,
+                            totalRefunds: 0
+                        });
+                    }
+
+                    const mgrStats = membersMap.get(managerMapKey)!;
+                    mgrStats.totalInvoices += 1;
+                    mgrStats.totalSalesGross += totalAmount;
+                    mgrStats.totalSalesNetBase += adjustedNetBase;
+                    mgrStats.totalCommissionEarned += managerCommissionEarned;
+                    mgrStats.totalRefunds += refunds;
+                }
+
                 return {
                     id: sale.id,
                     receiptNumber: sale.receiptNumber,
@@ -187,6 +238,14 @@ export class CommissionReportService {
                         ci: sale.member.user.ci,
                         roleName: sale.member.role.name
                     },
+                    manager: sale.managerMember ? {
+                        memberId: sale.managerMember.id,
+                        name: sale.managerMember.user.name,
+                        ci: sale.managerMember.user.ci,
+                        roleName: sale.managerMember.role.name,
+                        commissionPct: managerConfigPct,
+                        commissionEarned: managerCommissionEarned
+                    } : null,
                     conditions: sale.conditions,
                     paymentStatus: sale.paymentStatus,
                     subTotal,
@@ -196,6 +255,7 @@ export class CommissionReportService {
                     netBase: adjustedNetBase,
                     commissionPct,
                     commissionEarned,
+                    managerCommissionEarned,
                     hasRefunds: refunds > 0,
                     refundAmount: refunds
                 };

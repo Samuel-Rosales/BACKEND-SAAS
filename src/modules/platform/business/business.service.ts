@@ -385,23 +385,38 @@ export class BusinessService {
     }
   }
 
-  async updatePolicies(businessId: number, userId: number, data: { enableGlobalCredit?: boolean, defaultCreditLimit?: number }) {
+  async updatePolicies(businessId: number, userId: number, data: { 
+    enableGlobalCredit?: boolean;
+    defaultCreditLimit?: number;
+    enableManagerCommission?: boolean;
+    managerCommissionPercentage?: number;
+    managerMemberId?: number | null;
+  }) {
     try {
       // Seguridad Estricta: Solo OWNER debería cambiar políticas financieras globales
       const access = await this.verifyAccess(businessId, userId, { permission: 'BUSINESS_POLICIES_EDIT' });
       if (access.status !== 200) return access;
 
-      // VALIDACIÓN DE NEGOCIO (Lo que te faltaba)
+      // VALIDACIÓN DE NEGOCIO
       if (data.defaultCreditLimit !== undefined && data.defaultCreditLimit < 0) {
         throw new BusinessError('El límite de crédito base no puede ser negativo.', 400);
+      }
+      if (data.managerCommissionPercentage !== undefined && (data.managerCommissionPercentage < 0 || data.managerCommissionPercentage > 100)) {
+        throw new BusinessError('El porcentaje de comisión gerencial debe estar entre 0 y 100.', 400);
+      }
+
+      const updateData: any = {};
+      if (data.enableGlobalCredit !== undefined) updateData.enableGlobalCredit = data.enableGlobalCredit;
+      if (data.defaultCreditLimit !== undefined) updateData.defaultCreditLimit = data.defaultCreditLimit;
+      if (data.enableManagerCommission !== undefined) updateData.enableManagerCommission = data.enableManagerCommission;
+      if (data.managerCommissionPercentage !== undefined) updateData.managerCommissionPercentage = data.managerCommissionPercentage;
+      if (data.managerMemberId !== undefined) {
+        updateData.managerMemberId = data.managerMemberId ? Number(data.managerMemberId) : null;
       }
 
       const updated = await prisma.business.update({
         where: { id: businessId },
-        data: {
-          enableGlobalCredit: data.enableGlobalCredit,
-          defaultCreditLimit: data.defaultCreditLimit // Prisma maneja el cast a Decimal si el input es number
-        }
+        data: updateData
       });
 
       return {
@@ -409,7 +424,10 @@ export class BusinessService {
         status: 200,
         data: {
             enableGlobalCredit: updated.enableGlobalCredit,
-            defaultCreditLimit: updated.defaultCreditLimit.toNumber() // Convertir a number para el Frontend
+            defaultCreditLimit: updated.defaultCreditLimit.toNumber(),
+            enableManagerCommission: updated.enableManagerCommission,
+            managerCommissionPercentage: Number(updated.managerCommissionPercentage),
+            managerMemberId: updated.managerMemberId
         }
       };
     } catch (error: any) {
@@ -558,7 +576,10 @@ export class BusinessService {
           },
           policies: {
               enableGlobalCredit: business.enableGlobalCredit,
-              defaultCreditLimit: business.defaultCreditLimit.toNumber()
+              defaultCreditLimit: business.defaultCreditLimit.toNumber(),
+              enableManagerCommission: business.enableManagerCommission,
+              managerCommissionPercentage: business.managerCommissionPercentage ? business.managerCommissionPercentage.toNumber() : 0,
+              managerMemberId: business.managerMemberId
           },
           subscription: business.subscription ? {
               planType: business.subscription.planType,

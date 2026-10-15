@@ -117,6 +117,8 @@ model BusinessMember {
   cashRegisters  CashRegister[]
   quotations     Quotation[]
   expenses       Expense[]
+  managerBusinesses Business[] @relation("BusinessManagerCommission")
+  managerSales      Sale[]     @relation("SaleManagerCommission")
 
   @@index([userId])
   @@index([businessId])
@@ -155,6 +157,12 @@ model Business {
   // POLÍTICA GLOBAL
   defaultCreditLimit Decimal @default(100) @db.Decimal(15, 2) // Ej: Todos nacen con $100
   enableGlobalCredit Boolean @default(true) // Interruptor general
+
+  // --- COMISIÓN GERENCIAL GLOBAL (Exclusivo por Tienda / Plan PREMIUM) ---
+  enableManagerCommission     Boolean         @default(false)
+  managerCommissionPercentage Decimal         @default(0) @db.Decimal(5, 2)
+  managerMemberId              Int?
+  managerMember                BusinessMember? @relation("BusinessManagerCommission", fields: [managerMemberId], references: [id])
 
   // Relaciones
   exchangeRates ExchangeRate[] // Historial de tasas creadas por este negocio
@@ -594,6 +602,12 @@ model Sale {
   // --- COMISIÓN POR VENTA (Exclusivo Plan PREMIUM) ---
   commissionPercentage Decimal?  @db.Decimal(5, 2)
   commissionAmount     Decimal?  @db.Decimal(15, 2)
+
+  // --- COMISIÓN GERENCIAL GLOBAL (Exclusivo por Tienda / Plan PREMIUM) ---
+  managerCommissionPercentage Decimal?        @db.Decimal(5, 2)
+  managerCommissionAmount     Decimal?        @db.Decimal(15, 2)
+  managerMemberId             Int?
+  managerMember               BusinessMember? @relation("SaleManagerCommission", fields: [managerMemberId], references: [id])
 
   // Auditoría
   createdAt DateTime  @default(now())
