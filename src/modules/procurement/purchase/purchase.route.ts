@@ -61,6 +61,14 @@ router.post(
     controller.cancel
 );
 
+router.patch(
+    '/:id/adjust',
+    requireBusinessPermission('PROCUREMENT_WRITE'),
+    validator.validateAdjust,
+    handleValidationErrors,
+    controller.adjust
+);
+
 router.get(
     '/:id/purchase-payment/details',
     requireBusinessPermission('PROCUREMENT_READ'),

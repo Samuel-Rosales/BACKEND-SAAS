@@ -235,4 +235,44 @@ export class PurchaseController {
             });
         }
     }
+
+    async adjust(req: Request, res: Response) {
+        try {
+            const { businessId, membershipId } = req.user;
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            const purchaseId = Number(req.params.id);
+
+            if (!purchaseId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'El ID de la compra es inválido.',
+                    data: null
+                });
+            }
+
+            const { data, status, message } = await service.adjustPurchase(
+                businessId,
+                purchaseId,
+                Number(membershipId),
+                req.body
+            );
+
+            return res.status(status).json({ data, status, message });
+        } catch (error) {
+            console.error('Error en PurchaseController.adjust:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al ajustar la compra',
+                data: null
+            });
+        }
+    }
 }

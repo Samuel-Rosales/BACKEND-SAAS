@@ -1,5 +1,5 @@
 import { prisma } from '@/configs';
-import { CreatePaymentDto, CreatePurchaseInterface, FindPurchasesQuery } from './interfaces';
+import { AdjustPurchaseInterface, CreatePaymentDto, CreatePurchaseInterface, FindPurchasesQuery } from './interfaces';
 import { Conditions, Currency, InstallmentStatus, MovementType, PaymentStatus, ProductType, PurchaseStatus } from '@prisma/client';
 import { BusinessError, calculatePriceWithMarkup, resolveBusinessExchangeRate, updateRecursiveRecipeCosts } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -573,10 +573,12 @@ export class PurchaseService {
                     supplier: true,
                     member: { include: { user: { select: { name: true } } } },
                     exchangeRate: true, // Importante para saber a qué tasa se calculó
+                    tax: true,
                     items: {
                         include: {
                             product: { select: { name: true, sku: true, imageUrl: true } },
-                            depot: { select: { name: true } } // <--- CRÍTICO: Saber a qué almacén entró
+                            depot: { select: { name: true } },
+                            productPresentation: true
                         }
                     },
                     payments: {
@@ -1092,6 +1094,327 @@ export class PurchaseService {
                 return { status: error.status, message: error.message, data: null };
             }
             return { status: 500, message: 'Error interno al anular la compra', data: null };
+        }
+    }
+
+    async adjustPurchase(businessId: number, purchaseId: number, memberId: number, data: AdjustPurchaseInterface) {
+        try {
+            const result = await prisma.$transaction(async (tx) => {
+                // 1. Cargar la compra con todas las relaciones requeridas
+                const purchase = await tx.purchase.findUnique({
+                    where: { id: purchaseId, businessId },
+                    include: {
+                        items: {
+                            include: {
+                                product: true,
+                                productPresentation: true
+                            }
+                        },
+                        tax: true,
+                        payments: {
+                            include: {
+                                paymentMethod: true,
+                                exchangeRate: true
+                            }
+                        },
+                        installments: true
+                    }
+                });
+
+                if (!purchase) {
+                    throw new BusinessError('Compra no encontrada', 404);
+                }
+
+                if (purchase.status === PurchaseStatus.CANCELLED) {
+                    throw new BusinessError('No se puede modificar una compra que está anulada', 400);
+                }
+
+                const updateData: any = {};
+                if (data.reference !== undefined && data.reference !== null) {
+                    updateData.reference = data.reference.trim();
+                }
+                if (data.observation !== undefined && data.observation !== null) {
+                    updateData.observation = data.observation.trim();
+                }
+
+                // 2. Procesar ítems modificados si existen
+                if (data.items && data.items.length > 0) {
+                    for (const itemAdj of data.items) {
+                        const purchaseItem = purchase.items.find(pi => pi.id === itemAdj.purchaseItemId);
+                        if (!purchaseItem) {
+                            throw new BusinessError(`Item de compra ID ${itemAdj.purchaseItemId} no pertenece a esta compra`, 400);
+                        }
+
+                        const oldQuantity = new Decimal(purchaseItem.quantity);
+                        const oldUnitCost = new Decimal(purchaseItem.unitCost);
+
+                        const hasNewQty = itemAdj.newQuantity !== undefined && itemAdj.newQuantity !== null;
+                        const newQuantity = hasNewQty ? new Decimal(itemAdj.newQuantity!) : oldQuantity;
+
+                        const hasNewCost = itemAdj.newUnitCost !== undefined && itemAdj.newUnitCost !== null;
+                        const newUnitCost = hasNewCost ? new Decimal(itemAdj.newUnitCost!) : oldUnitCost;
+
+                        if (newQuantity.lte(0)) {
+                            throw new BusinessError(`La cantidad para el producto "${purchaseItem.product.name}" debe ser mayor a 0`, 400);
+                        }
+                        if (newUnitCost.lt(0)) {
+                            throw new BusinessError(`El costo unitario para el producto "${purchaseItem.product.name}" no puede ser negativo`, 400);
+                        }
+
+                        const factor = purchaseItem.productPresentation
+                            ? new Decimal(purchaseItem.productPresentation.factor)
+                            : new Decimal(1);
+
+                        const oldFinalQty = oldQuantity.mul(factor);
+                        const newFinalQty = newQuantity.mul(factor);
+                        const deltaFinalQty = newFinalQty.sub(oldFinalQty);
+
+                        const oldLotUnitCost = oldUnitCost.div(factor);
+                        const newLotUnitCost = newUnitCost.div(factor);
+
+                        // Localizar el movimiento de entrada original de esta compra y producto
+                        const originalMovement = await tx.stockMovement.findFirst({
+                            where: {
+                                businessId,
+                                productId: purchaseItem.productId,
+                                depotId: purchaseItem.depotId,
+                                reason: `Compra #${purchaseId}`,
+                                type: MovementType.IN
+                            },
+                            include: { stockLot: true }
+                        });
+
+                        let lot = originalMovement?.stockLot;
+                        if (!lot && originalMovement?.stockLotId) {
+                            lot = await tx.stockLot.findUnique({
+                                where: { id: originalMovement.stockLotId }
+                            });
+                        }
+
+                        if (!lot) {
+                            lot = await tx.stockLot.findFirst({
+                                where: {
+                                    productId: purchaseItem.productId,
+                                    depotId: purchaseItem.depotId,
+                                    expirationDate: purchaseItem.expirationDate,
+                                    lotCost: {
+                                        gte: oldLotUnitCost.sub(costTolerance),
+                                        lte: oldLotUnitCost.add(costTolerance)
+                                    }
+                                }
+                            });
+                        }
+
+                        if (!deltaFinalQty.isZero()) {
+                            if (!lot) {
+                                throw new BusinessError(
+                                    `No se encontró el lote de inventario asociado al producto "${purchaseItem.product.name}"`,
+                                    400
+                                );
+                            }
+
+                            // Si se reduce la cantidad (delta < 0)
+                            if (deltaFinalQty.isNegative()) {
+                                const qtyToRemove = deltaFinalQty.abs();
+                                const currentLotQty = new Decimal(lot.quantity);
+
+                                // GUARDARRAÍL MATEMÁTICO FORENSE:
+                                if (currentLotQty.lt(qtyToRemove)) {
+                                    const maxAllowedReductionInUnits = currentLotQty;
+                                    const maxAllowedReductionInPres = maxAllowedReductionInUnits.div(factor);
+                                    const minAllowedQtyInPres = oldQuantity.sub(maxAllowedReductionInPres);
+                                    const consumedInPres = oldQuantity.sub(minAllowedQtyInPres);
+
+                                    throw new BusinessError(
+                                        `No se puede reducir la cantidad de "${purchaseItem.product.name}" a ${newQuantity}. ` +
+                                        `De las ${oldQuantity} unidades compradas, ya se han vendido o consumido ${consumedInPres.toFixed(2)} unidades. ` +
+                                        `El stock disponible restante en el lote es de ${currentLotQty.toFixed(2)} unidades. ` +
+                                        `La cantidad mínima permitida para esta compra es ${minAllowedQtyInPres.toFixed(2)}.`,
+                                        400
+                                    );
+                                }
+
+                                // Decrementar lote
+                                await tx.stockLot.update({
+                                    where: { id: lot.id },
+                                    data: { quantity: { decrement: qtyToRemove } }
+                                });
+
+                                // Kardex: movimiento OUT por ajuste
+                                await tx.stockMovement.create({
+                                    data: {
+                                        businessId,
+                                        productId: purchaseItem.productId,
+                                        memberId,
+                                        depotId: purchaseItem.depotId,
+                                        type: MovementType.OUT,
+                                        quantity: qtyToRemove.negated(),
+                                        historicalCost: lot.lotCost,
+                                        reason: `Ajuste Compra #${purchaseId}: Reducción de ${oldQuantity} a ${newQuantity}${data.reason ? ` (${data.reason})` : ''}`,
+                                        date: new Date(),
+                                        stockLotId: lot.id
+                                    }
+                                });
+                            } else {
+                                // Se incrementa la cantidad (delta > 0)
+                                const qtyToAdd = deltaFinalQty;
+
+                                // Incrementar lote
+                                await tx.stockLot.update({
+                                    where: { id: lot.id },
+                                    data: { quantity: { increment: qtyToAdd } }
+                                });
+
+                                // Kardex: movimiento IN por ajuste
+                                await tx.stockMovement.create({
+                                    data: {
+                                        businessId,
+                                        productId: purchaseItem.productId,
+                                        memberId,
+                                        depotId: purchaseItem.depotId,
+                                        type: MovementType.IN,
+                                        quantity: qtyToAdd,
+                                        historicalCost: lot.lotCost,
+                                        reason: `Ajuste Compra #${purchaseId}: Incremento de ${oldQuantity} a ${newQuantity}${data.reason ? ` (${data.reason})` : ''}`,
+                                        date: new Date(),
+                                        stockLotId: lot.id
+                                    }
+                                });
+                            }
+                        }
+
+                        // Si cambió el costo unitario
+                        const costDiff = newUnitCost.sub(oldUnitCost).abs();
+                        if (costDiff.gt(costTolerance)) {
+                            if (lot) {
+                                await tx.stockLot.update({
+                                    where: { id: lot.id },
+                                    data: { lotCost: newLotUnitCost }
+                                });
+                            }
+
+                            const product = await tx.product.findUnique({
+                                where: { id: purchaseItem.productId }
+                            });
+                            if (product) {
+                                const currentMasterCost = new Decimal(product.costPrice);
+                                if (currentMasterCost.sub(oldLotUnitCost).abs().lte(costTolerance)) {
+                                    await tx.product.update({
+                                        where: { id: product.id },
+                                        data: {
+                                            costPrice: newLotUnitCost,
+                                            salePrice: calculatePriceWithMarkup(product.profitMargin, newLotUnitCost)
+                                        }
+                                    });
+                                    await updateRecursiveRecipeCosts(tx, product.id);
+                                }
+                            }
+                        }
+
+                        // Actualizar PurchaseItem
+                        await tx.purchaseItem.update({
+                            where: { id: purchaseItem.id },
+                            data: {
+                                quantity: newQuantity,
+                                unitCost: newUnitCost
+                            }
+                        });
+                    }
+                }
+
+                // 3. Recalcular montos de la compra (subTotal, taxAmount, totalCost)
+                const updatedItems = await tx.purchaseItem.findMany({
+                    where: { purchaseId }
+                });
+
+                let calculatedSubTotal = new Decimal(0);
+                for (const it of updatedItems) {
+                    const lineCost = new Decimal(it.quantity).mul(new Decimal(it.unitCost));
+                    calculatedSubTotal = calculatedSubTotal.add(lineCost);
+                }
+                calculatedSubTotal = calculatedSubTotal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+                const taxRate = purchase.tax ? new Decimal(purchase.tax.rate) : new Decimal(0);
+                let calculatedTax = new Decimal(0);
+                if (taxRate.gt(0)) {
+                    calculatedTax = calculatedSubTotal.mul(taxRate.div(100)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                }
+                const calculatedTotalCost = calculatedSubTotal.add(calculatedTax).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+                // Calcular pagos totales ya registrados
+                let totalPaidBase = new Decimal(0);
+                for (const pay of purchase.payments) {
+                    const amount = new Decimal(pay.amount);
+                    if (pay.paymentMethod.currency === 'USD') {
+                        totalPaidBase = totalPaidBase.add(amount);
+                    } else if (pay.paymentMethod.currency === 'VES') {
+                        const rate = new Decimal(pay.exchangeRate.rate);
+                        totalPaidBase = totalPaidBase.add(amount.div(rate));
+                    }
+                }
+                const totalPaidFinal = totalPaidBase.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+                // Manejo de condición Contado vs Crédito
+                if (purchase.conditions === Conditions.CASH && purchase.payments.length === 1) {
+                    const singlePay = purchase.payments[0];
+                    const rate = new Decimal(singlePay.exchangeRate.rate);
+                    const newAmount = singlePay.paymentMethod.currency === 'VES'
+                        ? calculatedTotalCost.mul(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+                        : calculatedTotalCost;
+
+                    await tx.purchasePayment.update({
+                        where: { id: singlePay.id },
+                        data: { amount: newAmount }
+                    });
+
+                    updateData.remainingBalance = new Decimal(0);
+                    updateData.paymentStatus = PaymentStatus.PAID;
+                } else {
+                    const newRemainingBalance = calculatedTotalCost.sub(totalPaidFinal);
+                    if (newRemainingBalance.lte(new Decimal(0.005))) {
+                        updateData.remainingBalance = new Decimal(0);
+                        updateData.paymentStatus = PaymentStatus.PAID;
+                    } else {
+                        updateData.remainingBalance = newRemainingBalance;
+                        updateData.paymentStatus = totalPaidFinal.gt(0) ? PaymentStatus.PARTIAL : PaymentStatus.PENDING;
+                    }
+                }
+
+                updateData.subTotal = calculatedSubTotal;
+                updateData.taxAmount = calculatedTax;
+                updateData.totalCost = calculatedTotalCost;
+
+                // 4. Guardar cambios en Purchase
+                const updatedPurchase = await tx.purchase.update({
+                    where: { id: purchaseId },
+                    data: updateData,
+                    include: {
+                        items: {
+                            include: {
+                                product: true,
+                                productPresentation: true
+                            }
+                        },
+                        supplier: true,
+                        tax: true
+                    }
+                });
+
+                return updatedPurchase;
+            });
+
+            return {
+                status: 200,
+                message: 'Compra ajustada exitosamente',
+                data: result
+            };
+
+        } catch (error) {
+            console.error('Error adjustPurchase:', error);
+            if (error instanceof BusinessError) {
+                return { status: error.status, message: error.message, data: null };
+            }
+            return { status: 500, message: 'Error interno al ajustar la compra: ' + (error as any)?.message, data: null };
         }
     }
 }

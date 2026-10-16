@@ -155,4 +155,36 @@ export class PurchaseValidator {
       // La validación de pertenencia al negocio se hace en el controlador/servicio
       // para evitar doble consulta a BD, pero si quieres hacerla aquí, está bien.
   ];
+
+  public validateAdjust: ValidationChain[] = [
+    param('id')
+      .isInt().withMessage('ID de compra inválido')
+      .toInt(),
+    body('reference')
+      .optional()
+      .trim()
+      .isString().withMessage('La referencia debe ser texto'),
+    body('observation')
+      .optional()
+      .trim()
+      .isString().withMessage('La observación debe ser texto'),
+    body('reason')
+      .optional()
+      .trim()
+      .isString().withMessage('El motivo del ajuste debe ser texto'),
+    body('items')
+      .optional()
+      .isArray().withMessage('Items debe ser un arreglo'),
+    body('items.*.purchaseItemId')
+      .if(body('items').exists())
+      .isInt().withMessage('ID del item de compra inválido'),
+    body('items.*.newQuantity')
+      .if(body('items').exists())
+      .optional()
+      .isFloat({ min: 0.000001 }).withMessage('La nueva cantidad debe ser mayor a 0'),
+    body('items.*.newUnitCost')
+      .if(body('items').exists())
+      .optional()
+      .isFloat({ min: 0 }).withMessage('El nuevo costo unitario no puede ser negativo')
+  ];
 }

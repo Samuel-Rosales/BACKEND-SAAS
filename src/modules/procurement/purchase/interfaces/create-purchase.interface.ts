@@ -73,3 +73,16 @@ export interface FindPurchasesQuery {
      */
     tzOffset?: number | string;
 }
+
+export interface AdjustPurchaseItemDto {
+    purchaseItemId: number;
+    newQuantity?: number | Decimal;
+    newUnitCost?: number | Decimal;
+}
+
+export interface AdjustPurchaseInterface {
+    items?: AdjustPurchaseItemDto[];
+    reference?: string;
+    observation?: string;
+    reason?: string;
+}
