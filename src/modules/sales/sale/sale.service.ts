@@ -1933,12 +1933,12 @@ export class SaleService {
 
             const isSuperAdmin = Boolean(member?.user?.isSuperAdmin);
             const roleCode = member?.role?.code || '';
-            const isAdmin = isSuperAdmin || roleCode === 'ADMIN' || roleCode === 'OWNER';
+            const isAdmin = isSuperAdmin || roleCode === 'ADMIN' || roleCode === 'OWNER' || roleCode === 'MANAGER';
 
             if (!isAdmin) {
                 return {
                     status: 403,
-                    message: 'Operación denegada. Solo un Administrador o Propietario puede cambiar el método de pago.',
+                    message: 'Operación denegada. Solo un Administrador, Gerente o Propietario puede cambiar el método de pago.',
                     data: null
                 };
             }
