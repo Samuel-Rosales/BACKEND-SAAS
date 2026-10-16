@@ -8,6 +8,7 @@ import { resolveBusinessExchangeRate } from '@/utils/resolve-exchange-rate';
 
 export class ExchangeRateService {
     private readonly BCV_API_URL = 'https://api-bcv-pi.vercel.app/api/tasa/usd';
+    private readonly DOLAR_API_URL = 'https://ve.dolarapi.com/v1/dolares/oficial';
 
     async create(businessId: number, data: CreateExchangeRateInterface) {
         try {
@@ -341,71 +342,95 @@ export class ExchangeRateService {
         }
     }
 
+    private async fetchBCVRateFromProviders(): Promise<{ rateValue: number; apiDateRaw: string; provider: string }> {
+        // Proveedor 1: api-bcv-pi.vercel.app (Primario)
+        try {
+            const res = await axios.get(this.BCV_API_URL, { timeout: 6000 });
+            const val = Number(res.data?.valor?.valor_num);
+            const dateRaw = res.data?.fecha_iso || res.data?.fecha;
+            if (val && !isNaN(val) && dateRaw) {
+                return { rateValue: val, apiDateRaw: String(dateRaw), provider: 'api-bcv-pi' };
+            }
+        } catch (err: any) {
+            console.warn(`[BCV SYNC] Proveedor primario (api-bcv-pi) no disponible (${err.message}). Probando proveedor de respaldo...`);
+        }
+
+        // Proveedor 2: ve.dolarapi.com (Respaldo)
+        try {
+            const res = await axios.get(this.DOLAR_API_URL, { timeout: 6000 });
+            const val = Number(res.data?.promedio);
+            const dateRaw = res.data?.fechaActualizacion;
+            if (val && !isNaN(val) && dateRaw) {
+                return { rateValue: val, apiDateRaw: String(dateRaw), provider: 'dolarapi' };
+            }
+        } catch (err: any) {
+            console.error(`[BCV SYNC] Proveedor secundario (dolarapi) también falló: ${err.message}`);
+        }
+
+        throw new Error('No se pudo obtener la tasa oficial de ninguno de los proveedores de BCV disponibles.');
+    }
+
     async syncBCVRate() {
         try {
-            //console.log('🔄 Iniciando sincronización de tasa BCV...');
+            const { rateValue, apiDateRaw, provider } = await this.fetchBCVRateFromProviders();
 
-            const response = await axios.get(this.BCV_API_URL);
-            
-            // Asegúrate de que los campos coincidan con tu API real
-            const rateValue = Number(response.data.valor.valor_num); 
-            const apiDateRaw = response.data.fecha_iso; // Ej: "2026-01-29T00:00:00.000Z"
-            
-            if (!rateValue || isNaN(rateValue)) {
-                throw new Error('La API externa no devolvió un valor numérico válido.');
-            }
-
-            // 1. Obtener la última tasa (Cualquiera que sea)
+            // 1. Obtener la última tasa oficial global registrada (excluyendo tasas manuales de negocios)
             const lastRate = await prisma.exchangeRate.findFirst({
+                where: {
+                    businessId: null,
+                    source: 'API_BCV',
+                },
                 orderBy: { createdAt: 'desc' }
             });
-            
-            //console.log('Última tasa en DB:', lastRate ? `${lastRate.source} (${lastRate.rate})` : 'Ninguna');
 
-            // =================================================================
-            // LÓGICA DE COMPARACIÓN DE FECHAS (YYYY-MM-DD)
-            // =================================================================
+            // 2. Comprobar si ya existe con la misma fecha valor y el mismo precio
             if (lastRate) {
-                // A. Convertimos fecha API a string corto "YYYY-MM-DD"
                 const apiDate = new Date(apiDateRaw).toISOString().split('T')[0];
-
-                // B. Convertimos fecha DB a string corto "YYYY-MM-DD"
                 const dbDate = new Date(lastRate.createdAt).toISOString().split('T')[0];
 
-                //console.log(`🔎 Comparando fechas: API[${apiDate}] vs DB[${dbDate}]`);
-
-                // C. La Condición Maestra:
-                // Si es el MISMO día Y el MISMO precio... no hacemos nada.
                 if (apiDate === dbDate && new Decimal(lastRate.rate).equals(rateValue)) {
-                    //console.log('ℹ️ La tasa BCV es idéntica a la última registrada hoy. Omitiendo.');
+                    if (!lastRate.isActive) {
+                        await prisma.exchangeRate.update({
+                            where: { id: lastRate.id },
+                            data: { isActive: true },
+                        });
+                        return { ...lastRate, isActive: true };
+                    }
                     return lastRate;
                 }
             }
 
-            // 3. Guardar en Base de Datos
-            //console.log('✨ Detectado cambio o nueva fecha. Guardando...');
-            
-            const newRate = await prisma.exchangeRate.create({
-                data: {
-                    rate: rateValue,
-                    // Asegúrate de importar tu Enum o usar el string directo
-                    source: 'API_BCV', // O ExchangeRateStrategy.API_BCV
-                    createdAt: new Date(apiDateRaw),
-                    isActive: true,
-                    businessId: null, // Si es global
-                }
+            // 3. Desactivar tasas oficiales previas y registrar la nueva tasa activa
+            const parsedDate = new Date(apiDateRaw);
+            const targetCreatedAt = !isNaN(parsedDate.getTime()) ? parsedDate : new Date();
+
+            const newRate = await prisma.$transaction(async (tx) => {
+                await tx.exchangeRate.updateMany({
+                    where: {
+                        businessId: null,
+                        source: 'API_BCV',
+                        isActive: true,
+                    },
+                    data: { isActive: false },
+                });
+
+                return tx.exchangeRate.create({
+                    data: {
+                        rate: rateValue,
+                        source: 'API_BCV',
+                        createdAt: targetCreatedAt,
+                        isActive: true,
+                        businessId: null,
+                    },
+                });
             });
 
-            if (!newRate) {
-                throw new Error('Error al guardar en Prisma.');
-            }
-
-            //console.log('✅ Nueva Tasa Guardada:', newRate.rate);
+            console.log(`[BCV SYNC] Tasa actualizada vía [${provider}]: ${newRate.rate} Bs. (Fecha: ${newRate.createdAt.toISOString().split('T')[0]})`);
             return newRate;
 
         } catch (error) {
             console.error('❌ Error sincronizando BCV:', error);
-            throw error; // Lanzar para que el Cron sepa que falló
+            throw error;
         }
     }
 }

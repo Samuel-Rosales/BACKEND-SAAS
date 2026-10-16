@@ -92,4 +92,19 @@ export class ExchangeRateController {
             data 
         });
     };
+
+    syncBCV = async (_req: Request, res: Response) => {
+        try {
+            const result = await this.service.syncBCVRate();
+            res.status(200).json({
+                message: 'Tasa BCV sincronizada exitosamente',
+                data: result
+            });
+        } catch (error: any) {
+            res.status(500).json({
+                message: error?.message || 'Error al sincronizar con el Banco Central',
+                data: null
+            });
+        }
+    };
 }

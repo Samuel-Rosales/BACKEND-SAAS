@@ -20,6 +20,12 @@ router.post(
   controller.create
 );
 
+router.post(
+  '/sync-bcv',
+  requireBusinessPermission('BUSINESS_EXCHANGE_RATE_EDIT'),
+  controller.syncBCV
+);
+
 router.get('/', requireBusinessPermission('FINANCE_READ'), controller.findAll);
 
 router.get(

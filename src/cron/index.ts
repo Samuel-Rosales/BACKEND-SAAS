@@ -7,9 +7,14 @@ export const initCronJobs = () => {
     // Configuración general de zona horaria
     const timeZone = "America/Caracas";
 
-    // Tarea 1: Tasa de Cambio (8:00 AM)
+    // Tarea 1A: Tasa de Cambio Vespertina (6:00 PM y 7:00 PM - Lunes a Viernes)
+    // El BCV suele publicar entre 4:30 PM y 6:00 PM. Se consulta a las 18:00 y se reintenta a las 19:00.
+    cron.schedule('0 18,19 * * 1-5', () => {
+        updateRateDaily();
+    }, { timezone: timeZone });
+
+    // Tarea 1B: Tasa de Cambio Matutina de Respaldo (8:00 AM - Diario)
     cron.schedule('0 8 * * *', () => {
-        //console.log('💵 Ejecutando actualización de tasa...');
         updateRateDaily();
     }, { timezone: timeZone });
 
