@@ -20,6 +20,29 @@ export class DepotService {
                 };
             }
 
+            // Validar límite de 1 depósito en Plan Comercial (Básico)
+            const subscription = await prisma.subscription.findUnique({
+                where: { businessId },
+                include: { plan: true }
+            });
+            const isPremium = subscription && (
+                subscription.planType === 'PREMIUM' ||
+                subscription.planType === 'TRIAL' ||
+                subscription.planType === 'ENTERPRISE' ||
+                subscription.plan?.name?.toUpperCase().includes('PREMIUM') ||
+                subscription.plan?.name?.toUpperCase().includes('ENTERPRISE')
+            );
+            if (!isPremium) {
+                const depotsCount = await prisma.depot.count({ where: { businessId } });
+                if (depotsCount >= 1) {
+                    return {
+                        message: 'El Plan Comercial incluye 1 depósito principal. La gestión de múltiples almacenes y bodegas es una función exclusiva del Plan Premium ($25/mes).',
+                        status: 403,
+                        data: null
+                    };
+                }
+            }
+
             const depot = await prisma.depot.create({
                 data: {
                     businessId: businessId,

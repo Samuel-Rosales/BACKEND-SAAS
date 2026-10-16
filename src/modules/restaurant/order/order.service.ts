@@ -17,6 +17,26 @@ export class OrderService {
                 };
             }
 
+            // 0. Validar suscripción PREMIUM o TRIAL de la empresa
+            const subscription = await prisma.subscription.findUnique({
+                where: { businessId },
+                include: { plan: true }
+            });
+            const isPremium = subscription && (
+                subscription.planType === 'PREMIUM' ||
+                subscription.planType === 'TRIAL' ||
+                subscription.planType === 'ENTERPRISE' ||
+                subscription.plan?.name?.toUpperCase().includes('PREMIUM') ||
+                subscription.plan?.name?.toUpperCase().includes('ENTERPRISE')
+            );
+            if (!isPremium) {
+                return {
+                    status: 403,
+                    message: 'El módulo de Restaurante (Mesas y Comandas) es una función exclusiva del Plan Premium ($25/mes).',
+                    data: null
+                };
+            }
+
             if (data.tableId) {
                 const table = await prisma.restaurantTable.findFirst({
                     where: { id: data.tableId, businessId, isActive: true }
