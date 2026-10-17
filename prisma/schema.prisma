@@ -191,6 +191,7 @@ model Business {
   quotations       Quotation[]
   expenseCategories ExpenseCategory[]
   expenses         Expense[]
+  aiUsageRecords   BusinessAiUsage[]
 }
 
 model BusinessCategory {
@@ -1213,5 +1214,20 @@ model Expense {
 
   @@index([businessId, expenseDate])
   @@index([businessId, categoryId])
+}
+
+model BusinessAiUsage {
+  id           Int      @id @default(autoincrement())
+  businessId   Int
+  periodMonth  String   @db.VarChar(7)
+  queryCount   Int      @default(0)
+  monthlyLimit Int      @default(100)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, periodMonth])
+  @@index([businessId, periodMonth])
 }
 

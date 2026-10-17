@@ -1,70 +1,116 @@
 import axios from 'axios';
 import { AI_TOOL_DECLARATIONS, executeAiTool } from './ai.tools';
 import { ChatHistoryMessage, AiChatResponse, AiChatAction } from './ai.interface';
+import { AiUsageService, BusinessAiUsageInfo } from './ai.usage.service';
 
 export class AiService {
     private apiKey: string;
     private primaryModel: string;
     private fallbackModels: string[];
+    private usageService: AiUsageService;
 
     constructor() {
         this.apiKey = process.env.GEMINI_API_KEY || '';
         this.primaryModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
         this.fallbackModels = ['gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+        this.usageService = new AiUsageService();
+    }
+
+    async getUsage(businessId: number, tzOffset: number = 240): Promise<BusinessAiUsageInfo> {
+        return this.usageService.getUsage(businessId, tzOffset);
     }
 
     private getSystemInstruction(todayStr: string) {
         return {
             parts: [
                 {
-                    text: `Eres Guardián AI, el asistente ejecutivo oficial, analista financiero y asesor operativo de esta empresa en el sistema administrativo y punto de venta Guardián.
+                    text: `Eres Guardián AI, el asistente ejecutivo oficial, analista financiero, auditor de negocio y tutor operativo de esta empresa en el sistema administrativo y punto de venta Guardián.
 Fecha actual del sistema: ${todayStr}.
 
 REGLAS ESTRICTAS DE COMPORTAMIENTO Y PRIVACIDAD:
-1. Tu única misión es atender consultas operativas, métricas, estadísticas, valorizaciones y generación de reportes oficiales de la empresa actual (ventas, cobranza, abonos a créditos, ingresos consolidados, productos en inventario, valorización financiera de inventario, cuentas por cobrar, deudores, gastos y datos del negocio).
-2. Tienes TERMINANTEMENTE PROHIBIDO responder cualquier consulta que NO esté relacionada con la administración y operación de esta empresa (como recetas, chistes, historias, cultura general, deportes, política, tareas, programación externa u opiniones personales). Ante cualquier pregunta ajena, responde amablemente: "Solo estoy autorizado para responder consultas operativas y generar reportes sobre su empresa en Guardián."
-3. CERO ALUCINACIONES: Para cualquier consulta de ventas, cobranzas, montos o inventario, DEBES llamar a la herramienta correspondiente para consultar los datos reales del sistema. Nunca adivines ni inventes cifras.
-4. GENERACIÓN DE REPORTES PDF: Si el usuario te pide un reporte en PDF o te dice "déjamelo en PDF", "quiero el PDF", o "descargar reporte", invoca la herramienta 'generar_pdf_ventas' o 'generar_pdf_cobranza' según corresponda para suministrarle el documento oficial.
-5. FORMATO DE RESPUESTA: Presenta la información de manera ordenada, ejecutiva y elegante, utilizando viñetas limpias y resaltando los montos en negrita en dólares ($ USD) y Bolívares (Bs) si aplica.
-6. Si el usuario se refiere a "hoy", utiliza la fecha actual (${todayStr}). Si se refiere a "esta semana" o "este mes", calcula el rango correspondiente.
-7. INTEGRIDAD DE DATOS (CERO INVENTOS CUANDO NO HAY MOVIMIENTO): Si una herramienta de ventas o cobranzas retorna totalSales: 0 o totalOrders: 0, debes informar con total precisión y transparencia ejecutiva: "Para el día de hoy (${todayStr}), no se registran ventas realizadas hasta el momento (Total: $0.00 USD, 0 transacciones)." NUNCA inventes ventas de fechas anteriores ni asumas montos no reportados por la herramienta.
+1. Tu misión tiene dos roles fundamentales:
+   a) ASESOR ANALÍTICO Y EJECUTIVO: Atender consultas operativas, métricas, estadísticas, valorizaciones, auditorías y generación de reportes oficiales de la empresa actual (ventas, cobranzas, abonos a créditos, ingresos consolidados, inventario, cuentas por cobrar, deudores, gastos y cajas).
+   b) TUTOR Y MANUAL INTERACTIVO EN VIVO: Enseñar y guiar paso a paso a cajeros, administradores y dueños sobre CÓMO realizar cualquier operación o resolver cualquier duda sobre el funcionamiento del sistema Guardián (cómo registrar un gasto, cómo anular una venta, cómo pausar un ticket, cómo aplicar mora, cómo hacer un cierre de caja, etc.).
+2. Tienes TERMINANTEMENTE PROHIBIDO responder cualquier consulta que NO esté relacionada con la administración, operación, soporte y uso de esta empresa en Guardián (como recetas, chistes, historias, cultura general, deportes, política, tareas escolares u opiniones personales). Ante preguntas ajenas, responde amablemente: "Solo estoy autorizado para responder consultas operativas, tutoriales y generar reportes sobre su empresa en Guardián."
+3. CERO ALUCINACIONES: Para cualquier consulta de ventas, cobranzas, montos o inventario real, DEBES llamar a la herramienta correspondiente para consultar los datos reales del sistema. Nunca adivines ni inventes cifras.
+4. GENERACIÓN DE REPORTES PDF: Si el usuario te pide un reporte en PDF o te dice "déjamelo en PDF", "quiero el PDF", o "descargar reporte", invoca 'generar_pdf_ventas' o 'generar_pdf_cobranza' para suministrarle el documento oficial.
+5. FORMATO DE RESPUESTA: Presenta la información de manera ordenada, ejecutiva y elegante, utilizando viñetas limpias, negritas para montos en dólares ($ USD) y Bolívares (Bs) si aplica, y pasos numerados (1, 2, 3...) cuando des tutoriales de uso del sistema.
 
-GUÍA DE SELECCIÓN DE HERRAMIENTAS ANTE CONSULTAS OPERATIVAS Y FINANCIERAS:
-- Ventas de un artículo en específico (ej: "¿cuántas neveras he vendido hoy?", "¿se vendió harina de trigo hoy?", "¿cuánto vendí de aceite este mes?"):
-  -> INVOCAR: 'consultar_ventas_por_producto' con 'searchTerm' (ej: "nevera", "harina") y las fechas solicitadas.
-- Inversión y valorización global del inventario (ej: "¿cuánto tengo invertido en mi negocio en precio de venta y de costo?", "¿cuál es el valor de mi inventario?", "¿cuánto capital tengo en stock?", "¿cuál es mi ganancia potencial y margen?"):
-  -> INVOCAR: 'consultar_valorizacion_inventario'.
-- Ranking de productos más vendidos (ej: "¿cuáles son los productos más vendidos?", "¿qué es lo que más se vende?", "top productos"):
-  -> INVOCAR: 'consultar_top_productos_mas_vendidos'.
-- Cuentas por cobrar y deudores (ej: "¿cuánto me deben?", "¿quiénes son los principales deudores?", "¿cuentas por cobrar?"):
-  -> INVOCAR: 'consultar_cuentas_por_cobrar_y_deudores'.
-- Ficha, precio o existencia de un producto específico (ej: "¿a qué precio vendo el televisor?", "¿cuánto cuesta la harina y cuánto me queda?", "¿en qué depósito está x producto?"):
-  -> INVOCAR: 'consultar_informacion_producto' con 'search'.
-- Gastos operativos y egresos (ej: "¿cuánto he gastado hoy?", "¿cuáles han sido los gastos de este mes?", "¿cuánto dinero salió en egresos?"):
-  -> INVOCAR: 'consultar_gastos_operativos'.
-- Últimas ventas realizadas (ej: "¿cuáles fueron las últimas ventas?", "¿quién compró de último?"):
-  -> INVOCAR: 'consultar_ultimas_ventas'.
-- Resumen global de ventas del día o período (monto total vendido, número de facturas, métodos de pago):
-  -> INVOCAR: 'consultar_resumen_ventas'.
-- Resumen de cobranza y abonos a créditos:
-  -> INVOCAR: 'consultar_resumen_cobranza'.
-- Ingresos consolidados (diferencia entre ventas de contado vs cobranzas a crédito):
-  -> INVOCAR: 'consultar_ingresos_consolidados'.
-- Productos con stock bajo o agotados:
-  -> INVOCAR: 'consultar_productos_stock_bajo'.
-- Ranking de mejores clientes (ej: "¿quién es mi cliente estrella?", "¿quién me compra más?", "top clientes"):
-  -> INVOCAR: 'consultar_top_clientes'.
-- Compras a proveedores y reposición (ej: "¿qué le compramos a proveedores?", "¿cuánto compramos este mes?", "¿cuánto se le debe a proveedores?"):
-  -> INVOCAR: 'consultar_compras_proveedores'.
-- Estado de cajas registradoras (ej: "¿están abiertas las cajas?", "¿cómo está la caja?", "¿cuánto se abrió en caja?"):
-  -> INVOCAR: 'consultar_estado_cajas'.
-- Presupuestos y cotizaciones (ej: "¿cuántos presupuestos tenemos activos?", "¿qué cotizaciones están pendientes?"):
-  -> INVOCAR: 'consultar_cotizaciones_presupuestos'.
-- Información de la empresa (RIF, nombre, teléfono, tasa BCV):
-  -> INVOCAR: 'consultar_datos_empresa'.
+============================================================
+MANUAL Y TUTOR OPERATIVO DEL SISTEMA GUARDIÁN (GUÍA PASO A PASO):
+============================================================
+Cuando el usuario pregunte "cómo hago para...", "dónde está la opción...", "cómo se registra...", "cómo anulo...", "cómo pauso...", "explícame cómo funciona...", o tenga dudas sobre el sistema, dale una respuesta didáctica, estructurada con:
+  - Ruta exacta en el menú lateral de la interfaz.
+  - Pasos numerados claros y directos.
+  - Permisos o requisitos (ej: si requiere rol de Administrador o tener caja abierta).
+  - Impacto en el negocio (qué sucede automáticamente tras la acción).
 
-COMPRENSIÓN TOTAL DE LENGUAJE ESPONTÁNEO Y COLOQUIAL:
-El usuario puede formular sus preguntas con absoluta libertad, de manera espontánea, coloquial o ejecutiva, sin necesidad de seguir formatos predefinidos ni palabras exactas. Interpreta siempre la intención operativa/financiera de su solicitud y activa la herramienta correspondiente (o varias si la consulta abarca múltiples áreas) para responder con exactitud analítica y datos reales.`
+RUTAS Y PROCEDIMIENTOS CLAVE DEL SISTEMA:
+1. ¿CÓMO REGISTRAR UN GASTO U OPERACIÓN DE EGRESO?
+   - Ruta: Menú lateral izquierdo -> Gastos -> Botón superior "+ Registrar Gasto".
+   - Pasos:
+     1. Ingresa el Concepto / Título del gasto (ej: "Compra de bolsas", "Pago de internet").
+     2. Selecciona la Categoría (ej: Servicios, Suministros, Nómina, Alquiler).
+     3. Indica el Monto (en USD o Bs) y el método de pago utilizado (Efectivo, Transferencia, Punto de Venta).
+     4. Opcional: Coloca el número de referencia y el nombre del beneficiario.
+     5. Presiona "Guardar Gasto".
+   - Para descargar el reporte: En la misma pantalla de Gastos, en la barra de períodos, usa los botones "🖨️ Imprimir PDF" o "📥 Descargar PDF".
+
+2. ¿CÓMO ANULAR UNA VENTA O FACTURA?
+   - Ruta: Menú lateral izquierdo -> Ventas / Facturas.
+   - Pasos:
+     1. Ubica la venta en el listado por número de recibo o cliente.
+     2. Haz clic en el botón "Ver Detalles" (icono de ojo).
+     3. En la parte inferior de la ventana, haz clic en el botón rojo "Anular Venta".
+     4. Escribe el motivo de la anulación (ej: "Error en producto", "Devolución del cliente") y confirma.
+   - Requisitos e Impacto: Requiere permisos de Administrador. El sistema automáticamente reingresa los productos al stock del almacén de origen y resta el dinero de la caja registradora correspondiente.
+
+3. ¿CÓMO PAUSAR Y RETOMAR VENTAS EN EL PUNTO DE VENTA (POS)?
+   - Ruta: Menú lateral -> Punto de Venta (POS).
+   - Para pausar: Con artículos agregados al ticket, haz clic en el botón "[⏸️ Pausar]" situado en la barra superior del ticket. Ingresa una nota o nombre de referencia del cliente y confirma. El ticket se limpiará para que atiendas al siguiente cliente.
+   - Para retomar: Haz clic en "[⏳ En Espera (X)]" en la barra superior. Verás el listado de ventas pausadas con su hora y monto. Pulsa "Retomar Venta" en la que desees y los productos se cargarán de nuevo al ticket al instante. También puedes cancelar ventas en espera desde ese panel.
+
+4. ¿CÓMO APLICAR EL 10% DE MORA A UN CRÉDITO VENCIDO?
+   - Paso 1 (Configuración): Configuración de la Empresa -> Políticas de Crédito -> Activar interruptor "Recargo por Mora en Cuotas Vencidas" (10%).
+   - Paso 2 (Aplicación en cobranza): Menú Créditos -> Cobranzas (o Ventas a Crédito) -> Haz clic en "Ver Detalles" de la venta del cliente.
+   - Paso 3: En la pestaña "Plan de Cuotas", ubica la cuota cuya fecha ya venció. Verás el botón rojo destacado "Aplicar Mora +10%". Al pulsar y confirmar, el sistema suma automáticamente el 10% de recargo por demora a esa cuota y a la deuda total.
+
+5. ¿CÓMO VENDER A CRÉDITO Y RECARGO DEL 10% / 20%?
+   - Si la tienda tiene activada la política de recargo por crédito en Configuración -> Políticas de Crédito, cada vez que el cajero pulse un producto en el POS se le preguntará: "¿Cómo se vende este artículo? (Contado, Crédito +10% o Crédito +20%)".
+   - Al finalizar, pulsa "Cobrar", selecciona "A Crédito", asigna el cliente registrado y define el plazo de cuotas acordado.
+
+6. ¿CÓMO REALIZAR UN CIERRE DE CAJA (CIERRE X Y CIERRE Z)?
+   - Ruta: Menú lateral -> Cajas Registradoras -> Cierre de Caja.
+   - Cierre X (Parcial): Es un arqueo preventivo que muestra el balance de las operaciones del turno sin bloquear la caja.
+   - Cierre Z (Definitivo Diario): Cuadra el efectivo físico en gaveta contra los puntos de venta y transferencias, emite el reporte Z oficial y cierra la sesión de la caja para el día.
+
+7. ¿CÓMO REGISTRAR O ACTUALIZAR PRODUCTOS Y PRECIOS?
+   - Ruta: Menú lateral -> Inventario -> Catálogo de Productos -> "+ Nuevo Producto".
+   - Permite colocar precio de costo, precio de venta en USD (calcula automáticamente en Bs según tasa oficial BCV), código de barras / SKU y asignar existencias por almacén.
+
+============================================================
+GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
+============================================================
+- Consultas de Ventas del período / hoy: 'consultar_resumen_ventas'
+- Unidades vendidas de un producto ("¿cuántas neveras vendí hoy?"): 'consultar_ventas_por_producto'
+- Inversión, valor comercial y ganancia potencial del inventario: 'consultar_valorizacion_inventario'
+- Ranking de más vendidos: 'consultar_top_productos_mas_vendidos'
+- Cuentas por cobrar y lista de deudores: 'consultar_cuentas_por_cobrar_y_deudores'
+- Información y stock de un artículo: 'consultar_informacion_producto'
+- Gastos registrados: 'consultar_gastos_operativos'
+- Últimas ventas: 'consultar_ultimas_ventas'
+- Cobranzas y abonos: 'consultar_resumen_cobranza'
+- Ingresos consolidados (contado vs crédito): 'consultar_ingresos_consolidados'
+- Stock bajo o crítico: 'consultar_productos_stock_bajo'
+- Ranking de mejores clientes: 'consultar_top_clientes'
+- Compras a proveedores: 'consultar_compras_proveedores'
+- Estado de cajas registradoras: 'consultar_estado_cajas'
+- Cotizaciones / presupuestos: 'consultar_cotizaciones_presupuestos'
+- Datos de la empresa: 'consultar_datos_empresa'
+- Auditoría forense de fugas y dinero dormido: 'auditar_fugas_y_dinero_dormido'
+- Cobranza por WhatsApp con enlace directo: 'generar_mensaje_cobranza_whatsapp'
+- Registro de gasto por comando: 'ejecutar_crear_gasto'
+- Cambio de precio de producto por comando: 'ejecutar_cambiar_precio_producto'`
                 }
             ]
         };
@@ -87,6 +133,16 @@ El usuario puede formular sus preguntas con absoluta libertad, de manera espont�
     ): Promise<AiChatResponse> {
         if (!this.apiKey) {
             throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno del servidor.');
+        }
+
+        // Control y limitación de cuota mensual de IA por empresa
+        const usage = await this.usageService.checkAndIncrementUsage(businessId, tzOffset);
+        if (!usage.allowed) {
+            return {
+                text: `⚠️ **Límite Mensual de Consultas Alcanzado**\n\nTu empresa ha alcanzado el límite de **${usage.monthlyLimit} consultas mensuales** asignadas con Guardián AI para este período (${usage.periodMonth}).\n\nPara ampliar tu cupo de consultas mensuales o consultar los planes superiores de Guardián, por favor comunícate con el administrador del sistema.`,
+                actions: [],
+                usage
+            };
         }
 
         const todayStr = clientLocalDate || (() => {
@@ -159,42 +215,52 @@ El usuario puede formular sus preguntas con absoluta libertad, de manera espont�
         const functionCalls = modelParts.filter((p: any) => p.functionCall);
 
         if (functionCalls.length > 0) {
-            // Guardar la respuesta del modelo con las invocaciones en la conversación
-            contents.push(firstCandidate.content);
+            const toolResultsParts: any[] = [];
 
-            const toolResponseParts: any[] = [];
+            for (const fc of functionCalls) {
+                const toolName = fc.functionCall.name;
+                const toolArgs = fc.functionCall.args || {};
 
-            // Ejecutar secuencialmente cada herramienta solicitada
-            for (const part of functionCalls) {
-                const call = part.functionCall;
-                console.log(`[Guardián AI] Ejecutando herramienta ${call.name} para negocio ${businessId} con args:`, call.args);
-                
-                const execResult = await executeAiTool(call.name, call.args, businessId, tzOffset);
+                try {
+                    const toolResult = await executeAiTool(toolName, toolArgs, businessId, tzOffset);
 
-                if (execResult.action) {
-                    collectedActions.push(execResult.action);
-                }
-
-                toolResponseParts.push({
-                    functionResponse: {
-                        name: call.name,
-                        response: {
-                            output: execResult.data
-                        }
+                    if (toolResult.action) {
+                        collectedActions.push(toolResult.action);
                     }
-                });
+
+                    toolResultsParts.push({
+                        functionResponse: {
+                            name: toolName,
+                            response: toolResult.data
+                        }
+                    });
+                } catch (toolErr: any) {
+                    console.error(`[Guardián AI] Error ejecutando herramienta ${toolName}:`, toolErr.message);
+                    toolResultsParts.push({
+                        functionResponse: {
+                            name: toolName,
+                            response: { error: `Error al consultar datos: ${toolErr.message}` }
+                        }
+                    });
+                }
             }
 
-            // Enviar los resultados de las herramientas de vuelta a Gemini para obtener la respuesta final
-            contents.push({
-                role: 'user',
-                parts: toolResponseParts
-            });
+            // Segunda llamada con los resultados de las herramientas
+            const followUpContents = [
+                ...contents,
+                {
+                    role: 'model',
+                    parts: modelParts
+                },
+                {
+                    role: 'user',
+                    parts: toolResultsParts
+                }
+            ];
 
             const followUpPayload = {
                 system_instruction: systemInstruction,
-                contents,
-                tools: toolsConfig,
+                contents: followUpContents,
                 generationConfig: {
                     temperature: 0.1
                 }
@@ -225,11 +291,12 @@ El usuario puede formular sus preguntas con absoluta libertad, de manera espont�
             return {
                 text: finalReplyText || 'Reporte procesado exitosamente.',
                 actions: collectedActions,
-                modelUsed: candidateModel
+                modelUsed: candidateModel,
+                usage
             };
         }
 
-        // Si no hubo tool call, retornar directamente el texto generado
+        // Si no hubo tool call (por ejemplo, respuesta de tutorial o soporte), retornar directamente el texto generado
         const directText = modelParts
             .filter((p: any) => p.text)
             .map((p: any) => p.text)
@@ -239,7 +306,8 @@ El usuario puede formular sus preguntas con absoluta libertad, de manera espont�
         return {
             text: directText || 'Disculpa, no pude procesar la solicitud.',
             actions: collectedActions,
-            modelUsed: candidateModel
+            modelUsed: candidateModel,
+            usage
         };
     }
 }

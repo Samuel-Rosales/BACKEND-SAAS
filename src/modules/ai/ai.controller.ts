@@ -26,12 +26,34 @@ export class AiController {
             return res.status(200).json({
                 message: result.text,
                 actions: result.actions,
-                modelUsed: result.modelUsed
+                modelUsed: result.modelUsed,
+                usage: result.usage
             });
         } catch (error: any) {
             console.error('[Guardián AI] Error en controlador:', error.message);
             return res.status(500).json({
                 error: error.message || 'Error procesando la consulta con la inteligencia artificial.'
+            });
+        }
+    };
+
+    getUsage = async (req: Request, res: Response) => {
+        const { businessId } = req.user;
+        const tzOffset = req.query.tzOffset ? Number(req.query.tzOffset) : 240;
+
+        if (!businessId) {
+            return res.status(400).json({
+                error: 'Falta identificar la empresa activa.'
+            });
+        }
+
+        try {
+            const usage = await aiService.getUsage(businessId, tzOffset);
+            return res.status(200).json(usage);
+        } catch (error: any) {
+            console.error('[Guardián AI] Error al consultar uso:', error.message);
+            return res.status(500).json({
+                error: error.message || 'Error al consultar cuota de IA.'
             });
         }
     };

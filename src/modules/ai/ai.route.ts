@@ -8,5 +8,6 @@ const controller = new AiController();
 router.use(authMiddleware);
 
 router.post('/chat', controller.chat);
+router.get('/usage', controller.getUsage);
 
 export const AiRoute = router;

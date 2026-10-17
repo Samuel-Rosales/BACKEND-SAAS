@@ -222,6 +222,53 @@ export const AI_TOOL_DECLARATIONS = [
                 toDate: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD.' }
             }
         }
+    },
+    {
+        name: 'auditar_fugas_y_dinero_dormido',
+        description: 'Audita la salud operativa y financiera del negocio detectando: 1) Faltantes o descuadres en cierres de caja recientes, 2) Artículos vendidos por debajo del costo o con margen crítico (< 5%), 3) Dinero dormido / mercancía congelada en inventario que no registra ventas en los últimos 45 días, calculando el capital total paralizado.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {}
+        }
+    },
+    {
+        name: 'generar_mensaje_cobranza_whatsapp',
+        description: 'Genera un mensaje formal y cortés de cobranza para un cliente con cuotas o deuda pendiente, con enlace directo para abrir el chat de WhatsApp listo para enviar.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                clientSearch: { type: 'STRING', description: 'Nombre, teléfono o cédula del cliente a cobrar.' },
+                tone: { type: 'STRING', description: 'Tono del mensaje: "cordial_recordatorio" o "formal_vencido". Por defecto "cordial_recordatorio".' }
+            },
+            required: ['clientSearch']
+        }
+    },
+    {
+        name: 'ejecutar_crear_gasto',
+        description: 'Registra un gasto operativo real en el sistema Guardián. Guarda el título, monto en USD y descuenta el saldo correspondiente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                title: { type: 'STRING', description: 'Título o concepto del gasto (ej: "Compra de bolsas plásticas", "Pago de internet").' },
+                amountUSD: { type: 'NUMBER', description: 'Monto del gasto en dólares USD.' },
+                categoryName: { type: 'STRING', description: 'Nombre de la categoría (ej: "Suministros", "Servicios", "Operativo"). Opcional.' },
+                beneficiary: { type: 'STRING', description: 'Beneficiario o persona que recibió el pago. Opcional.' },
+                reference: { type: 'STRING', description: 'Comprobante o referencia del pago. Opcional.' }
+            },
+            required: ['title', 'amountUSD']
+        }
+    },
+    {
+        name: 'ejecutar_cambiar_precio_producto',
+        description: 'Actualiza el precio de venta de un producto en el catálogo e inventario de la empresa.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                search: { type: 'STRING', description: 'Nombre o código SKU del producto a actualizar.' },
+                newSalePriceUSD: { type: 'NUMBER', description: 'Nuevo precio de venta en dólares USD.' }
+            },
+            required: ['search', 'newSalePriceUSD']
+        }
     }
 ];
 
@@ -923,6 +970,275 @@ export async function executeAiTool(
                         estado: q.status,
                         valido_hasta: q.validUntil ? q.validUntil.toISOString().split('T')[0] : 'Sin fecha límite'
                     }))
+                }
+            };
+        }
+
+        case 'auditar_fugas_y_dinero_dormido': {
+            const recentClosedBoxes = await prisma.cashRegister.findMany({
+                where: { businessId, status: 'CLOSED' },
+                orderBy: { openTime: 'desc' },
+                take: 5,
+                include: { member: { include: { user: true } } }
+            });
+
+            const fortyFiveDaysAgo = new Date(Date.now() - (45 * 24 * 60 * 60_000));
+            const recentSaleProductIds = await prisma.saleItem.findMany({
+                where: {
+                    sale: {
+                        businessId,
+                        status: { not: 'CANCELLED' },
+                        createdAt: { gte: fortyFiveDaysAgo }
+                    }
+                },
+                select: { productId: true },
+                distinct: ['productId']
+            });
+            const soldProductIds = new Set(recentSaleProductIds.map(s => s.productId));
+
+            const products = await prisma.product.findMany({
+                where: { businessId, isActive: true },
+                select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    costPrice: true,
+                    salePrice: true,
+                    stockLots: {
+                        select: {
+                            quantity: true,
+                            lotCost: true
+                        }
+                    }
+                }
+            });
+
+            let capitalCongeladoUSD = 0;
+            const itemsDormidos: any[] = [];
+            const lowMarginRisk: any[] = [];
+
+            for (const p of products) {
+                let totalStock = 0;
+                for (const lot of p.stockLots) {
+                    const q = Number(lot.quantity);
+                    if (q > 0) totalStock += q;
+                }
+
+                const cost = Number(p.costPrice);
+                const sale = Number(p.salePrice);
+
+                if (totalStock > 0 && !soldProductIds.has(p.id)) {
+                    const paralizado = totalStock * cost;
+                    capitalCongeladoUSD += paralizado;
+                    if (itemsDormidos.length < 8) {
+                        itemsDormidos.push({
+                            producto: p.name,
+                            sku: p.sku || 'S/N',
+                            unidades_congeladas: totalStock,
+                            costo_unitario_usd: cost,
+                            precio_venta_usd: sale,
+                            capital_inmovilizado_usd: Number(paralizado.toFixed(2))
+                        });
+                    }
+                }
+
+                if (sale > 0 && cost > 0) {
+                    if (sale <= cost || ((sale - cost) / sale) < 0.05) {
+                        if (lowMarginRisk.length < 5) {
+                            lowMarginRisk.push({
+                                producto: p.name,
+                                costo_reposicion_usd: cost,
+                                precio_venta_actual_usd: sale,
+                                margen_pct: Number((((sale - cost) / sale) * 100).toFixed(2))
+                            });
+                        }
+                    }
+                }
+            }
+
+            return {
+                data: {
+                    resumen_auditoria: 'Auditoría forense de operaciones, cajas y rotación de inventario completada.',
+                    dinero_dormido_total_usd: Number(capitalCongeladoUSD.toFixed(2)),
+                    productos_sin_rotacion_45_dias: itemsDormidos,
+                    productos_con_margen_critico_o_perdida: lowMarginRisk,
+                    cajas_recientes_revisadas: recentClosedBoxes.map(b => ({
+                        caja_id: b.id,
+                        cajero: b.member?.user?.name || 'Cajero',
+                        fecha_apertura: b.openTime.toISOString().split('T')[0],
+                        fecha_cierre: b.closeTime ? b.closeTime.toISOString().split('T')[0] : 'N/D',
+                        estado: b.status
+                    }))
+                }
+            };
+        }
+
+        case 'generar_mensaje_cobranza_whatsapp': {
+            const clientSearch = String(args?.clientSearch || '').trim();
+            const tone = args?.tone || 'cordial_recordatorio';
+
+            const client = await prisma.client.findFirst({
+                where: {
+                    businessId,
+                    isActive: true,
+                    OR: [
+                        { name: { contains: clientSearch, mode: 'insensitive' } },
+                        { ci: { contains: clientSearch, mode: 'insensitive' } },
+                        { phone: { contains: clientSearch, mode: 'insensitive' } }
+                    ]
+                }
+            });
+
+            if (!client) {
+                return {
+                    data: {
+                        status: 'NOT_FOUND',
+                        mensaje: `No se encontró ningún cliente moroso o registrado que coincida con "${clientSearch}".`
+                    }
+                };
+            }
+
+            const totalDeudaUSD = Number(client.currentDebt || 0);
+
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { name: true, currentExchangeRate: true, document: true }
+            });
+
+            const bcvRate = Number(business?.currentExchangeRate || 1);
+            const totalBs = Number((totalDeudaUSD * bcvRate).toFixed(2));
+            const bizName = business?.name || 'nuestra empresa';
+
+            let msg = '';
+            if (tone === 'formal_vencido' || totalDeudaUSD > 0) {
+                msg = `Estimado(a) ${client.name}, le saludamos formalmente de ${bizName}. Le recordamos que presenta un saldo pendiente por un total de $${totalDeudaUSD.toFixed(2)} USD (equivalente a Bs. ${totalBs.toLocaleString('es-VE')} a tasa oficial BCV de ${bcvRate.toFixed(2)}). Agradecemos coordinar su pago a la brevedad para mantener su crédito y récord comercial al día. Quedamos atentos a su comprobante. ¡Muchas gracias!`;
+            } else {
+                msg = `Hola ${client.name}, te saludamos de ${bizName}. Esperamos te encuentres muy bien. Te escribimos cordialmente para consultar si requieres alguna cotización o pedido. ¡Feliz día!`;
+            }
+
+            const cleanPhone = (client.phone || '').replace(/[^0-9]/g, '');
+            const waPhone = cleanPhone.startsWith('58') ? cleanPhone : (cleanPhone.startsWith('0') ? '58' + cleanPhone.slice(1) : cleanPhone);
+            const waUrl = waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+
+            return {
+                data: {
+                    cliente: client.name,
+                    cedula_rif: client.ci,
+                    telefono: client.phone || 'Sin número registrado',
+                    deuda_total_usd: Number(totalDeudaUSD.toFixed(2)),
+                    deuda_total_bs: totalBs,
+                    mensaje_propuesto: msg,
+                    enlace_whatsapp: waUrl
+                },
+                action: {
+                    type: 'OPEN_WHATSAPP',
+                    label: `📲 Abrir WhatsApp y Enviar a ${client.name}`,
+                    url: waUrl
+                }
+            };
+        }
+
+        case 'ejecutar_crear_gasto': {
+            const title = String(args?.title || '').trim();
+            const amountUSD = Number(args?.amountUSD || 0);
+
+            if (!title || isNaN(amountUSD) || amountUSD <= 0) {
+                return {
+                    data: { status: 'INVALID_ARGS', mensaje: 'Debe especificar un título válido y un monto mayor a 0 en USD.' }
+                };
+            }
+
+            const categoryName = String(args?.categoryName || 'Gastos Operativos').trim();
+            let category = await prisma.expenseCategory.findFirst({
+                where: { businessId, name: { contains: categoryName, mode: 'insensitive' } }
+            });
+
+            if (!category) {
+                category = await prisma.expenseCategory.findFirst({ where: { businessId } });
+            }
+            if (!category) {
+                category = await prisma.expenseCategory.create({
+                    data: { businessId, name: categoryName }
+                });
+            }
+
+            const member = await prisma.businessMember.findFirst({
+                where: { businessId, isActive: true },
+                orderBy: { id: 'asc' }
+            });
+
+            const expense = await prisma.expense.create({
+                data: {
+                    businessId,
+                    categoryId: category.id,
+                    memberId: member ? member.id : 1,
+                    title,
+                    amount: amountUSD,
+                    amountInUSD: amountUSD,
+                    currency: 'USD',
+                    beneficiary: args?.beneficiary || null,
+                    reference: args?.reference || 'Registro Asistente AI'
+                }
+            });
+
+            return {
+                data: {
+                    status: 'SUCCESS',
+                    mensaje: `Gasto registrado con éxito en el sistema.`,
+                    gasto_id: expense.id,
+                    concepto: expense.title,
+                    monto_usd: Number(expense.amountInUSD),
+                    categoria: category.name,
+                    fecha: expense.expenseDate.toISOString().split('T')[0]
+                }
+            };
+        }
+
+        case 'ejecutar_cambiar_precio_producto': {
+            const search = String(args?.search || '').trim();
+            const newPrice = Number(args?.newSalePriceUSD || 0);
+
+            if (!search || isNaN(newPrice) || newPrice <= 0) {
+                return {
+                    data: { status: 'INVALID_ARGS', mensaje: 'Debe especificar un nombre de producto y un nuevo precio mayor a 0 en USD.' }
+                };
+            }
+
+            const product = await prisma.product.findFirst({
+                where: {
+                    businessId,
+                    isActive: true,
+                    OR: [
+                        { name: { contains: search, mode: 'insensitive' } },
+                        { sku: { contains: search, mode: 'insensitive' } }
+                    ]
+                }
+            });
+
+            if (!product) {
+                return {
+                    data: {
+                        status: 'NOT_FOUND',
+                        mensaje: `No se encontró ningún artículo en catálogo que coincida con "${search}".`
+                    }
+                };
+            }
+
+            const oldPrice = Number(product.salePrice);
+            const updated = await prisma.product.update({
+                where: { id: product.id },
+                data: { salePrice: newPrice }
+            });
+
+            return {
+                data: {
+                    status: 'SUCCESS',
+                    mensaje: `Precio de venta actualizado exitosamente.`,
+                    producto: updated.name,
+                    sku: updated.sku || 'S/N',
+                    precio_anterior_usd: oldPrice,
+                    precio_nuevo_usd: Number(updated.salePrice),
+                    costo_referencial_usd: Number(updated.costPrice)
                 }
             };
         }
