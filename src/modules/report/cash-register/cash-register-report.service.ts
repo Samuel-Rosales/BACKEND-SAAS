@@ -171,6 +171,7 @@ export class CashRegisterReportService {
                 currency: string;
                 transactions: number;
                 amountUSD: Decimal;
+                amountVES: Decimal;
             }>();
 
             // Process payments
@@ -199,13 +200,15 @@ export class CashRegisterReportService {
                 if (existing) {
                     existing.transactions += 1;
                     existing.amountUSD = existing.amountUSD.add(amtUSD);
+                    existing.amountVES = existing.amountVES.add(amtVES);
                 } else {
                     methodStats.set(pay.paymentMethodId, {
                         method: pay.paymentMethod.name,
                         type: pay.paymentMethod.type,
                         currency: pay.paymentMethod.currency,
                         transactions: 1,
-                        amountUSD: amtUSD
+                        amountUSD: amtUSD,
+                        amountVES: amtVES
                     });
                 }
             }
@@ -236,13 +239,15 @@ export class CashRegisterReportService {
                 const existing = methodStats.get(ref.paymentMethodId);
                 if (existing) {
                     existing.amountUSD = existing.amountUSD.sub(amtUSD);
+                    existing.amountVES = existing.amountVES.sub(amtVES);
                 } else {
                     methodStats.set(ref.paymentMethodId, {
                         method: ref.paymentMethod.name,
                         type: ref.paymentMethod.type,
                         currency: ref.paymentMethod.currency,
                         transactions: 1,
-                        amountUSD: amtUSD.negated()
+                        amountUSD: amtUSD.negated(),
+                        amountVES: amtVES.negated()
                     });
                 }
             }
@@ -251,12 +256,14 @@ export class CashRegisterReportService {
             const totalUSDNumber = totalUSD.toNumber();
             const methodsArray = Array.from(methodStats.values()).map(m => {
                 const amountVal = m.amountUSD.toNumber();
+                const amountVESVal = m.amountVES.toNumber();
                 const pct = totalUSDNumber > 0 ? (amountVal / totalUSDNumber) * 100 : 0;
                 return {
                     method: m.method,
                     type: m.type,
                     transactions: m.transactions,
                     amountUSD: Number(amountVal.toFixed(2)),
+                    amountVES: Number(amountVESVal.toFixed(2)),
                     percentage: Number(pct.toFixed(2)),
                     color: getColorForPaymentType(m.type)
                 };

@@ -11,6 +11,7 @@ type PaymentMethodSummary = {
     type: string;
     transactions: number;
     amountUSD: number;
+    amountVES?: number;
     percentage: number;
 };
 
@@ -231,10 +232,11 @@ const styles = StyleSheet.create({
     },
 
     // Payment methods columns — flex-based proportions to avoid padding overflow
-    colPayMethod: { flex: 4.2 },
-    colPayTx:     { flex: 1.7, textAlign: 'right' },
-    colPayAmt:    { flex: 2.6, textAlign: 'right' },
-    colPayPct:    { flex: 1.5, textAlign: 'right' },
+    colPayMethod: { flex: 3.6 },
+    colPayTx:     { flex: 1.4, textAlign: 'right' },
+    colPayAmtUSD: { flex: 2.3, textAlign: 'right' },
+    colPayAmtVES: { flex: 2.7, textAlign: 'right' },
+    colPayPct:    { flex: 1.3, textAlign: 'right' },
 
     // Seller block
     sellerBlock: { marginTop: 12, marginBottom: 2 },
@@ -313,6 +315,12 @@ const usd = (v: number) => {
     const isNeg = v < 0;
     const absVal = Math.abs(v || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return (isNeg ? '-' : '') + 'USD ' + absVal;
+};
+
+const ves = (v: number) => {
+    const isNeg = v < 0;
+    const absVal = Math.abs(v || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (isNeg ? '-' : '') + absVal + ' Bs.';
 };
 
 const num = (v: number) => new Intl.NumberFormat('es-VE').format(v || 0);
@@ -429,7 +437,8 @@ const CashRegisterReport = ({
                 <View style={styles.tableHead}>
                     <Text style={[styles.tableHeadCell, styles.colPayMethod]}>Método de Pago</Text>
                     <Text style={[styles.tableHeadCell, styles.colPayTx, { textAlign: 'right' }]}>Transacciones</Text>
-                    <Text style={[styles.tableHeadCell, styles.colPayAmt, { textAlign: 'right' }]}>Monto (USD)</Text>
+                    <Text style={[styles.tableHeadCell, styles.colPayAmtUSD, { textAlign: 'right' }]}>Monto (USD)</Text>
+                    <Text style={[styles.tableHeadCell, styles.colPayAmtVES, { textAlign: 'right' }]}>Monto (Bs.)</Text>
                     <Text style={[styles.tableHeadCell, styles.colPayPct, { textAlign: 'right' }]}>Participación</Text>
                 </View>
 
@@ -437,7 +446,8 @@ const CashRegisterReport = ({
                     <View style={i % 2 === 0 ? styles.tableRow : styles.tableRowAlt} key={i}>
                         <Text style={[styles.tableCell, styles.colPayMethod]}>{m.method}</Text>
                         <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
-                        <Text style={[styles.tableCell, styles.colPayAmt]}>{usd(m.amountUSD)}</Text>
+                        <Text style={[styles.tableCell, styles.colPayAmtUSD]}>{usd(m.amountUSD)}</Text>
+                        <Text style={[styles.tableCell, styles.colPayAmtVES]}>{ves(m.amountVES ?? 0)}</Text>
                         <Text style={[styles.tableCellLast, styles.colPayPct]}>{m.percentage.toFixed(2)}%</Text>
                     </View>
                 ))}
@@ -447,7 +457,8 @@ const CashRegisterReport = ({
                     <Text style={[styles.tableTotalCell, styles.colPayTx]}>
                         {overview.methods.reduce((a, m) => a + m.transactions, 0)}
                     </Text>
-                    <Text style={[styles.tableTotalCell, styles.colPayAmt]}>{usd(overview.totalUSD)}</Text>
+                    <Text style={[styles.tableTotalCell, styles.colPayAmtUSD]}>{usd(overview.totalUSD)}</Text>
+                    <Text style={[styles.tableTotalCell, styles.colPayAmtVES]}>{ves(overview.totalVES)}</Text>
                     <Text style={[styles.tableTotalCellLast, styles.colPayPct]}>100.00%</Text>
                 </View>
             </View>
