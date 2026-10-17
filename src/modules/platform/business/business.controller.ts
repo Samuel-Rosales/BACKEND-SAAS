@@ -142,4 +142,17 @@ export class BusinessController {
             return res.status(500).json({ message: 'Error interno del servidor', status: 500, data: null });
         }
     };
+
+    // 9. ACTUALIZAR DISEÑO DE TICKET PERSONALIZADO
+    updateTicketConfig = async (req: Request, res: Response) => {
+        const { businessId } = req.user;
+        const { id: userId } = req.user;
+
+        if (!userId) {
+            return res.status(400).json({ message: 'User ID is required' });
+        }
+
+        const { status, data, message } = await this.service.updateTicketConfig(businessId, userId, req.body);
+        res.status(status).json({ message, data });
+    };
 }

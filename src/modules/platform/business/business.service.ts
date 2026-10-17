@@ -585,7 +585,8 @@ export class BusinessService {
               planType: business.subscription.planType,
               status: business.subscription.status,
               endDate: business.subscription.endDate
-          } : null
+          } : null,
+          ticketConfig: business.ticketConfig || null
       };
 
       return {
@@ -597,6 +598,29 @@ export class BusinessService {
     } catch (error) {
         console.error(error);
         return { status: 500, message: 'Error al obtener configuración', data: null };
+    }
+  }
+
+  async updateTicketConfig(businessId: number, userId: number, ticketConfig: any) {
+    try {
+      const access = await this.verifyAccess(businessId, userId, { permission: 'BUSINESS_SETTINGS_EDIT' });
+      if (access.status !== 200) return access;
+
+      const updated = await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          ticketConfig: ticketConfig
+        }
+      });
+
+      return {
+        status: 200,
+        message: 'Diseño de ticket actualizado exitosamente',
+        data: updated.ticketConfig
+      };
+    } catch (error) {
+      console.error('Error al actualizar diseño de ticket:', error);
+      return { status: 500, message: 'Error interno al actualizar diseño de ticket', data: null };
     }
   }
 

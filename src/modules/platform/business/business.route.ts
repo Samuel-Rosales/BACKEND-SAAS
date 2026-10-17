@@ -70,5 +70,14 @@ router.patch(
   controller.updateExchangeRateConfig
 );
 
+// D. Actualizar Diseño de Ticket Personalizado
+router.patch(
+  '/:id/ticket-config',
+  requireBusinessPermission('BUSINESS_SETTINGS_EDIT'),
+  validator.validateId,
+  handleValidationErrors,
+  controller.updateTicketConfig
+);
+
 export const BusinessRoute = router;
 export default router;
