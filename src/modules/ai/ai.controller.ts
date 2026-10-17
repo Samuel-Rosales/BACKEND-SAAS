@@ -6,7 +6,7 @@ const aiService = new AiService();
 export class AiController {
     chat = async (req: Request, res: Response) => {
         const { businessId } = req.user;
-        const { message, history } = req.body;
+        const { message, history, tzOffset, localDate } = req.body;
 
         if (!businessId) {
             return res.status(400).json({
@@ -21,7 +21,8 @@ export class AiController {
         }
 
         try {
-            const result = await aiService.chat(businessId, message.trim(), history || []);
+            const parsedTzOffset = tzOffset !== undefined && !isNaN(Number(tzOffset)) ? Number(tzOffset) : 240;
+            const result = await aiService.chat(businessId, message.trim(), history || [], parsedTzOffset, localDate);
             return res.status(200).json({
                 message: result.text,
                 actions: result.actions,

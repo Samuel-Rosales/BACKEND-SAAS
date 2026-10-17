@@ -88,12 +88,21 @@ export const AI_TOOL_DECLARATIONS = [
     }
 ];
 
-export async function executeAiTool(toolName: string, args: any, businessId: number): Promise<ToolExecutionResult> {
-    const tzOffset = -240; // America/Caracas standard (-4h = -240 min)
+export async function executeAiTool(
+    toolName: string, 
+    args: any, 
+    businessId: number, 
+    tzOffset: number = 240
+): Promise<ToolExecutionResult> {
+    const getLocalToday = () => {
+        const local = new Date(Date.now() - (tzOffset * 60_000));
+        return local.toISOString().split('T')[0];
+    };
+    const defaultDate = getLocalToday();
 
     switch (toolName) {
         case 'consultar_resumen_ventas': {
-            const fromDate = args?.fromDate || new Date().toISOString().split('T')[0];
+            const fromDate = args?.fromDate || defaultDate;
             const toDate = args?.toDate || fromDate;
             const res = await salesStatsService.getDetailedReport(businessId, { fromDate, toDate, tzOffset });
             return {
@@ -105,7 +114,7 @@ export async function executeAiTool(toolName: string, args: any, businessId: num
         }
 
         case 'generar_pdf_ventas': {
-            const fromDate = args?.fromDate || new Date().toISOString().split('T')[0];
+            const fromDate = args?.fromDate || defaultDate;
             const toDate = args?.toDate || fromDate;
             const endpoint = `/report/sales/pdf?fromDate=${fromDate}&toDate=${toDate}&tzOffset=${tzOffset}`;
             const action: AiChatAction = {
@@ -126,7 +135,7 @@ export async function executeAiTool(toolName: string, args: any, businessId: num
         }
 
         case 'consultar_resumen_cobranza': {
-            const fromDate = args?.fromDate || new Date().toISOString().split('T')[0];
+            const fromDate = args?.fromDate || defaultDate;
             const toDate = args?.toDate || fromDate;
             const res = await collectionsReportService.getOverview(businessId, { fromDate, toDate, tzOffset });
             return {
@@ -138,7 +147,7 @@ export async function executeAiTool(toolName: string, args: any, businessId: num
         }
 
         case 'generar_pdf_cobranza': {
-            const fromDate = args?.fromDate || new Date().toISOString().split('T')[0];
+            const fromDate = args?.fromDate || defaultDate;
             const toDate = args?.toDate || fromDate;
             const endpoint = `/report/collections/pdf?fromDate=${fromDate}&toDate=${toDate}&tzOffset=${tzOffset}`;
             const action: AiChatAction = {
@@ -159,7 +168,7 @@ export async function executeAiTool(toolName: string, args: any, businessId: num
         }
 
         case 'consultar_ingresos_consolidados': {
-            const fromDate = args?.fromDate || new Date().toISOString().split('T')[0];
+            const fromDate = args?.fromDate || defaultDate;
             const toDate = args?.toDate || fromDate;
             const res = await collectionsReportService.getConsolidatedIncome(businessId, { fromDate, toDate, tzOffset });
             return {

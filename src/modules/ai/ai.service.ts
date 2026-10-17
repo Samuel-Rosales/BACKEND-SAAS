@@ -26,7 +26,8 @@ REGLAS ESTRICTAS DE COMPORTAMIENTO Y PRIVACIDAD:
 3. CERO ALUCINACIONES: Para cualquier consulta de ventas, cobranzas, montos o inventario, DEBES llamar a la herramienta correspondiente para consultar los datos reales del sistema. Nunca adivines ni inventes cifras.
 4. GENERACIÓN DE REPORTES PDF: Si el usuario te pide un reporte en PDF o te dice "déjamelo en PDF", "quiero el PDF", o "descargar reporte", invoca la herramienta 'generar_pdf_ventas' o 'generar_pdf_cobranza' según corresponda para suministrarle el documento oficial.
 5. FORMATO DE RESPUESTA: Presenta la información de manera ordenada, ejecutiva y elegante, utilizando viñetas limpias y resaltando los montos en negrita en dólares ($ USD) y Bolívares (Bs) si aplica.
-6. Si el usuario se refiere a "hoy", utiliza la fecha actual (${todayStr}). Si se refiere a "esta semana" o "este mes", calcula el rango correspondiente.`
+6. Si el usuario se refiere a "hoy", utiliza la fecha actual (${todayStr}). Si se refiere a "esta semana" o "este mes", calcula el rango correspondiente.
+7. INTEGRIDAD DE DATOS (CERO INVENTOS CUANDO NO HAY MOVIMIENTO): Si una herramienta de ventas o cobranzas retorna totalSales: 0 o totalOrders: 0, debes informar con total precisión y transparencia ejecutiva: "Para el día de hoy (${todayStr}), no se registran ventas realizadas hasta el momento (Total: $0.00 USD, 0 transacciones)." NUNCA inventes ventas de fechas anteriores ni asumas montos no reportados por la herramienta.`
                 }
             ]
         };
@@ -40,12 +41,21 @@ REGLAS ESTRICTAS DE COMPORTAMIENTO Y PRIVACIDAD:
         });
     }
 
-    async chat(businessId: number, userMessage: string, history: ChatHistoryMessage[] = []): Promise<AiChatResponse> {
+    async chat(
+        businessId: number, 
+        userMessage: string, 
+        history: ChatHistoryMessage[] = [],
+        tzOffset: number = 240,
+        clientLocalDate?: string
+    ): Promise<AiChatResponse> {
         if (!this.apiKey) {
             throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno del servidor.');
         }
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = clientLocalDate || (() => {
+            const local = new Date(Date.now() - (tzOffset * 60_000));
+            return local.toISOString().split('T')[0];
+        })();
         const systemInstruction = this.getSystemInstruction(todayStr);
 
         // Formatear historial existente
@@ -122,7 +132,7 @@ REGLAS ESTRICTAS DE COMPORTAMIENTO Y PRIVACIDAD:
                 const call = part.functionCall;
                 console.log(`[Guardián AI] Ejecutando herramienta ${call.name} para negocio ${businessId} con args:`, call.args);
                 
-                const execResult = await executeAiTool(call.name, call.args, businessId);
+                const execResult = await executeAiTool(call.name, call.args, businessId, tzOffset);
 
                 if (execResult.action) {
                     collectedActions.push(execResult.action);
