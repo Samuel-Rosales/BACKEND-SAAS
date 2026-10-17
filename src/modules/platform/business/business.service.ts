@@ -316,6 +316,7 @@ export class BusinessService {
       // Sanitización: Solo permitimos campos cosméticos aquí
       const allowedData = {
         name: data.name,
+        document: data.document !== undefined ? data.document : undefined,
         address: data.address,
         logoUrl: data.logoUrl,
         businessCategoryId: data.businessCategoryId,
@@ -391,6 +392,8 @@ export class BusinessService {
     enableManagerCommission?: boolean;
     managerCommissionPercentage?: number;
     managerMemberId?: number | null;
+    enableLateFee?: boolean;
+    lateFeePercentage?: number;
   }) {
     try {
       // Seguridad Estricta: Solo OWNER debería cambiar políticas financieras globales
@@ -404,6 +407,9 @@ export class BusinessService {
       if (data.managerCommissionPercentage !== undefined && (data.managerCommissionPercentage < 0 || data.managerCommissionPercentage > 100)) {
         throw new BusinessError('El porcentaje de comisión gerencial debe estar entre 0 y 100.', 400);
       }
+      if (data.lateFeePercentage !== undefined && (data.lateFeePercentage < 0 || data.lateFeePercentage > 100)) {
+        throw new BusinessError('El porcentaje de recargo por mora debe estar entre 0 y 100.', 400);
+      }
 
       const updateData: any = {};
       if (data.enableGlobalCredit !== undefined) updateData.enableGlobalCredit = data.enableGlobalCredit;
@@ -413,6 +419,8 @@ export class BusinessService {
       if (data.managerMemberId !== undefined) {
         updateData.managerMemberId = data.managerMemberId ? Number(data.managerMemberId) : null;
       }
+      if (data.enableLateFee !== undefined) updateData.enableLateFee = data.enableLateFee;
+      if (data.lateFeePercentage !== undefined) updateData.lateFeePercentage = data.lateFeePercentage;
 
       const updated = await prisma.business.update({
         where: { id: businessId },
@@ -427,7 +435,9 @@ export class BusinessService {
             defaultCreditLimit: updated.defaultCreditLimit.toNumber(),
             enableManagerCommission: updated.enableManagerCommission,
             managerCommissionPercentage: Number(updated.managerCommissionPercentage),
-            managerMemberId: updated.managerMemberId
+            managerMemberId: updated.managerMemberId,
+            enableLateFee: updated.enableLateFee,
+            lateFeePercentage: Number(updated.lateFeePercentage || 10)
         }
       };
     } catch (error: any) {
@@ -564,6 +574,7 @@ export class BusinessService {
       const settingsDTO = {
           general: {
               name: business.name,
+              document: business.document || '',
               address: business.address,
               logoUrl: business.logoUrl,
               businessCategoryId: business.businessCategoryId,
@@ -579,7 +590,9 @@ export class BusinessService {
               defaultCreditLimit: business.defaultCreditLimit.toNumber(),
               enableManagerCommission: business.enableManagerCommission,
               managerCommissionPercentage: business.managerCommissionPercentage ? business.managerCommissionPercentage.toNumber() : 0,
-              managerMemberId: business.managerMemberId
+              managerMemberId: business.managerMemberId,
+              enableLateFee: business.enableLateFee ?? false,
+              lateFeePercentage: business.lateFeePercentage ? business.lateFeePercentage.toNumber() : 10
           },
           subscription: business.subscription ? {
               planType: business.subscription.planType,

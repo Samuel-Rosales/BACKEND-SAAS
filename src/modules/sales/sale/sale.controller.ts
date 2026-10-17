@@ -380,4 +380,81 @@ export class SaleController {
             });
         }
     }
+
+    async applyLateFee(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user;
+            const saleId = Number(req.params.id);
+            const installmentId = Number(req.params.installmentId);
+            const { customPercentage } = req.body || {};
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            if (isNaN(saleId) || isNaN(installmentId)) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Los IDs de venta y cuota deben ser números válidos',
+                    data: null
+                });
+            }
+
+            const { data, message, status } = await service.applyLateFee(businessId, saleId, installmentId, customPercentage);
+
+            return res.status(status).json({
+                data,
+                message
+            });
+        } catch (error) {
+            console.error('Error en SaleController.applyLateFee:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al aplicar mora',
+                data: null
+            });
+        }
+    }
+
+    async removeLateFee(req: Request, res: Response) {
+        try {
+            const { businessId } = req.user;
+            const saleId = Number(req.params.id);
+            const installmentId = Number(req.params.installmentId);
+
+            if (!businessId) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Falta el ID de la empresa en el header.',
+                    data: null
+                });
+            }
+
+            if (isNaN(saleId) || isNaN(installmentId)) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Los IDs de venta y cuota deben ser números válidos',
+                    data: null
+                });
+            }
+
+            const { data, message, status } = await service.removeLateFee(businessId, saleId, installmentId);
+
+            return res.status(status).json({
+                data,
+                message
+            });
+        } catch (error) {
+            console.error('Error en SaleController.removeLateFee:', error);
+            return res.status(500).json({
+                status: 500,
+                message: 'Error interno al exonerar mora',
+                data: null
+            });
+        }
+    }
 }

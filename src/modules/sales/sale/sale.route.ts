@@ -98,6 +98,20 @@ router.patch(
     controller.changePaymentMethod
 );
 
+// 8. Aplicar Recargo por Mora a Cuota
+router.post(
+    '/:id/installment/:installmentId/apply-late-fee',
+    requireBusinessPermission('CREDITS_SALES_COLLECT'),
+    controller.applyLateFee
+);
+
+// 9. Retirar / Exonerar Recargo por Mora a Cuota
+router.post(
+    '/:id/installment/:installmentId/remove-late-fee',
+    requireBusinessPermission('CREDITS_SALES_COLLECT'),
+    controller.removeLateFee
+);
+
 export const SaleRoute = router;
 
 export default router;

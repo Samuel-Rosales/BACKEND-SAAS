@@ -1547,7 +1547,10 @@ export class SaleService {
                             amount: true,
                             dueDate: true,
                             status: true,
-                            paidAt: true
+                            paidAt: true,
+                            lateFeeAmount: true,
+                            lateFeePercentage: true,
+                            isLateFeeApplied: true
                         }
                     }
                 },
@@ -1587,7 +1590,10 @@ export class SaleService {
                     amount: Number(inst.amount),
                     dueDate: inst.dueDate,
                     status: inst.status,
-                    paidAt: inst.paidAt
+                    paidAt: inst.paidAt,
+                    lateFeeAmount: Number(inst.lateFeeAmount || 0),
+                    lateFeePercentage: Number(inst.lateFeePercentage || 0),
+                    isLateFeeApplied: Boolean(inst.isLateFeeApplied)
                 }))
             }));
 
@@ -1609,15 +1615,15 @@ export class SaleService {
 
     async getPaymentHistory(businessId: number, saleId: number) {
         try {
-            // 1. Get Sale + Installments
+            // 1. Get Sale + Installments + Business policy
             const sale = await prisma.sale.findUnique({
                 where: { id: saleId, businessId },
                 include: {
-                    // ✅ Fetch Installments to show the plan
                     installments: {
                         orderBy: { number: 'asc' }
                     },
-                    client: { select: { name: true } }
+                    client: { select: { name: true } },
+                    business: { select: { enableLateFee: true, lateFeePercentage: true } }
                 }
             });
 
@@ -1665,7 +1671,10 @@ export class SaleService {
                 amountPaid: Number(ins.amountPaid),
                 dueDate: ins.dueDate,
                 status: ins.status, // PENDING, PAID, PARTIAL
-                paidAt: ins.paidAt
+                paidAt: ins.paidAt,
+                lateFeeAmount: Number(ins.lateFeeAmount || 0),
+                lateFeePercentage: Number(ins.lateFeePercentage || 0),
+                isLateFeeApplied: Boolean(ins.isLateFeeApplied)
             }));
 
             return {
@@ -1682,6 +1691,10 @@ export class SaleService {
                         currentDebt: Number(sale.remainingBalance),
                         totalPaid: Number(sale.totalAmount) - Number(sale.remainingBalance)
                     },
+                    lateFeeConfig: {
+                        enabled: sale.business?.enableLateFee ?? false,
+                        percentage: Number(sale.business?.lateFeePercentage || 10)
+                    },
                     // ✅ We send both lists now
                     plan: formattedInstallments,
                     history: formattedPayments
@@ -1691,6 +1704,185 @@ export class SaleService {
         } catch (error) {
             console.error(error);
             return { status: 500, message: 'Error interno', data: null };
+        }
+    }
+
+    async applyLateFee(businessId: number, saleId: number, installmentId: number, customPercentage?: number) {
+        try {
+            return await prisma.$transaction(async (tx) => {
+                const sale = await tx.sale.findUnique({
+                    where: { id: saleId, businessId },
+                    include: {
+                        business: { select: { enableLateFee: true, lateFeePercentage: true } }
+                    }
+                });
+
+                if (!sale) {
+                    throw new BusinessError('Venta no encontrada', 404);
+                }
+
+                const installment = await tx.saleInstallment.findFirst({
+                    where: { id: installmentId, saleId }
+                });
+
+                if (!installment) {
+                    throw new BusinessError('Cuota no encontrada', 404);
+                }
+
+                if (installment.status === InstallmentStatus.PAID) {
+                    throw new BusinessError('No se puede aplicar mora a una cuota que ya está pagada.', 400);
+                }
+
+                if (installment.isLateFeeApplied) {
+                    throw new BusinessError('Esta cuota ya tiene un recargo por mora aplicado.', 400);
+                }
+
+                const percentage = customPercentage !== undefined && Number(customPercentage) > 0
+                    ? Number(customPercentage)
+                    : Number(sale.business?.lateFeePercentage || 10);
+
+                if (percentage <= 0 || percentage > 100) {
+                    throw new BusinessError('El porcentaje de mora debe estar entre 1% y 100%.', 400);
+                }
+
+                // Base sobre la que se aplica la mora: el saldo pendiente de esta cuota
+                const currentAmount = new Decimal(installment.amount);
+                const currentAmountPaid = new Decimal(installment.amountPaid);
+                const pendingInstallmentAmount = currentAmount.sub(currentAmountPaid);
+
+                if (pendingInstallmentAmount.lte(0)) {
+                    throw new BusinessError('La cuota no tiene saldo pendiente por pagar.', 400);
+                }
+
+                const lateFeeDecimal = pendingInstallmentAmount
+                    .mul(new Decimal(percentage))
+                    .div(new Decimal(100))
+                    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+                if (lateFeeDecimal.lte(0)) {
+                    throw new BusinessError('El recargo por mora calculado es 0.', 400);
+                }
+
+                const newInstallmentAmount = currentAmount.add(lateFeeDecimal);
+
+                // Actualizar la cuota
+                await tx.saleInstallment.update({
+                    where: { id: installmentId },
+                    data: {
+                        amount: newInstallmentAmount,
+                        lateFeeAmount: lateFeeDecimal,
+                        lateFeePercentage: new Decimal(percentage),
+                        isLateFeeApplied: true
+                    }
+                });
+
+                // Actualizar la venta (totalAmount y remainingBalance)
+                const updatedTotalAmount = new Decimal(sale.totalAmount).add(lateFeeDecimal);
+                const updatedRemainingBalance = new Decimal(sale.remainingBalance).add(lateFeeDecimal);
+
+                await tx.sale.update({
+                    where: { id: saleId },
+                    data: {
+                        totalAmount: updatedTotalAmount,
+                        remainingBalance: updatedRemainingBalance
+                    }
+                });
+
+                return {
+                    status: 200,
+                    message: `Mora del ${percentage}% (+$${lateFeeDecimal}) aplicada exitosamente a la cuota #${installment.number}`,
+                    data: {
+                        saleId,
+                        installmentId,
+                        lateFeeAmount: lateFeeDecimal.toNumber(),
+                        lateFeePercentage: percentage,
+                        newInstallmentAmount: newInstallmentAmount.toNumber(),
+                        newTotalAmount: updatedTotalAmount.toNumber(),
+                        newRemainingBalance: updatedRemainingBalance.toNumber()
+                    }
+                };
+            });
+        } catch (error: any) {
+            if (error instanceof BusinessError) {
+                return { status: error.status, message: error.message, data: null };
+            }
+            console.error('Error al aplicar mora:', error);
+            return { status: 500, message: error.message || 'Error al aplicar mora', data: null };
+        }
+    }
+
+    async removeLateFee(businessId: number, saleId: number, installmentId: number) {
+        try {
+            return await prisma.$transaction(async (tx) => {
+                const sale = await tx.sale.findUnique({
+                    where: { id: saleId, businessId }
+                });
+
+                if (!sale) {
+                    throw new BusinessError('Venta no encontrada', 404);
+                }
+
+                const installment = await tx.saleInstallment.findFirst({
+                    where: { id: installmentId, saleId }
+                });
+
+                if (!installment) {
+                    throw new BusinessError('Cuota no encontrada', 404);
+                }
+
+                if (!installment.isLateFeeApplied || new Decimal(installment.lateFeeAmount).lte(0)) {
+                    throw new BusinessError('Esta cuota no tiene un recargo por mora aplicado.', 400);
+                }
+
+                const lateFeeDecimal = new Decimal(installment.lateFeeAmount);
+                const newInstallmentAmount = new Decimal(installment.amount).sub(lateFeeDecimal);
+
+                // No permitir revertir si el cliente ya pagó ese dinero
+                if (new Decimal(installment.amountPaid).gt(newInstallmentAmount)) {
+                    throw new BusinessError('No se puede anular la mora porque ya se registraron pagos sobre ese monto.', 400);
+                }
+
+                // Actualizar la cuota
+                await tx.saleInstallment.update({
+                    where: { id: installmentId },
+                    data: {
+                        amount: newInstallmentAmount,
+                        lateFeeAmount: new Decimal(0),
+                        lateFeePercentage: new Decimal(0),
+                        isLateFeeApplied: false
+                    }
+                });
+
+                // Actualizar la venta
+                const updatedTotalAmount = new Decimal(sale.totalAmount).sub(lateFeeDecimal);
+                const updatedRemainingBalance = new Decimal(sale.remainingBalance).sub(lateFeeDecimal);
+
+                await tx.sale.update({
+                    where: { id: saleId },
+                    data: {
+                        totalAmount: updatedTotalAmount,
+                        remainingBalance: updatedRemainingBalance
+                    }
+                });
+
+                return {
+                    status: 200,
+                    message: `Mora de $${lateFeeDecimal} exonerada / retirada de la cuota #${installment.number}`,
+                    data: {
+                        saleId,
+                        installmentId,
+                        newInstallmentAmount: newInstallmentAmount.toNumber(),
+                        newTotalAmount: updatedTotalAmount.toNumber(),
+                        newRemainingBalance: updatedRemainingBalance.toNumber()
+                    }
+                };
+            });
+        } catch (error: any) {
+            if (error instanceof BusinessError) {
+                return { status: error.status, message: error.message, data: null };
+            }
+            console.error('Error al retirar mora:', error);
+            return { status: 500, message: error.message || 'Error al retirar mora', data: null };
         }
     }
 

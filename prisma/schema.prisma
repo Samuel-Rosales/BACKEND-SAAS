@@ -136,6 +136,7 @@ model Business {
   businessCategory   BusinessCategory @relation(fields: [businessCategoryId], references: [id])
 
   address   String
+  document  String? // RIF o Cédula Fiscal de la empresa
   logoUrl   String? // Logo del negocio
   closingNotificationPhone String? // Número de WhatsApp para reportes de cierre
   ticketConfig             Json?   // Configuración personalizada de diseño de tickets térmicos
@@ -158,6 +159,8 @@ model Business {
   // POLÍTICA GLOBAL
   defaultCreditLimit Decimal @default(100) @db.Decimal(15, 2) // Ej: Todos nacen con $100
   enableGlobalCredit Boolean @default(true) // Interruptor general
+  enableLateFee      Boolean @default(false) // Recargo por mora en cuotas vencidas
+  lateFeePercentage  Decimal @default(10.00) @db.Decimal(5, 2) // Porcentaje de mora (ej: 10%)
 
   // --- COMISIÓN GERENCIAL GLOBAL (Exclusivo por Tienda / Plan PREMIUM) ---
   enableManagerCommission     Boolean         @default(false)
@@ -640,6 +643,10 @@ model SaleInstallment {
   dueDate     DateTime @db.Date
   status      InstallmentStatus @default(PENDING)
   paidAt      DateTime?
+
+  lateFeeAmount     Decimal  @default(0) @db.Decimal(15, 2) // Monto de recargo por mora aplicado
+  lateFeePercentage Decimal  @default(0) @db.Decimal(5, 2)  // Porcentaje aplicado (ej: 10.00)
+  isLateFeeApplied  Boolean  @default(false)
 
   sale        Sale     @relation(fields: [saleId], references: [id])
 }
