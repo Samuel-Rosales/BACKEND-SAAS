@@ -174,7 +174,12 @@ body('installments')
       .optional()
       .trim()
       .isString()
-      .isLength({ max: 200 }).withMessage('La referencia no puede exceder 200 caracteres')
+      .isLength({ max: 200 }).withMessage('La referencia no puede exceder 200 caracteres'),
+
+    body('cashRegisterId')
+      .optional({ nullable: true })
+      .isInt({ min: 1 }).withMessage('El ID de caja debe ser un número entero')
+      .toInt()
   ];
 
   public validateId: ValidationChain[] = [

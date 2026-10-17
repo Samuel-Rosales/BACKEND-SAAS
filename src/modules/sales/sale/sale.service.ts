@@ -1,6 +1,6 @@
 import { prisma } from '@/configs';
 import { CreateSaleInterface, CreateSalePaymentDto, UpdateSaleInterface } from './interfaces';
-import { PaymentStatus, Conditions, SaleStatus, SaleType, ProductType, Prisma, MovementType, Currency, InstallmentStatus, QuotationStatus } from '@prisma/client';
+import { PaymentStatus, Conditions, SaleStatus, SaleType, ProductType, Prisma, MovementType, Currency, InstallmentStatus, QuotationStatus, CashStatus } from '@prisma/client';
 import { BusinessError } from '@/utils/catch-errors.util';
 import { computeClientDebt, resolveBusinessExchangeRate } from '@/utils';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -1278,17 +1278,33 @@ export class SaleService {
                     throw new BusinessError(`El monto ($${paymentInBaseCurrency}) supera la deuda pendiente ($${sale.remainingBalance})`, 400);
                 }
 
-                    // 5. Crear el registro del Pago (Histórico)
-                    const newPayment = await tx.salePayment.create({
-                        data: {
-                            saleId,
-                            paymentMethodId: data.paymentMethodId,
-                            exchangeRateId: exchangeRate.id,
-                            amount: new Decimal(data.amount), // Guardamos el monto original
-                            reference: data.reference || "N/A",
-                            paymentProofUrl: data.paymentProofUrl
-                        }
+                // 4.5. Validar Caja Registradora de Mostrador (Opcional)
+                let targetRegisterId: number | null = null;
+                if (data.cashRegisterId) {
+                    const reg = await tx.cashRegister.findFirst({
+                        where: { id: data.cashRegisterId, businessId, status: CashStatus.OPEN }
                     });
+                    if (reg) {
+                        targetRegisterId = reg.id;
+                    }
+                }
+
+                // 5. Crear el registro del Pago (Histórico)
+                const newPayment = await tx.salePayment.create({
+                    data: {
+                        saleId,
+                        paymentMethodId: data.paymentMethodId,
+                        exchangeRateId: exchangeRate.id,
+                        amount: new Decimal(data.amount), // Guardamos el monto original
+                        reference: data.reference || "N/A",
+                        paymentProofUrl: data.paymentProofUrl,
+                        cashRegisterId: targetRegisterId
+                    },
+                    include: {
+                        paymentMethod: true,
+                        exchangeRate: true
+                    }
+                });
 
 
                 // =================================================================
@@ -1386,7 +1402,40 @@ export class SaleService {
                 });
 
                 return {
-                    payment: newPayment,
+                    payment: {
+                        id: newPayment.id,
+                        amount: Number(newPayment.amount),
+                        date: newPayment.date,
+                        reference: newPayment.reference,
+                        paymentProofUrl: newPayment.paymentProofUrl,
+                        cashRegisterId: newPayment.cashRegisterId,
+                        paymentMethod: {
+                            id: paymentMethod.id,
+                            name: paymentMethod.name,
+                            type: paymentMethod.type,
+                            currency: paymentMethod.currency
+                        },
+                        exchangeRate: {
+                            id: exchangeRate.id,
+                            rate: Number(exchangeRate.rate)
+                        }
+                    },
+                    sale: {
+                        id: sale.id,
+                        receiptNumber: sale.receiptNumber,
+                        createdAt: sale.createdAt,
+                        totalAmount: Number(sale.totalAmount),
+                        previousBalance: Number(currentDebt),
+                        newBalance: Number(newBalance),
+                        status: newStatus,
+                        client: {
+                            id: sale.client.id,
+                            name: sale.client.name,
+                            ci: sale.client.ci,
+                            phone: sale.client.phone,
+                            address: sale.client.address
+                        }
+                    },
                     newBalance: newBalance,
                     status: newStatus,
                     message: newStatus === PaymentStatus.PAID ? '¡Venta liquidada correctamente!' : 'Abono registrado correctamente'

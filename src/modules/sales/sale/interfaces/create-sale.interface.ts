@@ -23,6 +23,7 @@ export interface CreateSalePaymentDto {
     reference: string;
     exchangeRateId: number;
     paymentProofUrl?: string; // Comprobante de pago
+    cashRegisterId?: number | null; // Opcional: Para ingresar a caja de turno en mostrador
 }
 
 

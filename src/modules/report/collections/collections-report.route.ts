@@ -30,4 +30,18 @@ router.get(
     controller.generateReportPDF
 );
 
+// GET /api/v1/report/collections/cash-box
+router.get(
+    '/cash-box',
+    requireBusinessPermission('REPORTS_COLLECTIONS_VIEW'),
+    controller.getCashBox
+);
+
+// GET /api/v1/report/collections/consolidated-income
+router.get(
+    '/consolidated-income',
+    requireBusinessPermission('REPORTS_COLLECTIONS_VIEW'),
+    controller.getConsolidatedIncome
+);
+
 export const CollectionsReportRoute = router;

@@ -472,5 +472,363 @@ export class CollectionsReportService {
             return { status: 500, message: 'Error interno al generar PDF de cobranza', data: null };
         }
     }
+
+    /**
+     * CAJA DE COBRANZA:
+     * Reporte detallado de fondos recaudados por concepto de abonos a crédito en el período.
+     */
+    async getCashBox(businessId: number, query: DateRangeQuery) {
+        const now = new Date();
+        const tzOffsetMinutes = (() => {
+            if (query.tzOffset === null || query.tzOffset === undefined) {
+                return new Date().getTimezoneOffset();
+            }
+            const parsed = Number(query.tzOffset);
+            return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+        })();
+
+        const defaultMonthRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, 0);
+        let rangeStart = defaultMonthRange.start;
+        let rangeEnd = defaultMonthRange.end;
+
+        if (query.fromDate && query.toDate) {
+            rangeStart = parseDateOnlyStart(query.fromDate, tzOffsetMinutes);
+            rangeEnd = parseDateOnlyEnd(query.toDate, tzOffsetMinutes);
+        } else if (query.fromDate && !query.toDate) {
+            rangeStart = parseDateOnlyStart(query.fromDate, tzOffsetMinutes);
+            rangeEnd = now;
+        } else if (!query.fromDate && query.toDate) {
+            const base = parseDateOnlyStart(query.toDate, tzOffsetMinutes);
+            const monthRange = getLocalMonthRangeUtc(base, tzOffsetMinutes, 0);
+            rangeStart = monthRange.start;
+            rangeEnd = parseDateOnlyEnd(query.toDate, tzOffsetMinutes);
+        }
+
+        try {
+            const payments = await prisma.salePayment.findMany({
+                where: {
+                    sale: {
+                        businessId,
+                        conditions: 'CREDIT',
+                        status: 'COMPLETED',
+                        deletedAt: null
+                    },
+                    date: { gte: rangeStart, lte: rangeEnd }
+                },
+                include: {
+                    paymentMethod: { select: { id: true, name: true, type: true, currency: true } },
+                    exchangeRate: { select: { rate: true } },
+                    sale: {
+                        select: {
+                            id: true,
+                            receiptNumber: true,
+                            client: { select: { id: true, name: true, ci: true, phone: true } }
+                        }
+                    }
+                },
+                orderBy: { date: 'desc' }
+            });
+
+            let totalCollectedUSD = new Decimal(0);
+            let totalCollectedVES = new Decimal(0);
+            let counterUSD = new Decimal(0);
+            let counterCount = 0;
+            let adminUSD = new Decimal(0);
+            let adminCount = 0;
+
+            const methodsMap = new Map<number, {
+                id: number;
+                methodName: string;
+                paymentType: string;
+                currency: string;
+                count: number;
+                totalUSD: Decimal;
+                totalVES: Decimal;
+            }>();
+
+            for (const pay of payments) {
+                const amt = new Decimal(pay.amount);
+                const curr = pay.paymentMethod?.currency || 'USD';
+                const rate = pay.exchangeRate?.rate ? new Decimal(pay.exchangeRate.rate) : new Decimal(1);
+
+                let usdEquivalent = new Decimal(0);
+                let vesEquivalent = new Decimal(0);
+
+                if (curr === 'USD') {
+                    usdEquivalent = amt;
+                    vesEquivalent = rate.gt(0) ? amt.mul(rate) : new Decimal(0);
+                } else {
+                    vesEquivalent = amt;
+                    usdEquivalent = rate.gt(0) ? amt.div(rate) : new Decimal(0);
+                }
+
+                totalCollectedUSD = totalCollectedUSD.add(usdEquivalent);
+                totalCollectedVES = totalCollectedVES.add(vesEquivalent);
+
+                // Canal: Mostrador (con caja activa) vs Administrativo (WhatsApp / Banco)
+                if (pay.cashRegisterId) {
+                    counterUSD = counterUSD.add(usdEquivalent);
+                    counterCount++;
+                } else {
+                    adminUSD = adminUSD.add(usdEquivalent);
+                    adminCount++;
+                }
+
+                // Desglose por Método
+                const mId = pay.paymentMethod?.id || 0;
+                if (!methodsMap.has(mId)) {
+                    methodsMap.set(mId, {
+                        id: mId,
+                        methodName: pay.paymentMethod?.name || 'Otro',
+                        paymentType: String(pay.paymentMethod?.type || 'OTHER'),
+                        currency: curr,
+                        count: 0,
+                        totalUSD: new Decimal(0),
+                        totalVES: new Decimal(0)
+                    });
+                }
+                const mEntry = methodsMap.get(mId)!;
+                mEntry.count++;
+                mEntry.totalUSD = mEntry.totalUSD.add(usdEquivalent);
+                mEntry.totalVES = mEntry.totalVES.add(vesEquivalent);
+            }
+
+            const totalNum = totalCollectedUSD.toNumber();
+            const methods = Array.from(methodsMap.values()).map(m => {
+                const usd = m.totalUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+                const ves = m.totalVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+                const percentage = totalNum > 0 ? Number(((usd / totalNum) * 100).toFixed(1)) : 0;
+                return {
+                    id: m.id,
+                    methodName: m.methodName,
+                    paymentType: m.paymentType,
+                    currency: m.currency,
+                    count: m.count,
+                    totalUSD: usd,
+                    totalVES: ves,
+                    percentage
+                };
+            }).sort((a, b) => b.totalUSD - a.totalUSD);
+
+            return {
+                status: 200,
+                message: 'Caja de cobranza obtenida exitosamente',
+                data: {
+                    totalCollectedUSD: totalCollectedUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                    totalCollectedVES: totalCollectedVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                    paymentsCount: payments.length,
+                    channels: {
+                        counter: {
+                            count: counterCount,
+                            totalUSD: counterUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
+                        },
+                        administrative: {
+                            count: adminCount,
+                            totalUSD: adminUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
+                        }
+                    },
+                    methods,
+                    payments: payments.slice(0, 100).map(p => ({
+                        id: p.id,
+                        date: p.date,
+                        amount: Number(p.amount),
+                        reference: p.reference,
+                        paymentProofUrl: p.paymentProofUrl,
+                        cashRegisterId: p.cashRegisterId,
+                        channel: p.cashRegisterId ? 'COUNTER' : 'ADMINISTRATIVE',
+                        methodName: p.paymentMethod?.name || 'N/A',
+                        currency: p.paymentMethod?.currency || 'USD',
+                        clientName: p.sale.client.name,
+                        clientCi: p.sale.client.ci,
+                        saleReceiptNumber: p.sale.receiptNumber,
+                        saleId: p.sale.id
+                    }))
+                }
+            };
+        } catch (error) {
+            console.error('Error al obtener caja de cobranza:', error);
+            return { status: 500, message: 'Error interno al obtener caja de cobranza', data: null };
+        }
+    }
+
+    /**
+     * REPORTE CONSOLIDADO DE INGRESOS (VENTAS VS COBRANZAS):
+     * Muestra todo el dinero que entró a la empresa en el período,
+     * diferenciando con total nitidez lo que ingresó por ventas de contado vs recuperación de deudas.
+     */
+    async getConsolidatedIncome(businessId: number, query: DateRangeQuery) {
+        const now = new Date();
+        const tzOffsetMinutes = (() => {
+            if (query.tzOffset === null || query.tzOffset === undefined) {
+                return new Date().getTimezoneOffset();
+            }
+            const parsed = Number(query.tzOffset);
+            return Number.isFinite(parsed) ? parsed : new Date().getTimezoneOffset();
+        })();
+
+        const defaultMonthRange = getLocalMonthRangeUtc(now, tzOffsetMinutes, 0);
+        let rangeStart = defaultMonthRange.start;
+        let rangeEnd = defaultMonthRange.end;
+
+        if (query.fromDate && query.toDate) {
+            rangeStart = parseDateOnlyStart(query.fromDate, tzOffsetMinutes);
+            rangeEnd = parseDateOnlyEnd(query.toDate, tzOffsetMinutes);
+        } else if (query.fromDate && !query.toDate) {
+            rangeStart = parseDateOnlyStart(query.fromDate, tzOffsetMinutes);
+            rangeEnd = now;
+        } else if (!query.fromDate && query.toDate) {
+            const base = parseDateOnlyStart(query.toDate, tzOffsetMinutes);
+            const monthRange = getLocalMonthRangeUtc(base, tzOffsetMinutes, 0);
+            rangeStart = monthRange.start;
+            rangeEnd = parseDateOnlyEnd(query.toDate, tzOffsetMinutes);
+        }
+
+        try {
+            const allPayments = await prisma.salePayment.findMany({
+                where: {
+                    sale: {
+                        businessId,
+                        status: 'COMPLETED',
+                        deletedAt: null
+                    },
+                    date: { gte: rangeStart, lte: rangeEnd }
+                },
+                include: {
+                    paymentMethod: { select: { id: true, name: true, type: true, currency: true } },
+                    exchangeRate: { select: { rate: true } },
+                    sale: { select: { conditions: true } }
+                }
+            });
+
+            let totalInflowUSD = new Decimal(0);
+            let totalInflowVES = new Decimal(0);
+
+            let salesUSD = new Decimal(0);
+            let salesVES = new Decimal(0);
+            let salesCount = 0;
+
+            let collectionsUSD = new Decimal(0);
+            let collectionsVES = new Decimal(0);
+            let collectionsCount = 0;
+
+            const matrixMap = new Map<number, {
+                id: number;
+                methodName: string;
+                paymentType: string;
+                currency: string;
+                salesUSD: Decimal;
+                collectionsUSD: Decimal;
+                totalUSD: Decimal;
+                totalVES: Decimal;
+                count: number;
+            }>();
+
+            for (const pay of allPayments) {
+                const amt = new Decimal(pay.amount);
+                const curr = pay.paymentMethod?.currency || 'USD';
+                const rate = pay.exchangeRate?.rate ? new Decimal(pay.exchangeRate.rate) : new Decimal(1);
+
+                let usdEquivalent = new Decimal(0);
+                let vesEquivalent = new Decimal(0);
+
+                if (curr === 'USD') {
+                    usdEquivalent = amt;
+                    vesEquivalent = rate.gt(0) ? amt.mul(rate) : new Decimal(0);
+                } else {
+                    vesEquivalent = amt;
+                    usdEquivalent = rate.gt(0) ? amt.div(rate) : new Decimal(0);
+                }
+
+                totalInflowUSD = totalInflowUSD.add(usdEquivalent);
+                totalInflowVES = totalInflowVES.add(vesEquivalent);
+
+                const isCredit = pay.sale.conditions === 'CREDIT';
+
+                if (isCredit) {
+                    collectionsUSD = collectionsUSD.add(usdEquivalent);
+                    collectionsVES = collectionsVES.add(vesEquivalent);
+                    collectionsCount++;
+                } else {
+                    salesUSD = salesUSD.add(usdEquivalent);
+                    salesVES = salesVES.add(vesEquivalent);
+                    salesCount++;
+                }
+
+                const mId = pay.paymentMethod?.id || 0;
+                if (!matrixMap.has(mId)) {
+                    matrixMap.set(mId, {
+                        id: mId,
+                        methodName: pay.paymentMethod?.name || 'Otro',
+                        paymentType: String(pay.paymentMethod?.type || 'OTHER'),
+                        currency: curr,
+                        salesUSD: new Decimal(0),
+                        collectionsUSD: new Decimal(0),
+                        totalUSD: new Decimal(0),
+                        totalVES: new Decimal(0),
+                        count: 0
+                    });
+                }
+                const row = matrixMap.get(mId)!;
+                row.count++;
+                row.totalUSD = row.totalUSD.add(usdEquivalent);
+                row.totalVES = row.totalVES.add(vesEquivalent);
+                if (isCredit) {
+                    row.collectionsUSD = row.collectionsUSD.add(usdEquivalent);
+                } else {
+                    row.salesUSD = row.salesUSD.add(usdEquivalent);
+                }
+            }
+
+            const totalInflowNum = totalInflowUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+            const salesNum = salesUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+            const collectionsNum = collectionsUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+
+            const salesPct = totalInflowNum > 0 ? Number(((salesNum / totalInflowNum) * 100).toFixed(1)) : 0;
+            const collectionsPct = totalInflowNum > 0 ? Number(((collectionsNum / totalInflowNum) * 100).toFixed(1)) : 0;
+
+            const matrix = Array.from(matrixMap.values()).map(r => {
+                const totalRowUSD = r.totalUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+                const totalRowVES = r.totalVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+                const pct = totalInflowNum > 0 ? Number(((totalRowUSD / totalInflowNum) * 100).toFixed(1)) : 0;
+                return {
+                    id: r.id,
+                    methodName: r.methodName,
+                    paymentType: r.paymentType,
+                    currency: r.currency,
+                    salesUSD: r.salesUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                    collectionsUSD: r.collectionsUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                    totalUSD: totalRowUSD,
+                    totalVES: totalRowVES,
+                    count: r.count,
+                    percentage: pct
+                };
+            }).sort((a, b) => b.totalUSD - a.totalUSD);
+
+            return {
+                status: 200,
+                message: 'Consolidado de ingresos obtenido exitosamente',
+                data: {
+                    totalInflowUSD: totalInflowNum,
+                    totalInflowVES: totalInflowVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                    sales: {
+                        totalUSD: salesNum,
+                        totalVES: salesVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                        count: salesCount,
+                        percentage: salesPct
+                    },
+                    collections: {
+                        totalUSD: collectionsNum,
+                        totalVES: collectionsVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                        count: collectionsCount,
+                        percentage: collectionsPct
+                    },
+                    matrix
+                }
+            };
+        } catch (error) {
+            console.error('Error al calcular consolidado de ingresos:', error);
+            return { status: 500, message: 'Error interno al calcular consolidado de ingresos', data: null };
+        }
+    }
 }
 

@@ -133,5 +133,59 @@ export class CollectionsReportController {
             return res.status(500).json({ error: 'Error interno al generar PDF de cobranza' });
         }
     };
+
+    getCashBox = async (req: Request, res: Response) => {
+        const { businessId } = req.user;
+        const fromDate = req.query.fromDate as string | undefined;
+        const toDate = req.query.toDate as string | undefined;
+        const tzOffset = req.query.tzOffset === undefined ? undefined : Number(req.query.tzOffset);
+
+        if (!businessId) {
+            return res.status(400).json({ message: 'Falta el header x-business-id' });
+        }
+
+        try {
+            const result = await service.getCashBox(Number(businessId), {
+                fromDate,
+                toDate,
+                tzOffset
+            });
+
+            return res.status(result.status).json({
+                message: result.message,
+                data: result.data
+            });
+        } catch (error) {
+            console.error('Error in CollectionsReportController.getCashBox:', error);
+            return res.status(500).json({ error: 'Error interno al obtener caja de cobranza' });
+        }
+    };
+
+    getConsolidatedIncome = async (req: Request, res: Response) => {
+        const { businessId } = req.user;
+        const fromDate = req.query.fromDate as string | undefined;
+        const toDate = req.query.toDate as string | undefined;
+        const tzOffset = req.query.tzOffset === undefined ? undefined : Number(req.query.tzOffset);
+
+        if (!businessId) {
+            return res.status(400).json({ message: 'Falta el header x-business-id' });
+        }
+
+        try {
+            const result = await service.getConsolidatedIncome(Number(businessId), {
+                fromDate,
+                toDate,
+                tzOffset
+            });
+
+            return res.status(result.status).json({
+                message: result.message,
+                data: result.data
+            });
+        } catch (error) {
+            console.error('Error in CollectionsReportController.getConsolidatedIncome:', error);
+            return res.status(500).json({ error: 'Error interno al obtener consolidado de ingresos' });
+        }
+    };
 }
 
