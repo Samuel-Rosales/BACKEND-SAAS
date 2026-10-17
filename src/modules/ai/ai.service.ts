@@ -200,8 +200,20 @@ El usuario puede formular sus preguntas con absoluta libertad, de manera espont�
                 }
             };
 
-            const secondResponse = await this.callGeminiApi(candidateModel, followUpPayload);
-            const secondCandidate = secondResponse.data?.candidates?.[0];
+            let secondResponse: any = null;
+            for (const model of candidateModels) {
+                try {
+                    candidateModel = model;
+                    secondResponse = await this.callGeminiApi(model, followUpPayload);
+                    if (secondResponse && secondResponse.status === 200) {
+                        break;
+                    }
+                } catch (err: any) {
+                    console.warn(`[Guardián AI] Falló follow-up con modelo ${model}: ${err.message}. Probando fallback...`);
+                }
+            }
+
+            const secondCandidate = secondResponse?.data?.candidates?.[0];
             const secondParts = secondCandidate?.content?.parts || [];
             
             const finalReplyText = secondParts

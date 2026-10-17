@@ -406,17 +406,22 @@ export async function executeAiTool(
 
         case 'consultar_top_productos_mas_vendidos': {
             const limit = Math.min(Number(args?.limit ?? 5), 20);
-            const { fromStr, toStr, startDate, endDate } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+            const whereSale: any = {
+                businessId,
+                status: { not: 'CANCELLED' },
+                deletedAt: null
+            };
+            let periodoStr = 'Histórico global del negocio';
+            if (args?.fromDate || args?.toDate) {
+                const { fromStr, toStr, startDate, endDate } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+                whereSale.createdAt = { gte: startDate, lte: endDate };
+                periodoStr = `${fromStr} al ${toStr}`;
+            }
 
             const grouped = await prisma.saleItem.groupBy({
                 by: ['productId'],
                 where: {
-                    sale: {
-                        businessId,
-                        status: { not: 'CANCELLED' },
-                        deletedAt: null,
-                        createdAt: { gte: startDate, lte: endDate }
-                    }
+                    sale: whereSale
                 },
                 _sum: {
                     quantity: true,
@@ -449,7 +454,7 @@ export async function executeAiTool(
 
             return {
                 data: {
-                    periodo: `${fromStr} al ${toStr}`,
+                    periodo: periodoStr,
                     top_productos: ranking
                 }
             };
@@ -763,16 +768,21 @@ export async function executeAiTool(
 
         case 'consultar_top_clientes': {
             const limit = Math.min(Number(args?.limit ?? 5), 20);
-            const { fromStr, toStr, startDate, endDate } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+            const whereClause: any = {
+                businessId,
+                status: { not: 'CANCELLED' },
+                deletedAt: null
+            };
+            let periodoStr = 'Histórico global del negocio';
+            if (args?.fromDate || args?.toDate) {
+                const { fromStr, toStr, startDate, endDate } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+                whereClause.createdAt = { gte: startDate, lte: endDate };
+                periodoStr = `${fromStr} al ${toStr}`;
+            }
 
             const grouped = await prisma.sale.groupBy({
                 by: ['clientId'],
-                where: {
-                    businessId,
-                    status: { not: 'CANCELLED' },
-                    deletedAt: null,
-                    createdAt: { gte: startDate, lte: endDate }
-                },
+                where: whereClause,
                 _sum: { totalAmount: true },
                 _count: { id: true },
                 orderBy: { _sum: { totalAmount: 'desc' } },
@@ -788,7 +798,7 @@ export async function executeAiTool(
 
             return {
                 data: {
-                    periodo: `${fromStr} al ${toStr}`,
+                    periodo: periodoStr,
                     top_clientes: grouped.map(g => {
                         const c = clientMap.get(g.clientId);
                         return {
