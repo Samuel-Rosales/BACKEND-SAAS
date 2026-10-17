@@ -140,10 +140,15 @@ export class CashRegisterReportService {
                 }
             });
 
-            // Fetch all refunds for these registers
+            // Fetch all refunds for these registers (excluding refunds for cancelled sales whose payments were already excluded)
             const refunds = await prisma.creditNotePayment.findMany({
                 where: {
-                    cashRegisterId: { in: registerIds }
+                    cashRegisterId: { in: registerIds },
+                    creditNote: {
+                        sale: {
+                            status: { not: 'CANCELLED' }
+                        }
+                    }
                 },
                 include: {
                     paymentMethod: true,
@@ -400,6 +405,13 @@ export class CashRegisterReportService {
                         }
                     },
                     refunds: {
+                        where: {
+                            creditNote: {
+                                sale: {
+                                    status: { not: 'CANCELLED' }
+                                }
+                            }
+                        },
                         include: {
                             paymentMethod: true,
                             exchangeRate: true
