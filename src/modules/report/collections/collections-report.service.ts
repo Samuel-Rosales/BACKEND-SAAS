@@ -610,21 +610,55 @@ export class CollectionsReportService {
                 };
             }).sort((a, b) => b.totalUSD - a.totalUSD);
 
+            const totalUSDVal = totalCollectedUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+            const totalVESVal = totalCollectedVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+            const counterUSDVal = counterUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+            const adminUSDVal = adminUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+
+            const byMethod = methods.map(m => ({
+                methodId: m.id,
+                methodName: m.methodName,
+                type: m.paymentType,
+                currency: m.currency,
+                totalUsd: m.totalUSD,
+                totalVes: m.totalVES,
+                count: m.count,
+                percentage: m.percentage
+            }));
+
             return {
                 status: 200,
                 message: 'Caja de cobranza obtenida exitosamente',
                 data: {
-                    totalCollectedUSD: totalCollectedUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
-                    totalCollectedVES: totalCollectedVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                    summary: {
+                        totalCollectionsUsd: totalUSDVal,
+                        totalCollectionsVes: totalVESVal,
+                        count: payments.length
+                    },
+                    byChannel: {
+                        counter: {
+                            totalUsd: counterUSDVal,
+                            totalVes: totalUSDVal > 0 ? Number(((counterUSDVal / totalUSDVal) * totalVESVal).toFixed(2)) : 0,
+                            count: counterCount
+                        },
+                        administrative: {
+                            totalUsd: adminUSDVal,
+                            totalVes: totalUSDVal > 0 ? Number(((adminUSDVal / totalUSDVal) * totalVESVal).toFixed(2)) : 0,
+                            count: adminCount
+                        }
+                    },
+                    byMethod,
+                    totalCollectedUSD: totalUSDVal,
+                    totalCollectedVES: totalVESVal,
                     paymentsCount: payments.length,
                     channels: {
                         counter: {
                             count: counterCount,
-                            totalUSD: counterUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
+                            totalUSD: counterUSDVal
                         },
                         administrative: {
                             count: adminCount,
-                            totalUSD: adminUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
+                            totalUSD: adminUSDVal
                         }
                     },
                     methods,
@@ -804,10 +838,35 @@ export class CollectionsReportService {
                 };
             }).sort((a, b) => b.totalUSD - a.totalUSD);
 
+            const byMethod = matrix.map(r => ({
+                methodId: r.id,
+                methodName: r.methodName,
+                type: r.paymentType,
+                currency: r.currency,
+                cashSalesUsd: r.salesUSD,
+                collectionsUsd: r.collectionsUSD,
+                totalUsd: r.totalUSD,
+                totalVes: r.totalVES,
+                count: r.count,
+                percentage: r.percentage
+            }));
+
             return {
                 status: 200,
                 message: 'Consolidado de ingresos obtenido exitosamente',
                 data: {
+                    summary: {
+                        totalIncomeUsd: totalInflowNum,
+                        totalIncomeVes: totalInflowVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                        cashSalesUsd: salesNum,
+                        cashSalesVes: salesVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                        collectionsUsd: collectionsNum,
+                        collectionsVes: collectionsVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+                        cashSalesPercentage: salesPct,
+                        collectionsPercentage: collectionsPct,
+                        totalTransactions: allPayments.length
+                    },
+                    byMethod,
                     totalInflowUSD: totalInflowNum,
                     totalInflowVES: totalInflowVES.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
                     sales: {
