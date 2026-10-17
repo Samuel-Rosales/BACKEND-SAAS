@@ -137,6 +137,20 @@ export class SaleService {
                         : new Decimal(product.salePrice).mul(factor);
                 }
 
+                // Recargo por crédito si la tienda tiene habilitada la política
+                if (business.enableCreditPriceSurcharge) {
+                    const itemSurcharge = (item as any).surchargePercentage !== undefined
+                        ? Number((item as any).surchargePercentage)
+                        : (data.condition === Conditions.CREDIT && (data as any).creditSurchargePercentage !== undefined
+                            ? Number((data as any).creditSurchargePercentage)
+                            : 0);
+
+                    if (itemSurcharge > 0) {
+                        const surchargeDec = new Decimal(itemSurcharge);
+                        unitPrice = unitPrice.mul(new Decimal(1).add(surchargeDec.div(100))).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                    }
+                }
+
                 const lineGrossAmount = new Decimal(unitPrice).mul(item.quantity);
                 rawSubTotal = rawSubTotal.add(lineGrossAmount);
 

@@ -394,6 +394,8 @@ export class BusinessService {
     managerMemberId?: number | null;
     enableLateFee?: boolean;
     lateFeePercentage?: number;
+    enableCreditPriceSurcharge?: boolean;
+    creditSurchargePercentage?: number;
   }) {
     try {
       // Seguridad Estricta: Solo OWNER debería cambiar políticas financieras globales
@@ -410,6 +412,9 @@ export class BusinessService {
       if (data.lateFeePercentage !== undefined && (data.lateFeePercentage < 0 || data.lateFeePercentage > 100)) {
         throw new BusinessError('El porcentaje de recargo por mora debe estar entre 0 y 100.', 400);
       }
+      if (data.creditSurchargePercentage !== undefined && (data.creditSurchargePercentage < 0 || data.creditSurchargePercentage > 100)) {
+        throw new BusinessError('El porcentaje de recargo por crédito debe estar entre 0 y 100.', 400);
+      }
 
       const updateData: any = {};
       if (data.enableGlobalCredit !== undefined) updateData.enableGlobalCredit = data.enableGlobalCredit;
@@ -421,6 +426,8 @@ export class BusinessService {
       }
       if (data.enableLateFee !== undefined) updateData.enableLateFee = data.enableLateFee;
       if (data.lateFeePercentage !== undefined) updateData.lateFeePercentage = data.lateFeePercentage;
+      if (data.enableCreditPriceSurcharge !== undefined) updateData.enableCreditPriceSurcharge = data.enableCreditPriceSurcharge;
+      if (data.creditSurchargePercentage !== undefined) updateData.creditSurchargePercentage = data.creditSurchargePercentage;
 
       const updated = await prisma.business.update({
         where: { id: businessId },
@@ -437,7 +444,9 @@ export class BusinessService {
             managerCommissionPercentage: Number(updated.managerCommissionPercentage),
             managerMemberId: updated.managerMemberId,
             enableLateFee: updated.enableLateFee,
-            lateFeePercentage: Number(updated.lateFeePercentage || 10)
+            lateFeePercentage: Number(updated.lateFeePercentage || 10),
+            enableCreditPriceSurcharge: updated.enableCreditPriceSurcharge,
+            creditSurchargePercentage: Number(updated.creditSurchargePercentage || 10)
         }
       };
     } catch (error: any) {
@@ -592,7 +601,9 @@ export class BusinessService {
               managerCommissionPercentage: business.managerCommissionPercentage ? business.managerCommissionPercentage.toNumber() : 0,
               managerMemberId: business.managerMemberId,
               enableLateFee: business.enableLateFee ?? false,
-              lateFeePercentage: business.lateFeePercentage ? business.lateFeePercentage.toNumber() : 10
+              lateFeePercentage: business.lateFeePercentage ? business.lateFeePercentage.toNumber() : 10,
+              enableCreditPriceSurcharge: business.enableCreditPriceSurcharge ?? false,
+              creditSurchargePercentage: business.creditSurchargePercentage ? business.creditSurchargePercentage.toNumber() : 10
           },
           subscription: business.subscription ? {
               planType: business.subscription.planType,

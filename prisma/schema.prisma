@@ -161,6 +161,8 @@ model Business {
   enableGlobalCredit Boolean @default(true) // Interruptor general
   enableLateFee      Boolean @default(false) // Recargo por mora en cuotas vencidas
   lateFeePercentage  Decimal @default(10.00) @db.Decimal(5, 2) // Porcentaje de mora (ej: 10%)
+  enableCreditPriceSurcharge Boolean @default(false) // Recargo de precio en ventas a crédito (10% o 20%)
+  creditSurchargePercentage Decimal @default(10.00) @db.Decimal(5, 2) // Porcentaje de recargo por defecto
 
   // --- COMISIÓN GERENCIAL GLOBAL (Exclusivo por Tienda / Plan PREMIUM) ---
   enableManagerCommission     Boolean         @default(false)
