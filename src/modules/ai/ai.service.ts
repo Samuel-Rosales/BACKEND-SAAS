@@ -52,8 +52,19 @@ GUÍA DE SELECCIÓN DE HERRAMIENTAS ANTE CONSULTAS OPERATIVAS Y FINANCIERAS:
   -> INVOCAR: 'consultar_ingresos_consolidados'.
 - Productos con stock bajo o agotados:
   -> INVOCAR: 'consultar_productos_stock_bajo'.
+- Ranking de mejores clientes (ej: "¿quién es mi cliente estrella?", "¿quién me compra más?", "top clientes"):
+  -> INVOCAR: 'consultar_top_clientes'.
+- Compras a proveedores y reposición (ej: "¿qué le compramos a proveedores?", "¿cuánto compramos este mes?", "¿cuánto se le debe a proveedores?"):
+  -> INVOCAR: 'consultar_compras_proveedores'.
+- Estado de cajas registradoras (ej: "¿están abiertas las cajas?", "¿cómo está la caja?", "¿cuánto se abrió en caja?"):
+  -> INVOCAR: 'consultar_estado_cajas'.
+- Presupuestos y cotizaciones (ej: "¿cuántos presupuestos tenemos activos?", "¿qué cotizaciones están pendientes?"):
+  -> INVOCAR: 'consultar_cotizaciones_presupuestos'.
 - Información de la empresa (RIF, nombre, teléfono, tasa BCV):
-  -> INVOCAR: 'consultar_datos_empresa'.`
+  -> INVOCAR: 'consultar_datos_empresa'.
+
+COMPRENSIÓN TOTAL DE LENGUAJE ESPONTÁNEO Y COLOQUIAL:
+El usuario puede formular sus preguntas con absoluta libertad, de manera espontánea, coloquial o ejecutiva, sin necesidad de seguir formatos predefinidos ni palabras exactas. Interpreta siempre la intención operativa/financiera de su solicitud y activa la herramienta correspondiente (o varias si la consulta abarca múltiples áreas) para responder con exactitud analítica y datos reales.`
                 }
             ]
         };

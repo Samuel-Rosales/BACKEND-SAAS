@@ -180,6 +180,48 @@ export const AI_TOOL_DECLARATIONS = [
             type: 'OBJECT',
             properties: {}
         }
+    },
+    {
+        name: 'consultar_top_clientes',
+        description: 'Consulta el ranking de los clientes estrella que más compras han realizado en el negocio (ordenados por volumen total comprado en USD y número de pedidos).',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                limit: { type: 'NUMBER', description: 'Cantidad de clientes en el ranking. Por defecto 5.' },
+                fromDate: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD.' },
+                toDate: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD.' }
+            }
+        }
+    },
+    {
+        name: 'consultar_compras_proveedores',
+        description: 'Consulta las compras realizadas a proveedores de mercancía, facturas de compras recientes, total gastado en reposición y saldo pendiente por pagar a proveedores.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                fromDate: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD.' },
+                toDate: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD.' }
+            }
+        }
+    },
+    {
+        name: 'consultar_estado_cajas',
+        description: 'Consulta el estado operativo de las cajas registradoras de la empresa (si están abiertas o cerradas, cajero responsable, saldo inicial en apertura y montos de cierre).',
+        parameters: {
+            type: 'OBJECT',
+            properties: {}
+        }
+    },
+    {
+        name: 'consultar_cotizaciones_presupuestos',
+        description: 'Consulta las cotizaciones o presupuestos emitidos a clientes, montos totales cotizados y estados (pendientes, aprobados, rechazados).',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                fromDate: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD.' },
+                toDate: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD.' }
+            }
+        }
     }
 ];
 
@@ -716,6 +758,162 @@ export async function executeAiTool(
                     telefono_cierre: business.closingNotificationPhone || 'No configurado',
                     tasa_cambio_actual_bs: Number(business.currentExchangeRate)
                 } : { mensaje: 'Empresa no encontrada' }
+            };
+        }
+
+        case 'consultar_top_clientes': {
+            const limit = Math.min(Number(args?.limit ?? 5), 20);
+            const { fromStr, toStr, startDate, endDate } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+
+            const grouped = await prisma.sale.groupBy({
+                by: ['clientId'],
+                where: {
+                    businessId,
+                    status: { not: 'CANCELLED' },
+                    deletedAt: null,
+                    createdAt: { gte: startDate, lte: endDate }
+                },
+                _sum: { totalAmount: true },
+                _count: { id: true },
+                orderBy: { _sum: { totalAmount: 'desc' } },
+                take: limit
+            });
+
+            const clientIds = grouped.map(g => g.clientId);
+            const clients = await prisma.client.findMany({
+                where: { id: { in: clientIds } },
+                select: { id: true, name: true, ci: true, phone: true }
+            });
+            const clientMap = new Map(clients.map(c => [c.id, c]));
+
+            return {
+                data: {
+                    periodo: `${fromStr} al ${toStr}`,
+                    top_clientes: grouped.map(g => {
+                        const c = clientMap.get(g.clientId);
+                        return {
+                            cliente: c?.name || `Cliente #${g.clientId}`,
+                            cedula_rif: c?.ci || 'N/A',
+                            telefono: c?.phone || 'No registrado',
+                            total_comprado_usd: Number(Number(g._sum.totalAmount || 0).toFixed(2)),
+                            cantidad_pedidos: g._count.id
+                        };
+                    })
+                }
+            };
+        }
+
+        case 'consultar_compras_proveedores': {
+            const { fromStr, toStr, startDate, endDate } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+
+            const purchases = await prisma.purchase.findMany({
+                where: {
+                    businessId,
+                    createdAt: { gte: startDate, lte: endDate }
+                },
+                include: {
+                    supplier: { select: { id: true, nameCompany: true, contactName: true } }
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 8
+            });
+
+            const agg = await prisma.purchase.aggregate({
+                where: {
+                    businessId,
+                    createdAt: { gte: startDate, lte: endDate }
+                },
+                _sum: { totalCost: true, remainingBalance: true },
+                _count: { id: true }
+            });
+
+            return {
+                data: {
+                    periodo: `${fromStr} al ${toStr}`,
+                    total_compras_usd: Number(Number(agg._sum.totalCost || 0).toFixed(2)),
+                    saldo_pendiente_a_proveedores_usd: Number(Number(agg._sum.remainingBalance || 0).toFixed(2)),
+                    cantidad_facturas_compra: agg._count.id,
+                    compras_recientes: purchases.map(p => ({
+                        compra_id: p.id,
+                        proveedor: p.supplier?.nameCompany || p.supplier?.contactName || 'Proveedor General',
+                        monto_total_usd: Number(p.totalCost),
+                        saldo_pendiente_usd: Number(p.remainingBalance),
+                        condicion: p.conditions,
+                        estado_pago: p.paymentStatus,
+                        fecha: p.createdAt.toISOString().split('T')[0]
+                    }))
+                }
+            };
+        }
+
+        case 'consultar_estado_cajas': {
+            const registers = await prisma.cashRegister.findMany({
+                where: { businessId },
+                include: {
+                    member: {
+                        select: {
+                            user: { select: { id: true, name: true, ci: true } }
+                        }
+                    }
+                },
+                orderBy: { openTime: 'desc' },
+                take: 6
+            });
+
+            return {
+                data: {
+                    cajas_registradoras: registers.map(r => ({
+                        caja_id: r.id,
+                        cajero: r.member?.user?.name || 'Usuario',
+                        estado: r.status,
+                        monto_inicial_usd: Number(r.initialAmount),
+                        monto_final_usd: r.finalAmount ? Number(r.finalAmount) : null,
+                        hora_apertura: r.openTime.toISOString(),
+                        hora_cierre: r.closeTime ? r.closeTime.toISOString() : 'Aún abierta'
+                    }))
+                }
+            };
+        }
+
+        case 'consultar_cotizaciones_presupuestos': {
+            const { fromStr, toStr, startDate, endDate } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+
+            const quotations = await prisma.quotation.findMany({
+                where: {
+                    businessId,
+                    deletedAt: null,
+                    createdAt: { gte: startDate, lte: endDate }
+                },
+                include: {
+                    client: { select: { name: true, ci: true } }
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 8
+            });
+
+            const agg = await prisma.quotation.aggregate({
+                where: {
+                    businessId,
+                    deletedAt: null,
+                    createdAt: { gte: startDate, lte: endDate }
+                },
+                _sum: { totalAmount: true },
+                _count: { id: true }
+            });
+
+            return {
+                data: {
+                    periodo: `${fromStr} al ${toStr}`,
+                    total_cotizado_usd: Number(Number(agg._sum.totalAmount || 0).toFixed(2)),
+                    cantidad_cotizaciones: agg._count.id,
+                    cotizaciones_recientes: quotations.map(q => ({
+                        recibo_numero: q.receiptNumber,
+                        cliente: q.client?.name || 'Cliente Ocasional',
+                        monto_total_usd: Number(q.totalAmount),
+                        estado: q.status,
+                        valido_hasta: q.validUntil ? q.validUntil.toISOString().split('T')[0] : 'Sin fecha límite'
+                    }))
+                }
             };
         }
 
