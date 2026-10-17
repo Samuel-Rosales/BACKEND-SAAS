@@ -30,6 +30,7 @@ import { DepositsReportRoute } from '@/modules/report/deposits/deposits-report.r
 import { CommissionReportRoute } from '@/modules/report/commission/commission-report.route';
 
 import { AdminRoute } from '@/modules/admin';
+import { AiRoute } from '@/modules/ai';
 import { initCronJobs } from '@/cron';
 
 export class Server {
@@ -114,7 +115,8 @@ export class Server {
             admin: `${this.prefix}/admin`,
             adminBusiness: `${this.prefix}/admin/business`,
             adminSubscriptionPayments: `${this.prefix}/admin/subscription-payments`,
-            adminUsers: `${this.prefix}/admin/users`
+            adminUsers: `${this.prefix}/admin/users`,
+            ai: `${this.prefix}/ai`
         };
 
         this.dbConnection();
@@ -197,6 +199,7 @@ export class Server {
         this.app.use(this.paths.depositsReports, DepositsReportRoute);
         this.app.use(this.paths.commissionReports, CommissionReportRoute);
         this.app.use(this.paths.admin, AdminRoute);
+        this.app.use(this.paths.ai, AiRoute);
 
         this.app.use((req, res) => {
             //console.log(`[404 ERROR] Se intentó acceder a: ${req.originalUrl}`);
