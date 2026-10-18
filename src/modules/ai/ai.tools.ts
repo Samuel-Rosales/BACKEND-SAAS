@@ -1,10 +1,16 @@
 import { SalesStatsService } from '../report/sales/sales-stats.service';
 import { CollectionsReportService } from '../report/collections/collections-report.service';
+import { CommissionReportService } from '../report/commission/commission-report.service';
+import { FinancialReportService } from '../report/financial/financial-report.service';
+import { DepositsReportService } from '../report/deposits/deposits-report.service';
 import { prisma } from '@/configs';
 import { ToolExecutionResult, AiChatAction } from './ai.interface';
 
 const salesStatsService = new SalesStatsService();
 const collectionsReportService = new CollectionsReportService();
+const commissionReportService = new CommissionReportService();
+const financialReportService = new FinancialReportService();
+const depositsReportService = new DepositsReportService();
 
 const parseDateRange = (fromDate?: string, toDate?: string, tzOffset: number = 240) => {
     const local = new Date(Date.now() - (tzOffset * 60_000));
@@ -268,6 +274,37 @@ export const AI_TOOL_DECLARATIONS = [
                 newSalePriceUSD: { type: 'NUMBER', description: 'Nuevo precio de venta en dólares USD.' }
             },
             required: ['search', 'newSalePriceUSD']
+        }
+    },
+    {
+        name: 'consultar_comisiones_vendedores',
+        description: 'Consulta el reporte oficial de comisiones ganadas por los vendedores y colaboradores de la empresa en un rango de fechas. Muestra facturas emitidas, volumen vendido en USD, porcentaje de comisión asignado, deducciones por devoluciones y comisión total acumulada a liquidar para cada vendedor.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                fromDate: { type: 'STRING', description: 'Fecha inicio formato YYYY-MM-DD. Opcional.' },
+                toDate: { type: 'STRING', description: 'Fecha fin formato YYYY-MM-DD. Opcional.' },
+                sellerName: { type: 'STRING', description: 'Nombre o filtro del vendedor específico a consultar. Opcional.' }
+            }
+        }
+    },
+    {
+        name: 'consultar_reporte_financiero',
+        description: 'Consulta el balance financiero integral y estado de resultados del negocio: facturación bruta, notas de crédito/devoluciones, ingresos netos reales, costo de mercancía vendida (COGS), utilidad bruta con margen bruto %, gastos operativos, comisiones pagadas a vendedores, y la utilidad o ganancia neta real en USD junto con el margen neto % para un rango de fechas.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                fromDate: { type: 'STRING', description: 'Fecha inicio formato YYYY-MM-DD. Opcional.' },
+                toDate: { type: 'STRING', description: 'Fecha fin formato YYYY-MM-DD. Opcional.' }
+            }
+        }
+    },
+    {
+        name: 'consultar_reporte_almacenes_depositos',
+        description: 'Consulta el estado y valorización de todos los depósitos y almacenes físicos de la empresa: total de depósitos activos, unidades totales en existencia, capital total invertido a costo de reposición y valor comercial proyectado a precio de venta.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {}
         }
     }
 ];
@@ -1239,6 +1276,142 @@ export async function executeAiTool(
                     precio_anterior_usd: oldPrice,
                     precio_nuevo_usd: Number(updated.salePrice),
                     costo_referencial_usd: Number(updated.costPrice)
+                }
+            };
+        }
+
+        case 'consultar_comisiones_vendedores': {
+            const { fromStr, toStr } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+            const sellerFilter = String(args?.sellerName || '').toLowerCase().trim();
+
+            const res = await commissionReportService.getCommissionReport(businessId, {
+                fromDate: args?.fromDate || fromStr,
+                toDate: args?.toDate || toStr,
+                tzOffset
+            });
+
+            if (res.status !== 200 || !res.data) {
+                return {
+                    data: {
+                        status: 'UNAVAILABLE',
+                        mensaje: res.message || 'El reporte de comisiones requiere el Plan Premium o no se pudo generar.'
+                    }
+                };
+            }
+
+            const { summary, membersBreakdown } = res.data;
+
+            let filteredMembers = membersBreakdown;
+            if (sellerFilter) {
+                filteredMembers = membersBreakdown.filter(m => 
+                    m.name.toLowerCase().includes(sellerFilter) || 
+                    (m.ci && m.ci.toLowerCase().includes(sellerFilter))
+                );
+            }
+
+            return {
+                data: {
+                    periodo: `${args?.fromDate || fromStr} al ${args?.toDate || toStr}`,
+                    resumen_global: {
+                        total_ventas_brutas_usd: summary.totalSalesGross,
+                        total_base_neta_usd: summary.totalSalesNetBase,
+                        total_comisiones_a_pagar_usd: summary.totalCommissions,
+                        total_devoluciones_descontadas_usd: summary.totalRefunds,
+                        total_facturas_emitidas: summary.totalInvoices,
+                        vendedores_activos: summary.activeSellersCount
+                    },
+                    desglose_vendedores: filteredMembers.map(m => ({
+                        vendedor: m.name,
+                        cedula: m.ci || 'N/A',
+                        rol: m.roleName,
+                        porcentaje_comision: `${m.configuredCommissionPct}%`,
+                        facturas_cerradas: m.totalInvoices,
+                        ventas_brutas_usd: m.totalSalesGross,
+                        base_neta_ajustada_usd: m.totalSalesNetBase,
+                        comision_ganada_usd: m.totalCommissionEarned,
+                        devoluciones_descontadas_usd: m.totalRefunds
+                    })),
+                    mensaje: filteredMembers.length === 0 && sellerFilter
+                        ? `No se encontraron registros de comisión para el vendedor "${sellerFilter}" en este período.`
+                        : undefined
+                }
+            };
+        }
+
+        case 'consultar_reporte_financiero': {
+            const { fromStr, toStr } = parseDateRange(args?.fromDate, args?.toDate, tzOffset);
+            const res = await financialReportService.getFinancialOverview(businessId, {
+                fromDate: args?.fromDate || fromStr,
+                toDate: args?.toDate || toStr,
+                tzOffset
+            });
+
+            if (res.status !== 200 || !res.data) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: res.message || 'No se pudo generar el reporte financiero.'
+                    }
+                };
+            }
+
+            const d = res.data;
+            return {
+                data: {
+                    periodo: `${args?.fromDate || fromStr} al ${args?.toDate || toStr}`,
+                    ingresos: {
+                        facturacion_bruta_usd: d.billedRevenue,
+                        notas_credito_devoluciones_usd: d.returns,
+                        ingresos_netos_usd: d.netRevenue,
+                        total_ventas: d.salesCount,
+                        ticket_promedio_usd: d.avgTicket
+                    },
+                    costos_y_utilidad_bruta: {
+                        costo_mercancia_vendida_cogs_usd: d.costOfGoodsSold,
+                        utilidad_bruta_usd: d.grossProfit,
+                        margen_bruto_porcentaje: `${(d.grossMarginPct || 0).toFixed(2)}%`
+                    },
+                    egresos_operativos: {
+                        gastos_operativos_usd: d.directExpenses,
+                        comisiones_pagadas_vendedores_usd: d.salesCommissions,
+                        total_egresos_operativos_usd: d.totalExpenses
+                    },
+                    resultado_neto: {
+                        utilidad_neta_real_usd: d.netProfit,
+                        margen_neto_real_porcentaje: `${(d.netMarginPct || 0).toFixed(2)}%`,
+                        es_rentable: d.netProfit > 0
+                    },
+                    comparativa_periodo_anterior: {
+                        variacion_ingresos_pct: `${(d.revenueVariation || 0).toFixed(2)}%`,
+                        variacion_utilidad_neta_pct: `${(d.profitVariation || 0).toFixed(2)}%`
+                    }
+                }
+            };
+        }
+
+        case 'consultar_reporte_almacenes_depositos': {
+            const res = await depositsReportService.getOverview(businessId);
+            if (res.status !== 200 || !res.data) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: res.message || 'No se pudo consultar el reporte de depósitos.'
+                    }
+                };
+            }
+
+            const potentialProfit = Math.max(0, res.data.totalSale - res.data.totalCost);
+            const marginPct = res.data.totalSale > 0 ? ((potentialProfit / res.data.totalSale) * 100) : 0;
+
+            return {
+                data: {
+                    total_depositos_activos: res.data.totalDepots,
+                    unidades_totales_stock: res.data.totalStock,
+                    capital_invertido_costo_usd: Number(res.data.totalCost.toFixed(2)),
+                    valor_comercial_venta_usd: Number(res.data.totalSale.toFixed(2)),
+                    ganancia_proyectada_usd: Number(potentialProfit.toFixed(2)),
+                    margen_promedio_proyectado: `${marginPct.toFixed(2)}%`,
+                    productos_unicos_almacenados: res.data.totalProducts
                 }
             };
         }

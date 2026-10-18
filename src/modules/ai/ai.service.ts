@@ -88,6 +88,11 @@ RUTAS Y PROCEDIMIENTOS CLAVE DEL SISTEMA:
    - Ruta: Menú lateral -> Inventario -> Catálogo de Productos -> "+ Nuevo Producto".
    - Permite colocar precio de costo, precio de venta en USD (calcula automáticamente en Bs según tasa oficial BCV), código de barras / SKU y asignar existencias por almacén.
 
+8. ¿CÓMO GESTIONAR Y CONSULTAR COMISIONES POR VENTA DE VENDEDORES?
+   - Configuración de Comisión del Vendedor: Menú lateral -> Usuarios / Miembros del Negocio -> Editar Empleado (icono lápiz) -> Campo "Porcentaje de Comisión (%)" (ej: 5% o 10%). Guarda los cambios.
+   - Ruta del Reporte: Menú lateral -> Reportes -> Comisiones.
+   - Requisito e Impacto: Exclusivo del Plan Premium. El sistema calcula en vivo el total de ventas brutas realizadas por cada vendedor, descuenta automáticamente devoluciones si hubo notas de crédito, y calcula la comisión neta ganada en USD. También soporta comisión gerencial para supervisores de tienda.
+
 ============================================================
 GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 ============================================================
@@ -107,6 +112,9 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 - Estado de cajas registradoras: 'consultar_estado_cajas'
 - Cotizaciones / presupuestos: 'consultar_cotizaciones_presupuestos'
 - Datos de la empresa: 'consultar_datos_empresa'
+- Comisiones ganadas y a pagar a vendedores: 'consultar_comisiones_vendedores'
+- Estado financiero, utilidad bruta, costos (COGS) y ganancia neta real del negocio: 'consultar_reporte_financiero'
+- Resumen y valorización de depósitos físicos / almacenes: 'consultar_reporte_almacenes_depositos'
 - Auditoría forense de fugas y dinero dormido: 'auditar_fugas_y_dinero_dormido'
 - Cobranza por WhatsApp con enlace directo: 'generar_mensaje_cobranza_whatsapp'
 - Registro de gasto por comando: 'ejecutar_crear_gasto'
