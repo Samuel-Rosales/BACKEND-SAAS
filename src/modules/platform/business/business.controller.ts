@@ -155,4 +155,17 @@ export class BusinessController {
         const { status, data, message } = await this.service.updateTicketConfig(businessId, userId, req.body);
         res.status(status).json({ message, data });
     };
+
+    // 10. ACTUALIZAR DISEÑO DE ETIQUETAS DE ARTÍCULOS
+    updateLabelConfig = async (req: Request, res: Response) => {
+        const { businessId } = req.user;
+        const { id: userId } = req.user;
+
+        if (!userId) {
+            return res.status(400).json({ message: 'User ID is required' });
+        }
+
+        const { status, data, message } = await this.service.updateLabelConfig(businessId, userId, req.body);
+        res.status(status).json({ message, data });
+    };
 }

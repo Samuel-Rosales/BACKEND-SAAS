@@ -79,5 +79,14 @@ router.patch(
   controller.updateTicketConfig
 );
 
+// E. Actualizar Diseño de Etiquetas de Artículos (58mm / 80mm / Promociones)
+router.patch(
+  '/:id/label-config',
+  requireBusinessPermission('BUSINESS_SETTINGS_EDIT'),
+  validator.validateId,
+  handleValidationErrors,
+  controller.updateLabelConfig
+);
+
 export const BusinessRoute = router;
 export default router;

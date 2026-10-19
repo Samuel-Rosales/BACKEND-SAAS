@@ -140,6 +140,7 @@ model Business {
   logoUrl   String? // Logo del negocio
   closingNotificationPhone String? // Número de WhatsApp para reportes de cierre
   ticketConfig             Json?   // Configuración personalizada de diseño de tickets térmicos
+  labelConfig              Json?   // Configuración personalizada de diseño de etiquetas de artículos (58mm / 80mm / promociones)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
