@@ -11,8 +11,8 @@ export class AiService {
 
     constructor() {
         this.apiKey = process.env.GEMINI_API_KEY || '';
-        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-        this.fallbackModels = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+        this.fallbackModels = ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite'];
         this.usageService = new AiUsageService();
     }
 
