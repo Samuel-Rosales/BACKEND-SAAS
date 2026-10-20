@@ -118,7 +118,20 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 - Auditoría forense de fugas y dinero dormido: 'auditar_fugas_y_dinero_dormido'
 - Cobranza por WhatsApp con enlace directo: 'generar_mensaje_cobranza_whatsapp'
 - Registro de gasto por comando: 'ejecutar_crear_gasto'
-- Cambio de precio de producto por comando: 'ejecutar_cambiar_precio_producto'`
+- Cambio de precio de producto por comando: 'ejecutar_cambiar_precio_producto'
+- ABONAR / PAGAR A CLIENTE POR COMANDO (ej: "abónale 20 dólares a Pedro", "Pedro pagó 50"): 'ejecutar_abonar_a_cliente'
+- SUGERENCIA PREDICTIVA DE COMPRAS Y REPOSICIÓN A PROVEEDORES (ej: "sugiéreme qué comprar", "qué productos se van a agotar"): 'sugerir_reposicion_compras_proveedores'
+- RESUMEN EJECUTIVO DE APERTURA MATUTINO (ej: "cómo arrancamos hoy", "resumen de apertura", "briefing del día"): 'consultar_resumen_apertura_matutino'
+- CREACIÓN RÁPIDA DE PRODUCTO POR COMANDO DE VOZ (ej: "crea el producto Galletas María 100g, costo 0.60, venta 1.00, stock inicial 40"): 'ejecutar_crear_producto'
+- AUDITORÍA FORENSE DE FRAUDE Y ANULACIONES DE CAJA (ej: "audita si hay ventas anuladas o sospecha de fraude en cajas"): 'auditar_fraude_y_anulaciones_caja'
+- COMBOS Y PROMOCIONES INTELIGENTES CON DINERO DORMIDO (ej: "créame combos con los productos que no se venden", "combos promocionales"): 'generar_promociones_combos_estancados'
+
+COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
+1. Si el usuario te dice: "Abónale X dólares a [Cliente]" o "[Cliente] pagó X dólares", invoca 'ejecutar_abonar_a_cliente' con el nombre del cliente y el monto numérico en USD.
+2. Si el usuario te dice: "Hazme un reporte de cómo me fue en ventas" o "¿Cómo me fue en ventas?", invoca 'consultar_resumen_ventas' para hoy y dale un resumen conciso, motivador y ejecutivo, y genera el PDF para que lo descargue de inmediato.
+3. Si el usuario te dice: "¿Cómo arrancamos hoy?" o "Resumen de apertura", invoca 'consultar_resumen_apertura_matutino'.
+4. Si el usuario te dice: "Sugiéreme qué comprar" o "Qué le compro a los proveedores", invoca 'sugerir_reposicion_compras_proveedores'.
+5. Si el usuario te dice: "Crea el producto [Nombre], costo [X], venta [Y]", invoca 'ejecutar_crear_producto'.`
                 }
             ]
         };
@@ -137,7 +150,8 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         userMessage: string, 
         history: ChatHistoryMessage[] = [],
         tzOffset: number = 240,
-        clientLocalDate?: string
+        clientLocalDate?: string,
+        userId?: number
     ): Promise<AiChatResponse> {
         if (!this.apiKey) {
             throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno del servidor.');
@@ -230,7 +244,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
                 const toolArgs = fc.functionCall.args || {};
 
                 try {
-                    const toolResult = await executeAiTool(toolName, toolArgs, businessId, tzOffset);
+                    const toolResult = await executeAiTool(toolName, toolArgs, businessId, tzOffset, userId);
 
                     if (toolResult.action) {
                         collectedActions.push(toolResult.action);

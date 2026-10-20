@@ -5,6 +5,12 @@ import { FinancialReportService } from '../report/financial/financial-report.ser
 import { DepositsReportService } from '../report/deposits/deposits-report.service';
 import { prisma } from '@/configs';
 import { ToolExecutionResult, AiChatAction } from './ai.interface';
+import { SaleService } from '../sales/sale/sale.service';
+import { resolveBusinessExchangeRate } from '@/utils';
+import { CashStatus, ProductType, MovementType, InstallmentStatus } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/client';
+
+const saleService = new SaleService();
 
 const salesStatsService = new SalesStatsService();
 const collectionsReportService = new CollectionsReportService();
@@ -307,13 +313,83 @@ export const AI_TOOL_DECLARATIONS = [
             properties: {}
         }
     }
+,
+    {
+        name: 'ejecutar_abonar_a_cliente',
+        description: 'Registra un abono o pago a crédito de un cliente por su nombre, cédula o teléfono (ej: "abónale 20 dólares a Pedro", "Pedro pagó 50"). Busca automáticamente las facturas o cuotas pendientes de ese cliente y aplica el pago en cascada (FIFO), actualizando el saldo deudor global.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                clientSearch: { type: 'STRING', description: 'Nombre, apellido, cédula o teléfono del cliente (ej: "Pedro", "Pedro Perez", "24890123").' },
+                amountUSD: { type: 'NUMBER', description: 'Monto a abonar en dólares USD (ej: 20).' },
+                paymentMethodName: { type: 'STRING', description: 'Método de pago utilizado (ej: "Efectivo", "Pago Móvil", "Zelle", "Dólares"). Opcional, por defecto Efectivo USD.' },
+                reference: { type: 'STRING', description: 'Número de referencia bancaria o comprobante. Opcional.' }
+            },
+            required: ['clientSearch', 'amountUSD']
+        }
+    },
+    {
+        name: 'sugerir_reposicion_compras_proveedores',
+        description: 'Analiza el inventario del negocio y la velocidad de ventas de los últimos 30 días para predecir cuándo se agotará cada producto. Identifica productos en quiebre o riesgo de agotarse en los próximos 7 días, calcula la cantidad de reposición recomendada y redacta el mensaje de pedido para WhatsApp al proveedor.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                daysThreshold: { type: 'NUMBER', description: 'Días de inventario de tolerancia para considerar en riesgo (por defecto 7 días).' }
+            }
+        }
+    },
+    {
+        name: 'consultar_resumen_apertura_matutino',
+        description: 'Genera el resumen ejecutivo matutino ("Briefing de Apertura") para el dueño o administrador: 1) Cobranzas y cuotas de crédito que vencen hoy o esta semana, 2) Productos en riesgo crítico de agotarse hoy, 3) Meta de ventas sugerida basada en el mismo día de la semana anterior, 4) Estado operativo de cajas registradoras.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {}
+        }
+    },
+    {
+        name: 'ejecutar_crear_producto',
+        description: 'Crea y registra un nuevo producto en el catálogo e inventario de la empresa directamente por comando de voz o texto (ej: "crea el producto Galletas María 100g, costo 0.60, venta 1.00, stock inicial 40"). Asigna categoría, unidad de medida, impuestos y stock en almacén principal automáticamente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                name: { type: 'STRING', description: 'Nombre del producto a crear (ej: "Galletas María 100g").' },
+                costPriceUSD: { type: 'NUMBER', description: 'Precio de costo del producto en dólares USD.' },
+                salePriceUSD: { type: 'NUMBER', description: 'Precio de venta al público (PVP) en dólares USD.' },
+                initialStock: { type: 'NUMBER', description: 'Cantidad inicial de unidades físicas en stock. Opcional, por defecto 0.' },
+                sku: { type: 'STRING', description: 'Código de barras o SKU del producto. Opcional.' },
+                categoryName: { type: 'STRING', description: 'Nombre de la categoría (ej: "Snacks", "Bebidas", "Víveres"). Opcional.' },
+                description: { type: 'STRING', description: 'Descripción o notas del producto. Opcional.' }
+            },
+            required: ['name', 'costPriceUSD', 'salePriceUSD']
+        }
+    },
+    {
+        name: 'auditar_fraude_y_anulaciones_caja',
+        description: 'Audita las operaciones de caja y facturación para detectar posibles fraudes, mermas o irregularidades: lista ventas canceladas/anuladas, notas de crédito emitidas, cajeros con mayor frecuencia de cancelación y descuentos manuales inusuales.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                fromDate: { type: 'STRING', description: 'Fecha inicio YYYY-MM-DD. Opcional, por defecto últimos 7 días.' },
+                toDate: { type: 'STRING', description: 'Fecha fin YYYY-MM-DD. Opcional, por defecto hoy.' }
+            }
+        }
+    },
+    {
+        name: 'generar_promociones_combos_estancados',
+        description: 'Identifica mercancía fría o dinero dormido (productos sin ventas en las últimas semanas con stock disponible) y genera combos promocionales inteligentes combinándolos con los productos más vendidos, calculando precios de oferta atractivos con margen protegido y copy publicitario listo para WhatsApp / Instagram.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {}
+        }
+    }
 ];
 
 export async function executeAiTool(
     toolName: string, 
     args: any, 
     businessId: number, 
-    tzOffset: number = 240
+    tzOffset: number = 240,
+    userId?: number
 ): Promise<ToolExecutionResult> {
     const local = new Date(Date.now() - (tzOffset * 60_000));
     const defaultDate = local.toISOString().split('T')[0];
@@ -1412,6 +1488,723 @@ export async function executeAiTool(
                     ganancia_proyectada_usd: Number(potentialProfit.toFixed(2)),
                     margen_promedio_proyectado: `${marginPct.toFixed(2)}%`,
                     productos_unicos_almacenados: res.data.totalProducts
+                }
+            };
+        }
+
+        
+        case 'ejecutar_abonar_a_cliente': {
+            const clientSearch = String(args?.clientSearch || '').trim();
+            const amountUSD = Number(args?.amountUSD);
+            const paymentMethodName = String(args?.paymentMethodName || 'Efectivo').trim();
+            const reference = String(args?.reference || 'Abono registrado por Guardián AI').trim();
+
+            if (!clientSearch) {
+                return { data: { status: 'ERROR', mensaje: 'Debes indicar el nombre, cédula o teléfono del cliente a abonar.' } };
+            }
+            if (!amountUSD || isNaN(amountUSD) || amountUSD <= 0) {
+                return { data: { status: 'ERROR', mensaje: 'El monto en dólares USD debe ser mayor a 0.' } };
+            }
+
+            // 1. Buscar cliente por nombre, cédula o teléfono
+            const client = await prisma.client.findFirst({
+                where: {
+                    businessId,
+                    isActive: true,
+                    OR: [
+                        { name: { contains: clientSearch, mode: 'insensitive' } },
+                        { ci: { contains: clientSearch, mode: 'insensitive' } },
+                        { phone: { contains: clientSearch, mode: 'insensitive' } }
+                    ]
+                }
+            });
+
+            if (!client) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: `No se encontró ningún cliente activo que coincida con "${clientSearch}". Verifica el nombre o regístralo primero.`
+                    }
+                };
+            }
+
+            // 2. Buscar ventas a crédito pendientes (con saldo mayor a 0)
+            const pendingSales = await prisma.sale.findMany({
+                where: {
+                    businessId,
+                    clientId: client.id,
+                    status: { not: 'CANCELLED' },
+                    deletedAt: null,
+                    remainingBalance: { gt: 0 }
+                },
+                orderBy: { createdAt: 'asc' },
+                include: {
+                    installments: {
+                        where: { status: { not: InstallmentStatus.PAID } },
+                        orderBy: { dueDate: 'asc' }
+                    }
+                }
+            });
+
+            if (pendingSales.length === 0) {
+                return {
+                    data: {
+                        status: 'SIN_DEUDA',
+                        cliente: client.name,
+                        cedula_rif: client.ci,
+                        deuda_actual_usd: 0,
+                        mensaje: `El cliente ${client.name} está al día. No tiene facturas ni cuentas pendientes por pagar.`
+                    }
+                };
+            }
+
+            // 3. Resolver Tasa de Cambio y Método de Pago
+            const exchangeRate = await resolveBusinessExchangeRate(businessId, prisma);
+            if (!exchangeRate) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: 'No hay una tasa de cambio activa configurada en el sistema para procesar el abono.'
+                    }
+                };
+            }
+
+            const paymentMethod = await prisma.paymentMethod.findFirst({
+                where: {
+                    isActive: true,
+                    OR: [
+                        { name: { contains: paymentMethodName, mode: 'insensitive' } },
+                        { currency: 'USD' }
+                    ]
+                },
+                orderBy: { id: 'asc' }
+            }) || await prisma.paymentMethod.findFirst({
+                where: { isActive: true }
+            });
+
+            if (!paymentMethod) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: 'No hay métodos de pago activos configurados en la empresa.'
+                    }
+                };
+            }
+
+            // 4. Buscar caja registradora abierta si existe
+            const openRegister = await prisma.cashRegister.findFirst({
+                where: { businessId, status: CashStatus.OPEN },
+                include: { member: { select: { user: { select: { name: true } } } } }
+            });
+
+            // 5. Aplicar Abono en Cascada (FIFO)
+            let remainingToDistribute = new Decimal(amountUSD).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+            const initialAmountToPay = remainingToDistribute;
+            const appliedBreakdown: Array<{
+                recibo: string;
+                ventaId: number;
+                montoAplicadoUSD: number;
+                saldoRestanteFacturaUSD: number;
+                estadoFinal: string;
+            }> = [];
+
+            for (const sale of pendingSales) {
+                if (remainingToDistribute.lte(new Decimal(0.01))) break;
+
+                const saleDebt = new Decimal(sale.remainingBalance);
+                let paymentForThisSale: Decimal;
+
+                if (remainingToDistribute.gte(saleDebt)) {
+                    paymentForThisSale = saleDebt;
+                } else {
+                    paymentForThisSale = remainingToDistribute;
+                }
+
+                const payResult = await saleService.addPayment(businessId, sale.id, {
+                    paymentMethodId: paymentMethod.id,
+                    amount: Number(paymentForThisSale.toFixed(2)),
+                    exchangeRateId: exchangeRate.id,
+                    reference: reference,
+                    cashRegisterId: openRegister ? openRegister.id : null
+                });
+
+                if (payResult.status === 200) {
+                    remainingToDistribute = remainingToDistribute.sub(paymentForThisSale);
+                    const updatedSaleBalance = Math.max(0, Number(saleDebt.sub(paymentForThisSale).toFixed(2)));
+                    appliedBreakdown.push({
+                        recibo: sale.receiptNumber ? String(sale.receiptNumber) : `#${sale.id}`,
+                        ventaId: sale.id,
+                        montoAplicadoUSD: Number(paymentForThisSale.toFixed(2)),
+                        saldoRestanteFacturaUSD: updatedSaleBalance,
+                        estadoFinal: updatedSaleBalance <= 0.05 ? 'TOTALMENTE_PAGADA' : 'ABONADA_PARCIAL'
+                    });
+                }
+            }
+
+            const totalAppliedUSD = Number(initialAmountToPay.sub(remainingToDistribute).toFixed(2));
+
+            const updatedClient = await prisma.client.findUnique({
+                where: { id: client.id },
+                select: { id: true, name: true, ci: true, phone: true, currentDebt: true }
+            });
+
+            const newTotalDebt = Number(updatedClient?.currentDebt || 0);
+
+            const action: AiChatAction = {
+                type: 'NAVIGATE',
+                label: `👁️ Ver Cuenta de ${client.name} en Cobranzas`,
+                url: `/credits`
+            };
+
+            const registerName = openRegister
+                ? (openRegister.member?.user?.name ? `Caja de ${openRegister.member.user.name}` : `Caja #${openRegister.id}`)
+                : 'Ingreso directo (Sin caja de turno)';
+
+            return {
+                data: {
+                    status: 'EXITOSO',
+                    cliente: client.name,
+                    cedula_rif: client.ci,
+                    monto_total_abonado_usd: totalAppliedUSD,
+                    metodo_pago_usado: paymentMethod.name,
+                    deuda_restante_global_usd: Number(newTotalDebt.toFixed(2)),
+                    caja_registradora_ingresada: registerName,
+                    desglose_por_factura: appliedBreakdown,
+                    mensaje: `¡Abono procesado con éxito! Se aplicaron $${totalAppliedUSD.toFixed(2)} USD a la cuenta de ${client.name}. Deuda restante: $${newTotalDebt.toFixed(2)} USD.`
+                },
+                action
+            };
+        }
+
+        case 'sugerir_reposicion_compras_proveedores': {
+            const daysThreshold = Number(args?.daysThreshold || 7);
+            const thirtyDaysAgo = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
+
+            const products = await prisma.product.findMany({
+                where: { businessId, isActive: true },
+                select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    minStock: true,
+                    costPrice: true,
+                    salePrice: true,
+                    category: { select: { name: true } },
+                    stockLots: { select: { quantity: true } },
+                    purchaseItems: {
+                        select: {
+                            purchase: {
+                                select: {
+                                    supplier: { select: { id: true, nameCompany: true, contactName: true, phone: true } }
+                                }
+                            }
+                        },
+                        orderBy: { id: 'desc' },
+                        take: 1
+                    }
+                }
+            });
+
+            const recentSaleItems = await prisma.saleItem.findMany({
+                where: {
+                    sale: {
+                        businessId,
+                        status: { not: 'CANCELLED' },
+                        deletedAt: null,
+                        createdAt: { gte: thirtyDaysAgo }
+                    }
+                },
+                select: {
+                    productId: true,
+                    quantity: true
+                }
+            });
+
+            const salesByProduct = new Map<number, number>();
+            for (const item of recentSaleItems) {
+                salesByProduct.set(item.productId, (salesByProduct.get(item.productId) || 0) + Number(item.quantity));
+            }
+
+            const suggestions: any[] = [];
+            let totalEstimatedInvestmentUSD = 0;
+
+            for (const prod of products) {
+                const totalStock = prod.stockLots.reduce((acc, lot) => acc + Number(lot.quantity), 0);
+                const sold30d = salesByProduct.get(prod.id) || 0;
+                const dailyVelocity = sold30d / 30;
+                const daysRemaining = dailyVelocity > 0 ? (totalStock / dailyVelocity) : (totalStock > 0 ? 999 : 0);
+
+                const isCriticallyLow = totalStock <= Number(prod.minStock);
+                const isExhaustingSoon = daysRemaining <= daysThreshold && (dailyVelocity > 0 || totalStock === 0);
+
+                if (isCriticallyLow || isExhaustingSoon) {
+                    const targetBufferDays = 15;
+                    const suggestedUnits = Math.max(
+                        Number(prod.minStock) * 2,
+                        Math.ceil(dailyVelocity * targetBufferDays)
+                    ) || 10;
+
+                    const cost = Number(prod.costPrice || 0);
+                    const estimatedCost = Number((suggestedUnits * cost).toFixed(2));
+                    totalEstimatedInvestmentUSD += estimatedCost;
+
+                    const supplier = prod.purchaseItems[0]?.purchase?.supplier;
+
+                    suggestions.push({
+                        productoId: prod.id,
+                        producto: prod.name,
+                        sku: prod.sku || 'S/C',
+                        stockActual: totalStock,
+                        stockMinimo: Number(prod.minStock),
+                        ventasUltimos30Dias: sold30d,
+                        velocidadDiaria: Number(dailyVelocity.toFixed(1)),
+                        diasRestantesEstimados: daysRemaining === 999 ? 'Sin ventas recientes' : Number(daysRemaining.toFixed(1)),
+                        cantidadSugeridaPedir: suggestedUnits,
+                        costoUnitarioUSD: cost,
+                        inversionEstimadaUSD: estimatedCost,
+                        proveedor: supplier ? {
+                            nombre: supplier.nameCompany,
+                            contacto: supplier.contactName,
+                            telefono: supplier.phone
+                        } : null
+                    });
+                }
+            }
+
+            suggestions.sort((a, b) => {
+                const dA = typeof a.diasRestantesEstimados === 'number' ? a.diasRestantesEstimados : 99;
+                const dB = typeof b.diasRestantesEstimados === 'number' ? b.diasRestantesEstimados : 99;
+                return dA - dB;
+            });
+
+            let whatsappDraft = `*SOLICITUD DE REPOSICIÓN DE MERCANCÍA*\nHola estimado proveedor, requerimos cotización/despacho para los siguientes artículos prioritarios:\n\n`;
+            suggestions.slice(0, 8).forEach((s, idx) => {
+                whatsappDraft += `${idx + 1}. *${s.producto}* (${s.sku}) -> Cantidad: *${s.cantidadSugeridaPedir} unids*\n`;
+            });
+            whatsappDraft += `\nFavor confirmar disponibilidad y precio. Saludos cordiales.`;
+
+            return {
+                data: {
+                    status: 'OK',
+                    total_articulos_en_riesgo: suggestions.length,
+                    inversion_total_estimada_usd: Number(totalEstimatedInvestmentUSD.toFixed(2)),
+                    productos_a_reponer: suggestions.slice(0, 15),
+                    borrador_mensaje_whatsapp: whatsappDraft
+                }
+            };
+        }
+
+        case 'consultar_resumen_apertura_matutino': {
+            const todayUtc = new Date(Date.now() - (tzOffset * 60_000));
+            const todayStr = todayUtc.toISOString().split('T')[0];
+
+            const nextWeek = new Date(todayUtc.getTime() + (7 * 24 * 60 * 60 * 1000));
+            const upcomingInstallments = await prisma.saleInstallment.findMany({
+                where: {
+                    sale: {
+                        businessId,
+                        status: { not: 'CANCELLED' },
+                        deletedAt: null
+                    },
+                    status: { not: InstallmentStatus.PAID },
+                    dueDate: { lte: nextWeek }
+                },
+                include: {
+                    sale: {
+                        select: {
+                            id: true,
+                            receiptNumber: true,
+                            client: { select: { id: true, name: true, phone: true } }
+                        }
+                    }
+                },
+                orderBy: { dueDate: 'asc' }
+            });
+
+            const totalCobranzaSemanaUSD = upcomingInstallments.reduce((acc, i) => acc + (Number(i.amount) - Number(i.amountPaid)), 0);
+            const cuotasVencidasHoy = upcomingInstallments.filter(i => new Date(i.dueDate) <= todayUtc);
+            const totalVencidoHoyUSD = cuotasVencidasHoy.reduce((acc, i) => acc + (Number(i.amount) - Number(i.amountPaid)), 0);
+
+            const sevenDaysAgoStart = new Date(todayUtc.getTime() - (7 * 24 * 60 * 60 * 1000));
+            sevenDaysAgoStart.setUTCHours(0, 0, 0, 0);
+            const sevenDaysAgoEnd = new Date(todayUtc.getTime() - (7 * 24 * 60 * 60 * 1000));
+            sevenDaysAgoEnd.setUTCHours(23, 59, 59, 999);
+
+            const pastSales = await prisma.sale.findMany({
+                where: {
+                    businessId,
+                    status: { not: 'CANCELLED' },
+                    deletedAt: null,
+                    createdAt: { gte: sevenDaysAgoStart, lte: sevenDaysAgoEnd }
+                },
+                select: { totalAmount: true }
+            });
+
+            const benchmarkVentasSemanaPasada = pastSales.reduce((acc, s) => acc + Number(s.totalAmount), 0);
+            const metaSugeridaHoyUSD = Number((benchmarkVentasSemanaPasada * 1.10).toFixed(2));
+
+            const productsWithStock = await prisma.product.findMany({
+                where: { businessId, isActive: true },
+                select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    stockLots: { select: { quantity: true } }
+                }
+            });
+
+            const outOfStockProducts = productsWithStock
+                .filter(p => p.stockLots.reduce((acc, lot) => acc + Number(lot.quantity), 0) <= 0)
+                .slice(0, 5);
+
+            const openRegisters = await prisma.cashRegister.findMany({
+                where: { businessId, status: CashStatus.OPEN },
+                include: {
+                    member: { select: { user: { select: { name: true } } } }
+                }
+            });
+
+            return {
+                data: {
+                    fecha_apertura: todayStr,
+                    estado_cajas: {
+                        cajas_abiertas: openRegisters.length,
+                        detalle_cajas: openRegisters.map(c => c.member?.user?.name ? `Caja de ${c.member.user.name}` : `Caja #${c.id}`),
+                        recomendacion_caja: openRegisters.length > 0 ? 'Cajas operativas listas para vender.' : 'Atención: No hay cajas abiertas aún. Recuerda realizar la apertura de turno.'
+                    },
+                    cuentas_por_cobrar_prioritarias: {
+                        total_por_cobrar_proximos_7_dias_usd: Number(totalCobranzaSemanaUSD.toFixed(2)),
+                        total_vencido_hoy_o_retrasado_usd: Number(totalVencidoHoyUSD.toFixed(2)),
+                        cuotas_pendientes_conteo: upcomingInstallments.length,
+                        clientes_a_cobrar: upcomingInstallments.slice(0, 5).map(inst => ({
+                            cliente: inst.sale.client.name,
+                            telefono: inst.sale.client.phone,
+                            recibo: inst.sale.receiptNumber ? String(inst.sale.receiptNumber) : `#${inst.sale.id}`,
+                            montoPendienteUSD: Number((Number(inst.amount) - Number(inst.amountPaid)).toFixed(2)),
+                            vencimiento: inst.dueDate.toISOString().split('T')[0]
+                        }))
+                    },
+                    meta_ventas_del_dia: {
+                        ventas_mismo_dia_semana_pasada_usd: Number(benchmarkVentasSemanaPasada.toFixed(2)),
+                        meta_sugerida_hoy_usd: metaSugeridaHoyUSD,
+                        mensaje_motivacional: `Para superar el ritmo de la semana pasada, tu meta de ventas para hoy son $${metaSugeridaHoyUSD.toFixed(2)} USD.`
+                    },
+                    alertas_de_inventario: {
+                        articulos_agotados_total: outOfStockProducts.length,
+                        articulos_muestra: outOfStockProducts.map(p => p.name)
+                    }
+                }
+            };
+        }
+
+        case 'ejecutar_crear_producto': {
+            const name = String(args?.name || '').trim();
+            const costPriceUSD = Number(args?.costPriceUSD);
+            const salePriceUSD = Number(args?.salePriceUSD);
+            const initialStock = Number(args?.initialStock || 0);
+            const sku = args?.sku ? String(args.sku).trim() : `SKU-${Date.now().toString().slice(-6)}`;
+            const categoryName = args?.categoryName ? String(args.categoryName).trim() : '';
+            const description = args?.description ? String(args.description).trim() : 'Producto registrado por Guardián AI';
+
+            if (!name) return { data: { status: 'ERROR', mensaje: 'Debes indicar el nombre del producto.' } };
+            if (isNaN(costPriceUSD) || costPriceUSD < 0) return { data: { status: 'ERROR', mensaje: 'Precio de costo inválido.' } };
+            if (isNaN(salePriceUSD) || salePriceUSD <= 0) return { data: { status: 'ERROR', mensaje: 'Precio de venta inválido.' } };
+
+            let category = categoryName ? await prisma.category.findFirst({
+                where: { businessId, name: { contains: categoryName, mode: 'insensitive' } }
+            }) : null;
+
+            if (!category) {
+                category = await prisma.category.findFirst({ where: { businessId } });
+                if (!category) {
+                    category = await prisma.category.create({
+                        data: { businessId, name: categoryName || 'General', description: 'Categoría principal' }
+                    });
+                }
+            }
+
+            const unit = await prisma.measurementUnit.findFirst({ where: { isActive: true } }) 
+                      || await prisma.measurementUnit.findFirst();
+            if (!unit) return { data: { status: 'ERROR', mensaje: 'No hay unidades de medida configuradas en la base de datos.' } };
+
+            const tax = await prisma.tax.findFirst({ where: { isActive: true } }) 
+                     || await prisma.tax.findFirst();
+            if (!tax) return { data: { status: 'ERROR', mensaje: 'No hay tipos de impuesto configurados en la base de datos.' } };
+
+            const primaryDepot = await prisma.depot.findFirst({
+                where: { businessId, isActive: true },
+                orderBy: { id: 'asc' }
+            }) || await prisma.depot.findFirst({ where: { businessId } });
+
+            const margin = salePriceUSD > 0 ? Math.max(0, (salePriceUSD - costPriceUSD) / salePriceUSD) : 0;
+
+            let member = userId ? await prisma.businessMember.findFirst({
+                where: { businessId, userId }
+            }) : null;
+            if (!member) {
+                member = await prisma.businessMember.findFirst({
+                    where: { businessId }
+                });
+            }
+            const memberId = member ? member.id : 1;
+
+            const created = await prisma.$transaction(async (tx) => {
+                const prod = await tx.product.create({
+                    data: {
+                        businessId,
+                        name,
+                        sku,
+                        description,
+                        categoryId: category!.id,
+                        unitId: unit.id,
+                        taxId: tax.id,
+                        type: ProductType.SIMPLE,
+                        costPrice: new Decimal(costPriceUSD),
+                        salePrice: new Decimal(salePriceUSD),
+                        profitMargin: new Decimal(margin.toFixed(4)),
+                        minStock: 5,
+                        isActive: true
+                    }
+                });
+
+                if (initialStock > 0 && primaryDepot) {
+                    const lot = await tx.stockLot.create({
+                        data: {
+                            productId: prod.id,
+                            depotId: primaryDepot.id,
+                            quantity: initialStock,
+                            expirationDate: new Date('2099-12-31'),
+                            lotCost: new Decimal(costPriceUSD)
+                        }
+                    });
+
+                    await tx.stockMovement.create({
+                        data: {
+                            businessId,
+                            depotId: primaryDepot.id,
+                            productId: prod.id,
+                            quantity: initialStock,
+                            type: MovementType.IN,
+                            reason: 'Stock inicial registrado por comando Guardián AI',
+                            memberId: memberId,
+                            historicalCost: new Decimal(costPriceUSD),
+                            stockLotId: lot.id
+                        }
+                    });
+                }
+
+                return prod;
+            });
+
+            return {
+                data: {
+                    status: 'EXITOSO',
+                    mensaje: `Producto "${created.name}" creado exitosamente en el inventario.`,
+                    producto: {
+                        id: created.id,
+                        nombre: created.name,
+                        sku: created.sku,
+                        categoria: category.name,
+                        precio_costo_usd: costPriceUSD,
+                        precio_venta_usd: salePriceUSD,
+                        margen_ganancia: `${(margin * 100).toFixed(1)}%`,
+                        stock_inicial: initialStock,
+                        almacen: primaryDepot ? primaryDepot.name : 'Sin almacén'
+                    }
+                }
+            };
+        }
+
+        case 'auditar_fraude_y_anulaciones_caja': {
+            const defaultDaysAgo = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+            const fromDate = args?.fromDate || defaultDaysAgo;
+            const toDate = args?.toDate || defaultDate;
+            const { startDate, endDate } = parseDateRange(fromDate, toDate, tzOffset);
+
+            const cancelledSales = await prisma.sale.findMany({
+                where: {
+                    businessId,
+                    status: 'CANCELLED',
+                    createdAt: { gte: startDate, lte: endDate }
+                },
+                include: {
+                    client: { select: { name: true } },
+                    member: { select: { user: { select: { name: true } } } }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            const totalMontoAnuladoUSD = cancelledSales.reduce((acc, s) => acc + Number(s.totalAmount), 0);
+
+            const creditNotes = await prisma.creditNote.findMany({
+                where: {
+                    businessId,
+                    createdAt: { gte: startDate, lte: endDate }
+                },
+                include: {
+                    sale: { select: { client: { select: { name: true } } } }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            const totalDevolucionesUSD = creditNotes.reduce((acc, cn) => acc + Number(cn.totalAmount), 0);
+
+            const salesWithDiscount = await prisma.sale.findMany({
+                where: {
+                    businessId,
+                    status: { not: 'CANCELLED' },
+                    deletedAt: null,
+                    discount: { gt: 0 },
+                    createdAt: { gte: startDate, lte: endDate }
+                },
+                select: {
+                    id: true,
+                    receiptNumber: true,
+                    totalAmount: true,
+                    discount: true,
+                    createdAt: true,
+                    client: { select: { name: true } }
+                },
+                orderBy: { discount: 'desc' },
+                take: 5
+            });
+
+            return {
+                data: {
+                    periodo: `${fromDate} al ${toDate}`,
+                    ventas_canceladas_anuladas: {
+                        cantidad_total: cancelledSales.length,
+                        monto_total_anulado_usd: Number(totalMontoAnuladoUSD.toFixed(2)),
+                        detalle_reciente: cancelledSales.slice(0, 8).map(s => ({
+                            recibo: s.receiptNumber ? String(s.receiptNumber) : `#${s.id}`,
+                            montoUSD: Number(s.totalAmount),
+                            fecha: s.createdAt.toISOString().split('T')[0],
+                            cliente: s.client?.name || 'Cliente Ocasional',
+                            cajero: s.member?.user?.name || 'Cajero'
+                        }))
+                    },
+                    devoluciones_y_notas_credito: {
+                        cantidad_total: creditNotes.length,
+                        monto_total_devoluciones_usd: Number(totalDevolucionesUSD.toFixed(2)),
+                        detalle_reciente: creditNotes.slice(0, 5).map(cn => ({
+                            numero: `#${cn.number}`,
+                            montoUSD: Number(cn.totalAmount),
+                            cliente: cn.sale?.client?.name || 'N/A',
+                            motivo: cn.reason || 'Devolución'
+                        }))
+                    },
+                    ventas_con_descuentos_manuales: {
+                        cantidad: salesWithDiscount.length,
+                        descuentos_destacados: salesWithDiscount.map(s => ({
+                            recibo: s.receiptNumber ? String(s.receiptNumber) : `#${s.id}`,
+                            descuentoUSD: Number(s.discount),
+                            totalFacturaUSD: Number(s.totalAmount),
+                            cliente: s.client?.name || 'Cliente Ocasional'
+                        }))
+                    },
+                    veredicto_auditoria: cancelledSales.length > 5 
+                        ? 'ALERTA: Se detectó un volumen elevado de anulaciones en el período. Se sugiere auditar turnos de cajeros.'
+                        : 'Nivel de riesgo operativo bajo/normal en cajas y facturación.'
+                }
+            };
+        }
+
+        case 'generar_promociones_combos_estancados': {
+            const fortyFiveDaysAgo = new Date(Date.now() - (45 * 24 * 60 * 60 * 1000));
+
+            const allProducts = await prisma.product.findMany({
+                where: { businessId, isActive: true },
+                select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                    costPrice: true,
+                    salePrice: true,
+                    stockLots: { select: { quantity: true } }
+                }
+            });
+
+            const recentSales = await prisma.saleItem.findMany({
+                where: {
+                    sale: {
+                        businessId,
+                        status: { not: 'CANCELLED' },
+                        deletedAt: null,
+                        createdAt: { gte: fortyFiveDaysAgo }
+                    }
+                },
+                select: { productId: true, quantity: true }
+            });
+
+            const activeSoldProductIds = new Set(recentSales.map(s => s.productId));
+
+            const slowMoving = allProducts.filter(p => {
+                const totalStock = p.stockLots.reduce((acc, lot) => acc + Number(lot.quantity), 0);
+                return totalStock > 0 && !activeSoldProductIds.has(p.id);
+            });
+
+            const sales30d = new Map<number, number>();
+            for (const s of recentSales) {
+                sales30d.set(s.productId, (sales30d.get(s.productId) || 0) + Number(s.quantity));
+            }
+
+            const topSellers = allProducts
+                .filter(p => (sales30d.get(p.id) || 0) > 0)
+                .sort((a, b) => (sales30d.get(b.id) || 0) - (sales30d.get(a.id) || 0))
+                .slice(0, 5);
+
+            if (slowMoving.length === 0) {
+                return {
+                    data: {
+                        status: 'SIN_STOCK_ESTANCADO',
+                        mensaje: '¡Excelente noticia! Tu inventario tiene alta rotación. No se detectaron productos con más de 45 días sin venderse.'
+                    }
+                };
+            }
+
+            const combos: any[] = [];
+            for (let i = 0; i < Math.min(3, slowMoving.length); i++) {
+                const cold = slowMoving[i];
+                const hot = topSellers[i % topSellers.length] || allProducts.find(p => p.id !== cold.id);
+
+                const coldPrice = Number(cold.salePrice);
+                const coldCost = Number(cold.costPrice);
+                const hotPrice = hot ? Number(hot.salePrice) : coldPrice;
+                const hotCost = hot ? Number(hot.costPrice) : coldCost;
+
+                const originalTotal = coldPrice + (hot ? hotPrice : 0);
+                const totalCost = coldCost + (hot ? hotCost : 0);
+
+                const promoPrice = Number((originalTotal * 0.88).toFixed(2));
+                const profit = Number((promoPrice - totalCost).toFixed(2));
+                const marginPct = promoPrice > 0 ? Number(((profit / promoPrice) * 100).toFixed(1)) : 0;
+
+                const comboTitle = hot ? `Combo Dúo Ahorro: ${hot.name} + ${cold.name}` : `Oferta Especial: ${cold.name}`;
+                const copyText = `🔥 ¡OFERTA LIMITADA EN NUESTRA TIENDA! 🔥\n` +
+                                `Lleva tu *${comboTitle}*\n` +
+                                `❌ Antes: $${originalTotal.toFixed(2)} USD\n` +
+                                `✅ Ahora SOLO: *$${promoPrice.toFixed(2)} USD* (Ahorras ${(originalTotal - promoPrice).toFixed(2)}$)\n` +
+                                `🏃‍♂️ ¡Válido hasta agotarse la existencia! Visítanos o pide por delivery.`;
+
+                combos.push({
+                    comboNumero: i + 1,
+                    titulo: comboTitle,
+                    productoEstancado: cold.name,
+                    productoEstrella: hot ? hot.name : 'Individual',
+                    precioOriginalUSD: Number(originalTotal.toFixed(2)),
+                    precioPromocionalUSD: promoPrice,
+                    ahorroClienteUSD: Number((originalTotal - promoPrice).toFixed(2)),
+                    gananciaNetaUSD: profit,
+                    margenGanancia: `${marginPct}%`,
+                    copyParaRedesYWhatsApp: copyText
+                });
+            }
+
+            return {
+                data: {
+                    status: 'COMBOS_GENERADOS',
+                    total_productos_estancados_detectados: slowMoving.length,
+                    combos_estrategicos: combos
                 }
             };
         }
