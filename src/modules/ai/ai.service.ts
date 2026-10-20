@@ -312,8 +312,18 @@ COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
                 .join('\n')
                 .trim();
 
+            let fallbackText = '';
+            for (const p of toolResultsParts) {
+                const resp = p.functionResponse?.response;
+                if (resp?.mensaje) {
+                    fallbackText += (fallbackText ? '\n\n' : '') + resp.mensaje;
+                } else if (resp?.error) {
+                    fallbackText += (fallbackText ? '\n\n' : '') + resp.error;
+                }
+            }
+
             return {
-                text: finalReplyText || 'Reporte procesado exitosamente.',
+                text: finalReplyText || fallbackText || 'Operación ejecutada exitosamente.',
                 actions: collectedActions,
                 modelUsed: candidateModel,
                 usage

@@ -2319,7 +2319,7 @@ export async function executeAiTool(
                 };
             }
 
-            // 4. Buscar y Validar cada Producto y su Stock
+            // 4. Buscar y Validar cada Producto y su Stock con resolución inteligente de nombres
             const processedSaleItems: any[] = [];
             let rawSubTotal = new Decimal(0);
             let finalTaxAmount = new Decimal(0);
@@ -2331,7 +2331,8 @@ export async function executeAiTool(
 
                 if (!search || !qty || qty <= 0) continue;
 
-                let prod = await prisma.product.findFirst({
+                // 1. Buscar todos los productos candidatos que coincidan por nombre o SKU
+                const candidateProducts = await prisma.product.findMany({
                     where: {
                         businessId,
                         isActive: true,
@@ -2340,13 +2341,73 @@ export async function executeAiTool(
                             { sku: { contains: search, mode: 'insensitive' } }
                         ]
                     },
-                    include: { tax: true, presentations: true }
+                    include: {
+                        tax: true,
+                        presentations: true,
+                        stockLots: {
+                            where: {
+                                depotId: primaryDepot.id,
+                                quantity: { gt: 0 }
+                            }
+                        }
+                    }
                 });
 
+                let prod: any = null;
+
+                if (candidateProducts.length > 0) {
+                    const searchLower = search.toLowerCase();
+
+                    // Prioridad 1: Coincidencia EXACTA por nombre o SKU que tenga stock suficiente
+                    prod = candidateProducts.find(p => 
+                        (p.name.toLowerCase() === searchLower || p.sku?.toLowerCase() === searchLower) &&
+                        p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty
+                    );
+
+                    // Prioridad 2: Coincidencia EXACTA por nombre o SKU aunque no tenga stock (para no confundir con otro producto como pasta de jabón)
+                    if (!prod) {
+                        prod = candidateProducts.find(p => 
+                            p.name.toLowerCase() === searchLower || p.sku?.toLowerCase() === searchLower
+                        );
+                    }
+
+                    // Prioridad 3: El nombre COMIENZA con la palabra buscada y TIENE stock suficiente (ej: "Jabón..." antes que "Pasta de Jabón")
+                    if (!prod) {
+                        prod = candidateProducts.find(p => 
+                            p.name.toLowerCase().startsWith(searchLower) &&
+                            p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty
+                        );
+                    }
+
+                    // Prioridad 4: Cualquier producto que contenga la palabra y TENGA stock suficiente
+                    if (!prod) {
+                        prod = candidateProducts.find(p => 
+                            p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty
+                        );
+                    }
+
+                    // Prioridad 5: Si ninguno tiene stock suficiente, elegir el más cercano por palabras exactas o mayor stock
+                    if (!prod) {
+                        candidateProducts.sort((a, b) => {
+                            const aWords = a.name.toLowerCase().split(/\s+/);
+                            const bWords = b.name.toLowerCase().split(/\s+/);
+                            const aExactWord = aWords.includes(searchLower) ? 1 : 0;
+                            const bExactWord = bWords.includes(searchLower) ? 1 : 0;
+                            if (aExactWord !== bExactWord) return bExactWord - aExactWord;
+
+                            const aStock = a.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0);
+                            const bStock = b.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0);
+                            return bStock - aStock;
+                        });
+                        prod = candidateProducts[0];
+                    }
+                }
+
                 if (!prod) {
+                    // Intento de búsqueda dividiendo en palabras si no hubo candidatos
                     const words = search.split(/\s+/).filter((w: string) => w.length > 2);
                     if (words.length > 0) {
-                        prod = await prisma.product.findFirst({
+                        const fallbackCandidates = await prisma.product.findMany({
                             where: {
                                 businessId,
                                 isActive: true,
@@ -2354,8 +2415,20 @@ export async function executeAiTool(
                                     name: { contains: w, mode: 'insensitive' }
                                 }))
                             },
-                            include: { tax: true, presentations: true }
+                            include: {
+                                tax: true,
+                                presentations: true,
+                                stockLots: {
+                                    where: {
+                                        depotId: primaryDepot.id,
+                                        quantity: { gt: 0 }
+                                    }
+                                }
+                            }
                         });
+                        if (fallbackCandidates.length > 0) {
+                            prod = fallbackCandidates.find(p => p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty) || fallbackCandidates[0];
+                        }
                     }
                 }
 
@@ -2368,14 +2441,7 @@ export async function executeAiTool(
                     };
                 }
 
-                const stockLots = await prisma.stockLot.findMany({
-                    where: {
-                        productId: prod.id,
-                        depotId: primaryDepot.id,
-                        quantity: { gt: 0 }
-                    }
-                });
-                const totalStock = stockLots.reduce((acc, l) => acc + Number(l.quantity), 0);
+                const totalStock = prod.stockLots.reduce((acc: number, l: any) => acc + Number(l.quantity), 0);
 
                 if (totalStock < qty) {
                     return {
