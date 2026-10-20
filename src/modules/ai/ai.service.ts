@@ -11,8 +11,8 @@ export class AiService {
 
     constructor() {
         this.apiKey = process.env.GEMINI_API_KEY || '';
-        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
-        this.fallbackModels = ['gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+        this.fallbackModels = ['gemini-2.0-flash', 'gemini-1.5-flash'];
         this.usageService = new AiUsageService();
     }
 
@@ -141,7 +141,7 @@ COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
         return axios.post(url, payload, {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 25000
+            timeout: 15000
         });
     }
 
