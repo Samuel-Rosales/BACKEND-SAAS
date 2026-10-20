@@ -7,7 +7,7 @@ import { prisma } from '@/configs';
 import { ToolExecutionResult, AiChatAction } from './ai.interface';
 import { SaleService } from '../sales/sale/sale.service';
 import { resolveBusinessExchangeRate } from '@/utils';
-import { CashStatus, ProductType, MovementType, InstallmentStatus } from '@prisma/client';
+import { CashStatus, ProductType, MovementType, InstallmentStatus, Conditions, SaleType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
 
 const saleService = new SaleService();
@@ -380,6 +380,35 @@ export const AI_TOOL_DECLARATIONS = [
         parameters: {
             type: 'OBJECT',
             properties: {}
+        }
+    },
+    {
+        name: 'ejecutar_crear_venta',
+        description: 'Registra y procesa una venta real en el sistema Guardián (Punto de Venta / POS) por comando de voz o texto (ej: "vende 2 Coca Colas en efectivo", "véndele 3 Harina Pan a crédito a María López", "vende 1 Arroz", "haz una venta de 2 galletas"). Valida inventario disponible en almacén, verifica que exista una caja registradora abierta de turno, calcula la tasa de cambio oficial, asigna al cliente (o Consumidor Final de mostrador por defecto), rebaja el stock automáticamente con método FIFO y genera el ticket/factura oficial.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                items: {
+                    type: 'ARRAY',
+                    description: 'Lista de productos a vender.',
+                    items: {
+                        type: 'OBJECT',
+                        properties: {
+                            productSearch: { type: 'STRING', description: 'Nombre o parte del nombre del producto a vender (ej: "Coca Cola", "Harina Pan").' },
+                            quantity: { type: 'NUMBER', description: 'Cantidad de unidades a vender (ej: 1, 2, 5).' },
+                            unitPriceUSD: { type: 'NUMBER', description: 'Precio unitario en dólares USD si se especifica un precio personalizado. Opcional.' }
+                        },
+                        required: ['productSearch', 'quantity']
+                    }
+                },
+                clientSearch: { type: 'STRING', description: 'Nombre, cédula o teléfono del cliente. Opcional. Si no se especifica o dice "consumidor final", se asigna a Consumidor Final / Mostrador.' },
+                condition: { type: 'STRING', description: 'Condición de la venta: "CASH" para contado o "CREDIT" para crédito. Por defecto "CASH".' },
+                paymentMethodName: { type: 'STRING', description: 'Método de pago (ej: "Efectivo", "Dólares", "Pago Móvil", "Punto de Venta", "Zelle"). Por defecto "Efectivo".' },
+                discountUSD: { type: 'NUMBER', description: 'Descuento global en dólares USD. Opcional, por defecto 0.' },
+                reference: { type: 'STRING', description: 'Referencia bancaria o nota de comprobante. Opcional.' },
+                creditDays: { type: 'NUMBER', description: 'Si la venta es a crédito, días de plazo para pagar (ej: 15 o 30). Opcional, por defecto 15.' }
+            },
+            required: ['items']
         }
     }
 ];
@@ -2205,6 +2234,355 @@ export async function executeAiTool(
                     status: 'COMBOS_GENERADOS',
                     total_productos_estancados_detectados: slowMoving.length,
                     combos_estrategicos: combos
+                }
+            };
+        }
+
+        case 'ejecutar_crear_venta': {
+            const rawItems = Array.isArray(args?.items) ? args.items : [];
+            const clientSearch = String(args?.clientSearch || '').trim();
+            const conditionStr = String(args?.condition || 'CASH').toUpperCase();
+            const paymentMethodName = String(args?.paymentMethodName || 'Efectivo').trim();
+            const discountUSD = Number(args?.discountUSD || 0);
+            const reference = String(args?.reference || 'Venta por comando Guardián AI').trim();
+            const creditDays = Number(args?.creditDays || 15);
+
+            if (rawItems.length === 0) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: 'Debes indicar al menos un producto y la cantidad a vender (ej: "Vende 2 Harina Pan").'
+                    }
+                };
+            }
+
+            // 1. Validar Tasa de Cambio
+            const currentRateRecord = await resolveBusinessExchangeRate(businessId, prisma);
+            if (!currentRateRecord) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: 'No hay una tasa de cambio configurada en el sistema. Configura la tasa antes de realizar ventas.'
+                    }
+                };
+            }
+
+            // 2. Validar Miembro y Caja Abierta
+            let cashierMember = userId ? await prisma.businessMember.findFirst({
+                where: { businessId, userId },
+                include: { user: true }
+            }) : null;
+
+            let openRegister = cashierMember ? await prisma.cashRegister.findFirst({
+                where: { businessId, memberId: cashierMember.id, status: CashStatus.OPEN }
+            }) : null;
+
+            if (!openRegister) {
+                openRegister = await prisma.cashRegister.findFirst({
+                    where: { businessId, status: CashStatus.OPEN }
+                });
+                if (openRegister) {
+                    cashierMember = await prisma.businessMember.findFirst({
+                        where: { id: openRegister.memberId },
+                        include: { user: true }
+                    });
+                }
+            }
+
+            if (!openRegister || !cashierMember) {
+                return {
+                    data: {
+                        status: 'CAJA_CERRADA',
+                        mensaje: '⚠️ No tienes ninguna caja registradora abierta en este momento. Para realizar ventas (tanto por el punto de venta como por Guardián AI), es obligatorio abrir caja en el módulo de Cajas.',
+                        accion_requerida: 'Realizar Apertura de Caja'
+                    },
+                    action: {
+                        type: 'NAVIGATE',
+                        label: '🏦 Ir a Apertura de Caja',
+                        url: `/dashboard/business/${businessId}/cash-register`
+                    }
+                };
+            }
+
+            // 3. Obtener Depósito Principal
+            const primaryDepot = await prisma.depot.findFirst({
+                where: { businessId, isActive: true },
+                orderBy: { id: 'asc' }
+            }) || await prisma.depot.findFirst({ where: { businessId } });
+
+            if (!primaryDepot) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: 'No se encontró ningún almacén o depósito activo en la empresa.'
+                    }
+                };
+            }
+
+            // 4. Buscar y Validar cada Producto y su Stock
+            const processedSaleItems: any[] = [];
+            let rawSubTotal = new Decimal(0);
+            let finalTaxAmount = new Decimal(0);
+            const itemsSummary: any[] = [];
+
+            for (const item of rawItems) {
+                const search = String(item.productSearch || '').trim();
+                const qty = Number(item.quantity);
+
+                if (!search || !qty || qty <= 0) continue;
+
+                let prod = await prisma.product.findFirst({
+                    where: {
+                        businessId,
+                        isActive: true,
+                        OR: [
+                            { name: { contains: search, mode: 'insensitive' } },
+                            { sku: { contains: search, mode: 'insensitive' } }
+                        ]
+                    },
+                    include: { tax: true, presentations: true }
+                });
+
+                if (!prod) {
+                    const words = search.split(/\s+/).filter((w: string) => w.length > 2);
+                    if (words.length > 0) {
+                        prod = await prisma.product.findFirst({
+                            where: {
+                                businessId,
+                                isActive: true,
+                                AND: words.map((w: string) => ({
+                                    name: { contains: w, mode: 'insensitive' }
+                                }))
+                            },
+                            include: { tax: true, presentations: true }
+                        });
+                    }
+                }
+
+                if (!prod) {
+                    return {
+                        data: {
+                            status: 'ERROR',
+                            mensaje: `No se encontró ningún producto activo con el término "${search}" en el catálogo. Verifica el nombre exacto del artículo.`
+                        }
+                    };
+                }
+
+                const stockLots = await prisma.stockLot.findMany({
+                    where: {
+                        productId: prod.id,
+                        depotId: primaryDepot.id,
+                        quantity: { gt: 0 }
+                    }
+                });
+                const totalStock = stockLots.reduce((acc, l) => acc + Number(l.quantity), 0);
+
+                if (totalStock < qty) {
+                    return {
+                        data: {
+                            status: 'STOCK_INSUFICIENTE',
+                            mensaje: `Stock insuficiente para "${prod.name}". Solicitaste vender ${qty} unidades pero solo quedan ${totalStock} disponibles en almacén.`,
+                            producto: prod.name,
+                            stock_disponible: totalStock,
+                            solicitado: qty
+                        }
+                    };
+                }
+
+                const unitPrice = new Decimal(prod.salePrice);
+                const lineGross = unitPrice.mul(qty);
+                rawSubTotal = rawSubTotal.add(lineGross);
+
+                const taxRate = prod.tax?.rate ? new Decimal(prod.tax.rate) : new Decimal(0);
+                const lineTax = lineGross.mul(taxRate);
+                finalTaxAmount = finalTaxAmount.add(lineTax);
+
+                processedSaleItems.push({
+                    productId: prod.id,
+                    quantity: qty,
+                    price: unitPrice,
+                    depotId: primaryDepot.id
+                });
+
+                itemsSummary.push({
+                    producto: prod.name,
+                    cantidad: qty,
+                    precio_unitario_usd: unitPrice.toNumber(),
+                    subtotal_linea_usd: lineGross.toNumber()
+                });
+            }
+
+            if (processedSaleItems.length === 0) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: 'No se pudieron procesar los artículos de la venta. Verifica los nombres y cantidades.'
+                    }
+                };
+            }
+
+            // 5. Cliente
+            let client = null;
+            if (clientSearch && !['consumidor final', 'mostrador', 'general', 'varios'].includes(clientSearch.toLowerCase())) {
+                client = await prisma.client.findFirst({
+                    where: {
+                        businessId,
+                        isActive: true,
+                        OR: [
+                            { name: { contains: clientSearch, mode: 'insensitive' } },
+                            { ci: { contains: clientSearch, mode: 'insensitive' } },
+                            { phone: { contains: clientSearch, mode: 'insensitive' } }
+                        ]
+                    }
+                });
+            }
+
+            if (!client) {
+                client = await prisma.client.findFirst({
+                    where: {
+                        businessId,
+                        isActive: true,
+                        OR: [
+                            { name: { contains: 'Consumidor', mode: 'insensitive' } },
+                            { name: { contains: 'Varios', mode: 'insensitive' } },
+                            { name: { contains: 'General', mode: 'insensitive' } },
+                            { name: { contains: 'Mostrador', mode: 'insensitive' } }
+                        ]
+                    }
+                }) || await prisma.client.findFirst({
+                    where: { businessId, isActive: true },
+                    orderBy: { id: 'asc' }
+                });
+            }
+
+            if (!client) {
+                client = await prisma.client.create({
+                    data: {
+                        businessId,
+                        name: 'Consumidor Final',
+                        ci: 'V-00000000',
+                        phone: '0000000000',
+                        email: 'consumidor@guardian.com.ve',
+                        address: 'Mostrador',
+                        allowCredit: false,
+                        currentDebt: 0
+                    }
+                });
+            }
+
+            const discountDec = new Decimal(discountUSD);
+            const totalAmount = rawSubTotal.sub(discountDec).add(finalTaxAmount);
+            const isCredit = conditionStr === 'CREDIT';
+
+            if (isCredit && !client.allowCredit) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: `El cliente "${client.name}" no tiene habilitado el cupo para compras a crédito en el sistema.`
+                    }
+                };
+            }
+
+            // 6. Método de Pago (si es Contado)
+            let paymentsDto: any[] = [];
+            let paymentMethodUsed = null;
+
+            if (!isCredit) {
+                paymentMethodUsed = await prisma.paymentMethod.findFirst({
+                    where: {
+                        isActive: true,
+                        name: { contains: paymentMethodName, mode: 'insensitive' }
+                    }
+                }) || await prisma.paymentMethod.findFirst({
+                    where: { isActive: true, currency: 'USD' }
+                }) || await prisma.paymentMethod.findFirst({
+                    where: { isActive: true }
+                });
+
+                if (!paymentMethodUsed) {
+                    return {
+                        data: {
+                            status: 'ERROR',
+                            mensaje: 'No hay métodos de pago registrados en el sistema.'
+                        }
+                    };
+                }
+
+                let payAmount = totalAmount.toNumber();
+                if (paymentMethodUsed.currency !== 'USD') {
+                    payAmount = totalAmount.mul(currentRateRecord.rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+                }
+
+                paymentsDto = [{
+                    paymentMethodId: paymentMethodUsed.id,
+                    amount: payAmount,
+                    reference,
+                    exchangeRateId: currentRateRecord.id,
+                    cashRegisterId: openRegister.id
+                }];
+            }
+
+            // 7. Ejecutar Venta
+            const saleCreationData: any = {
+                clientId: client.id,
+                memberId: cashierMember.id,
+                sellerMemberId: cashierMember.id,
+                exchangeRateId: currentRateRecord.id,
+                type: SaleType.RETAIL,
+                depotId: primaryDepot.id,
+                discount: discountDec,
+                condition: isCredit ? Conditions.CREDIT : Conditions.CASH,
+                items: processedSaleItems,
+                payments: paymentsDto,
+                subTotal: rawSubTotal,
+                taxAmount: finalTaxAmount,
+                totalAmount: totalAmount
+            };
+
+            if (isCredit) {
+                saleCreationData.installments = [{
+                    number: 1,
+                    amount: totalAmount,
+                    dueDate: new Date(Date.now() + creditDays * 86400000)
+                }];
+            }
+
+            const saleRes = await saleService.create(businessId, cashierMember.id, saleCreationData);
+
+            if (saleRes.status !== 201 || !saleRes.data) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: `No se pudo procesar la venta: ${saleRes.message}`
+                    }
+                };
+            }
+
+            const saleCreated = saleRes.data as any;
+            const totalVES = totalAmount.mul(currentRateRecord.rate).toFixed(2);
+
+            return {
+                data: {
+                    status: 'VENTA_COMPLETADA',
+                    recibo_numero: saleCreated.receiptNumber,
+                    cliente: client.name,
+                    cajero: cashierMember.user?.name || 'Cajero de turno',
+                    caja_id: openRegister.id,
+                    condicion: isCredit ? 'CRÉDITO' : 'CONTADO',
+                    metodo_pago: isCredit ? 'Pendiente por cobrar' : paymentMethodUsed?.name,
+                    subtotal_usd: rawSubTotal.toNumber(),
+                    impuestos_usd: finalTaxAmount.toNumber(),
+                    descuento_usd: discountDec.toNumber(),
+                    total_usd: totalAmount.toNumber(),
+                    total_ves: totalVES,
+                    tasa_cambio: currentRateRecord.rate,
+                    articulos_vendidos: itemsSummary,
+                    mensaje: `Venta #${saleCreated.receiptNumber} registrada con éxito. Total: ${totalAmount.toFixed(2)} USD (Bs. ${totalVES}). Stock actualizado en almacén.`
+                },
+                action: {
+                    type: 'NAVIGATE',
+                    label: `🧾 Ver Venta #${saleCreated.receiptNumber}`,
+                    url: `/dashboard/business/${businessId}/sales`
                 }
             };
         }

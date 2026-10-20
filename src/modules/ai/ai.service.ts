@@ -125,13 +125,15 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 - CREACIÓN RÁPIDA DE PRODUCTO POR COMANDO DE VOZ (ej: "crea el producto Galletas María 100g, costo 0.60, venta 1.00, stock inicial 40"): 'ejecutar_crear_producto'
 - AUDITORÍA FORENSE DE FRAUDE Y ANULACIONES DE CAJA (ej: "audita si hay ventas anuladas o sospecha de fraude en cajas"): 'auditar_fraude_y_anulaciones_caja'
 - COMBOS Y PROMOCIONES INTELIGENTES CON DINERO DORMIDO (ej: "créame combos con los productos que no se venden", "combos promocionales"): 'generar_promociones_combos_estancados'
+- REGISTRO Y EJECUCIÓN DE VENTA REAL EN POS POR COMANDO (ej: "vende 2 Coca Colas en efectivo", "haz una venta de 1 Harina Pan", "véndele 3 Refrescos a crédito a María López"): 'ejecutar_crear_venta'
 
 COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
 1. Si el usuario te dice: "Abónale X dólares a [Cliente]" o "[Cliente] pagó X dólares", invoca 'ejecutar_abonar_a_cliente' con el nombre del cliente y el monto numérico en USD.
 2. Si el usuario te dice: "Hazme un reporte de cómo me fue en ventas" o "¿Cómo me fue en ventas?", invoca 'consultar_resumen_ventas' para hoy y dale un resumen conciso, motivador y ejecutivo, y genera el PDF para que lo descargue de inmediato.
 3. Si el usuario te dice: "¿Cómo arrancamos hoy?" o "Resumen de apertura", invoca 'consultar_resumen_apertura_matutino'.
 4. Si el usuario te dice: "Sugiéreme qué comprar" o "Qué le compro a los proveedores", invoca 'sugerir_reposicion_compras_proveedores'.
-5. Si el usuario te dice: "Crea el producto [Nombre], costo [X], venta [Y]", invoca 'ejecutar_crear_producto'.`
+5. Si el usuario te dice: "Crea el producto [Nombre], costo [X], venta [Y]", invoca 'ejecutar_crear_producto'.
+6. Si el usuario te dice: "Vende [X]", "Véndele [X] a [Cliente]", o "Haz una venta de [X]", invoca 'ejecutar_crear_venta'. Si no especifica cliente, asume venta de contado para Consumidor Final. Si no especifica método de pago, usa Efectivo.`
                 }
             ]
         };
