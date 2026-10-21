@@ -414,6 +414,7 @@ model Product {
   
   name          String
   sku           String?
+  secondaryCode String?
   description   String? @default("")
   imageUrl      String?
   imagePublicId String?
@@ -462,6 +463,7 @@ model Product {
   componentOf     ProductComponent[] @relation("ChildProduct")
 
   @@index([businessId, sku])
+  @@index([businessId, secondaryCode])
 }
 
 // TABLA DE RELACIÓN (La Receta / BOM)

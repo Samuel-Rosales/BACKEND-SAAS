@@ -60,6 +60,12 @@ export class ProductValidator {
             .isString()
             .isLength({ min: 1, max: 100 }).withMessage('El SKU debe tener entre 1 y 100 caracteres'),
 
+        body('secondaryCode')
+            .optional({ nullable: true, checkFalsy: true })
+            .trim()
+            .isString()
+            .isLength({ min: 1, max: 100 }).withMessage('El código secundario debe tener entre 1 y 100 caracteres'),
+
         body('description')
             .optional({ nullable: true })
             .trim()
@@ -195,6 +201,7 @@ export class ProductValidator {
 
         body('name').optional().trim().isString().isLength({ min: 2, max: 200 }),
         body('sku').optional({ nullable: true }).trim().isString().isLength({ max: 100 }),
+        body('secondaryCode').optional({ nullable: true }).trim().isString().isLength({ max: 100 }),
         body('description').optional().trim().isString().isLength({ max: 1000 }),
         body('imageUrl').optional({ nullable: true }).trim().isURL(),
         body('imagePublicId').optional({ nullable: true }).isString(),

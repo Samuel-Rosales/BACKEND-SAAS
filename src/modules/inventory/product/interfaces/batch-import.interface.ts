@@ -3,6 +3,7 @@ import { ProductType } from '@prisma/client';
 export interface BatchImportProductItem {
     name: string;
     sku?: string;
+    secondaryCode?: string;
     description?: string;
     categoryName?: string;
     unitSymbolOrName?: string;

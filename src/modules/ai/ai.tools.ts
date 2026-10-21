@@ -726,13 +726,15 @@ export async function executeAiTool(
                     isActive: true,
                     OR: [
                         ...searchVariants.map(term => ({ name: { contains: term, mode: 'insensitive' as const } })),
-                        ...searchVariants.map(term => ({ sku: { contains: term, mode: 'insensitive' as const } }))
+                        ...searchVariants.map(term => ({ sku: { contains: term, mode: 'insensitive' as const } })),
+                        ...searchVariants.map(term => ({ secondaryCode: { contains: term, mode: 'insensitive' as const } }))
                     ]
                 },
                 select: {
                     id: true,
                     name: true,
                     sku: true,
+                    secondaryCode: true,
                     salePrice: true,
                     costPrice: true,
                     minStock: true,
@@ -751,8 +753,8 @@ export async function executeAiTool(
             products.sort((a, b) => {
                 const aNorm = normalize(a.name);
                 const bNorm = normalize(b.name);
-                const aExact = (aNorm === target || normalize(a.sku || '') === target) ? 1 : 0;
-                const bExact = (bNorm === target || normalize(b.sku || '') === target) ? 1 : 0;
+                const aExact = (aNorm === target || normalize(a.sku || '') === target || normalize(a.secondaryCode || '') === target) ? 1 : 0;
+                const bExact = (bNorm === target || normalize(b.sku || '') === target || normalize(b.secondaryCode || '') === target) ? 1 : 0;
                 if (aExact !== bExact) return bExact - aExact;
 
                 const aStarts = aNorm.startsWith(target) ? 1 : 0;
@@ -2371,7 +2373,8 @@ export async function executeAiTool(
                         isActive: true,
                         OR: [
                             ...searchVariants.map(term => ({ name: { contains: term, mode: 'insensitive' as const } })),
-                            ...searchVariants.map(term => ({ sku: { contains: term, mode: 'insensitive' as const } }))
+                            ...searchVariants.map(term => ({ sku: { contains: term, mode: 'insensitive' as const } })),
+                        ...searchVariants.map(term => ({ secondaryCode: { contains: term, mode: 'insensitive' as const } }))
                         ]
                     },
                     include: {
@@ -2391,7 +2394,7 @@ export async function executeAiTool(
                 if (candidateProducts.length > 0) {
                     // Prioridad 1: Coincidencia EXACTA (insensible a mayúsculas y acentos) por nombre o SKU que tenga stock suficiente
                     prod = candidateProducts.find(p => 
-                        (normalize(p.name) === target || normalize(p.sku || '') === target) &&
+                        (normalize(p.name) === target || normalize(p.sku || '') === target || normalize(p.secondaryCode || '') === target || normalize(p.secondaryCode || '') === target) &&
                         p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty
                     );
 

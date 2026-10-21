@@ -8,6 +8,7 @@ export interface ProductComponentDTO {
 export interface CreateProductInterface {
     name: string;
     sku?: string;
+    secondaryCode?: string;
     description?: string;
     categoryId: number;
     unitId: number;

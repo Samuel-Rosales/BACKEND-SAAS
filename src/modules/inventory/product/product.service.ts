@@ -107,6 +107,7 @@ export class ProductService {
                 prisma.measurementUnit.findUnique({ where: { id: data.unitId } }),
                 prisma.tax.findUnique({ where: { id: data.taxId } }),
                 data.sku ? prisma.product.findFirst({ where: { sku: data.sku, businessId } }) : null,
+                data.secondaryCode ? prisma.product.findFirst({ where: { secondaryCode: data.secondaryCode, businessId } }) : null,
                 hasInitialStock
                     ? prisma.depot.findFirst({
                         where: {
@@ -123,6 +124,8 @@ export class ProductService {
             if (!unit) return { message: 'Unidad inválida', status: 404, data: null };
             if (!tax) return { message: 'Impuesto inválido', status: 404, data: null };
             if (existingSku) return { message: `SKU "${data.sku}" ya existe`, status: 400, data: null };
+            const existingSec = existingSku ? null : (data.secondaryCode ? await prisma.product.findFirst({ where: { secondaryCode: data.secondaryCode, businessId } }) : null);
+            if (existingSec) return { message: `El código secundario "${data.secondaryCode}" ya existe`, status: 400, data: null };
             if (hasInitialStock && !initialDepot) {
                 return { message: 'Depósito inicial inválido o no pertenece al negocio', status: 404, data: null };
             }
@@ -187,6 +190,7 @@ export class ProductService {
                         updatedById: userId,
                         name: data.name,
                         sku: data.sku || null,
+                        secondaryCode: data.secondaryCode ? String(data.secondaryCode).trim() : null,
                         description: data.description,
                         imageUrl: data.imageUrl || null,
                         imagePublicId: data.imagePublicId || null,
@@ -301,6 +305,7 @@ export class ProductService {
                 whereClause.OR = [
                     { name: { contains: search, mode: 'insensitive' } },
                     { sku: { contains: search, mode: 'insensitive' } },
+                    { secondaryCode: { contains: search, mode: 'insensitive' } },
                     { presentations: { some: { name: { contains: search, mode: 'insensitive' } } } },
                     { presentations: { some: { barCode: { contains: search, mode: 'insensitive' } } } }
                 ];
