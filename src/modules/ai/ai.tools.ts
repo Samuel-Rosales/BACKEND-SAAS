@@ -18,6 +18,36 @@ const commissionReportService = new CommissionReportService();
 const financialReportService = new FinancialReportService();
 const depositsReportService = new DepositsReportService();
 
+export const stripAccents = (str: string): string => {
+    return (str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+};
+
+export const getSearchVariants = (term: string): string[] => {
+    const raw = (term || '').trim();
+    if (!raw) return [];
+    const lower = raw.toLowerCase();
+    const unaccented = stripAccents(lower);
+
+    const set = new Set<string>();
+    set.add(raw);
+    set.add(lower);
+    set.add(unaccented);
+
+    for (const v of [lower, unaccented]) {
+        if (v.endsWith('es') && v.length > 3) set.add(v.slice(0, -2));
+        if (v.endsWith('s') && v.length > 2) set.add(v.slice(0, -1));
+
+        const words = v.split(/\s+/).filter(w => w.length > 2);
+        for (const w of words) {
+            set.add(w);
+            set.add(stripAccents(w));
+            if (w.endsWith('es') && w.length > 3) set.add(w.slice(0, -2));
+            if (w.endsWith('s') && w.length > 2) set.add(w.slice(0, -1));
+        }
+    }
+    return Array.from(set).filter(Boolean);
+};
+
 const parseDateRange = (fromDate?: string, toDate?: string, tzOffset: number = 240) => {
     const local = new Date(Date.now() - (tzOffset * 60_000));
     const todayStr = local.toISOString().split('T')[0];
@@ -686,35 +716,17 @@ export async function executeAiTool(
 
         case 'consultar_informacion_producto': {
             const search = String(args?.search || '').trim();
-            const cleanTerm = search.toLowerCase().trim();
-            const searchVariants = new Set<string>();
-            if (cleanTerm) {
-                searchVariants.add(cleanTerm);
-                if (cleanTerm.endsWith('es') && cleanTerm.length > 3) {
-                    searchVariants.add(cleanTerm.slice(0, -2));
-                }
-                if (cleanTerm.endsWith('s') && cleanTerm.length > 2) {
-                    searchVariants.add(cleanTerm.slice(0, -1));
-                }
-                const words = cleanTerm.split(/\s+/).filter(w => w.length > 2);
-                for (const w of words) {
-                    searchVariants.add(w);
-                    if (w.endsWith('es') && w.length > 3) searchVariants.add(w.slice(0, -2));
-                    if (w.endsWith('s') && w.length > 2) searchVariants.add(w.slice(0, -1));
-                }
-            }
-
-            const nameConditions = Array.from(searchVariants).map(term => ({
-                name: { contains: term, mode: 'insensitive' as const }
-            }));
+            const searchVariants = getSearchVariants(search);
+            const normalize = (s: string) => stripAccents(s || '').toLowerCase().trim();
+            const target = normalize(search);
 
             const products = await prisma.product.findMany({
                 where: {
                     businessId,
                     isActive: true,
                     OR: [
-                        ...(nameConditions.length > 0 ? nameConditions : [{ name: { contains: search, mode: 'insensitive' as const } }]),
-                        { sku: { contains: search, mode: 'insensitive' } }
+                        ...searchVariants.map(term => ({ name: { contains: term, mode: 'insensitive' as const } })),
+                        ...searchVariants.map(term => ({ sku: { contains: term, mode: 'insensitive' as const } }))
                     ]
                 },
                 select: {
@@ -732,9 +744,26 @@ export async function executeAiTool(
                         }
                     }
                 },
-                take: 5
+                take: 20
             });
 
+            // Ordenar por relevancia: coincidencias exactas primero, luego las que comienzan con el término y con más stock
+            products.sort((a, b) => {
+                const aNorm = normalize(a.name);
+                const bNorm = normalize(b.name);
+                const aExact = (aNorm === target || normalize(a.sku || '') === target) ? 1 : 0;
+                const bExact = (bNorm === target || normalize(b.sku || '') === target) ? 1 : 0;
+                if (aExact !== bExact) return bExact - aExact;
+
+                const aStarts = aNorm.startsWith(target) ? 1 : 0;
+                const bStarts = bNorm.startsWith(target) ? 1 : 0;
+                if (aStarts !== bStarts) return bStarts - aStarts;
+
+                const aStock = a.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0);
+                const bStock = b.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0);
+                return bStock - aStock;
+            });
+            
             return {
                 data: {
                     coincidencias_encontradas: products.length,
@@ -2331,14 +2360,18 @@ export async function executeAiTool(
 
                 if (!search || !qty || qty <= 0) continue;
 
-                // 1. Buscar todos los productos candidatos que coincidan por nombre o SKU
+                const searchVariants = getSearchVariants(search);
+                const normalize = (s: string) => stripAccents(s || '').toLowerCase().trim();
+                const target = normalize(search);
+
+                // 1. Buscar todos los productos candidatos que coincidan por nombre o SKU (incluyendo acentos y sin acentos)
                 const candidateProducts = await prisma.product.findMany({
                     where: {
                         businessId,
                         isActive: true,
                         OR: [
-                            { name: { contains: search, mode: 'insensitive' } },
-                            { sku: { contains: search, mode: 'insensitive' } }
+                            ...searchVariants.map(term => ({ name: { contains: term, mode: 'insensitive' as const } })),
+                            ...searchVariants.map(term => ({ sku: { contains: term, mode: 'insensitive' as const } }))
                         ]
                     },
                     include: {
@@ -2356,43 +2389,49 @@ export async function executeAiTool(
                 let prod: any = null;
 
                 if (candidateProducts.length > 0) {
-                    const searchLower = search.toLowerCase();
-
-                    // Prioridad 1: Coincidencia EXACTA por nombre o SKU que tenga stock suficiente
+                    // Prioridad 1: Coincidencia EXACTA (insensible a mayúsculas y acentos) por nombre o SKU que tenga stock suficiente
                     prod = candidateProducts.find(p => 
-                        (p.name.toLowerCase() === searchLower || p.sku?.toLowerCase() === searchLower) &&
+                        (normalize(p.name) === target || normalize(p.sku || '') === target) &&
                         p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty
                     );
 
-                    // Prioridad 2: Coincidencia EXACTA por nombre o SKU aunque no tenga stock (para no confundir con otro producto como pasta de jabón)
+                    // Prioridad 2: Coincidencia EXACTA por nombre o SKU aunque no tenga stock (para evitar confundir 'jabón' con 'pasta de jabón')
                     if (!prod) {
                         prod = candidateProducts.find(p => 
-                            p.name.toLowerCase() === searchLower || p.sku?.toLowerCase() === searchLower
+                            normalize(p.name) === target || normalize(p.sku || '') === target
                         );
                     }
 
-                    // Prioridad 3: El nombre COMIENZA con la palabra buscada y TIENE stock suficiente (ej: "Jabón..." antes que "Pasta de Jabón")
+                    // Prioridad 3: El nombre COMIENZA con la frase buscada y TIENE stock suficiente
                     if (!prod) {
                         prod = candidateProducts.find(p => 
-                            p.name.toLowerCase().startsWith(searchLower) &&
+                            normalize(p.name).startsWith(target) &&
                             p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty
                         );
                     }
 
-                    // Prioridad 4: Cualquier producto que contenga la palabra y TENGA stock suficiente
+                    // Prioridad 4: El nombre CONTIENE la frase buscada completa y TIENE stock suficiente
+                    if (!prod) {
+                        prod = candidateProducts.find(p => 
+                            normalize(p.name).includes(target) &&
+                            p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty
+                        );
+                    }
+
+                    // Prioridad 5: Cualquier producto candidato que tenga stock suficiente
                     if (!prod) {
                         prod = candidateProducts.find(p => 
                             p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty
                         );
                     }
 
-                    // Prioridad 5: Si ninguno tiene stock suficiente, elegir el más cercano por palabras exactas o mayor stock
+                    // Prioridad 6: Si ninguno tiene stock suficiente, ordenar por proximidad léxica
                     if (!prod) {
                         candidateProducts.sort((a, b) => {
-                            const aWords = a.name.toLowerCase().split(/\s+/);
-                            const bWords = b.name.toLowerCase().split(/\s+/);
-                            const aExactWord = aWords.includes(searchLower) ? 1 : 0;
-                            const bExactWord = bWords.includes(searchLower) ? 1 : 0;
+                            const aWords = normalize(a.name).split(/\s+/);
+                            const bWords = normalize(b.name).split(/\s+/);
+                            const aExactWord = aWords.includes(target) ? 1 : 0;
+                            const bExactWord = bWords.includes(target) ? 1 : 0;
                             if (aExactWord !== bExactWord) return bExactWord - aExactWord;
 
                             const aStock = a.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0);
@@ -2400,35 +2439,6 @@ export async function executeAiTool(
                             return bStock - aStock;
                         });
                         prod = candidateProducts[0];
-                    }
-                }
-
-                if (!prod) {
-                    // Intento de búsqueda dividiendo en palabras si no hubo candidatos
-                    const words = search.split(/\s+/).filter((w: string) => w.length > 2);
-                    if (words.length > 0) {
-                        const fallbackCandidates = await prisma.product.findMany({
-                            where: {
-                                businessId,
-                                isActive: true,
-                                AND: words.map((w: string) => ({
-                                    name: { contains: w, mode: 'insensitive' }
-                                }))
-                            },
-                            include: {
-                                tax: true,
-                                presentations: true,
-                                stockLots: {
-                                    where: {
-                                        depotId: primaryDepot.id,
-                                        quantity: { gt: 0 }
-                                    }
-                                }
-                            }
-                        });
-                        if (fallbackCandidates.length > 0) {
-                            prod = fallbackCandidates.find(p => p.stockLots.reduce((acc, l) => acc + Number(l.quantity), 0) >= qty) || fallbackCandidates[0];
-                        }
                     }
                 }
 
