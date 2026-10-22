@@ -1100,6 +1100,7 @@ export class ProductService {
                 select: {
                     id: true,
                     sku: true,
+                    secondaryCode: true,
                     name: true,
                     costPrice: true,
                     salePrice: true,
@@ -1110,9 +1111,11 @@ export class ProductService {
                 }
             });
             const skuMap = new Map<string, any>();
+            const secCodeMap = new Map<string, any>();
             const nameMap = new Map<string, any>();
             existingProducts.forEach(p => {
                 if (p.sku) skuMap.set(p.sku.trim().toLowerCase(), p);
+                if (p.secondaryCode) secCodeMap.set(p.secondaryCode.trim().toLowerCase(), p);
                 if (p.name) nameMap.set(p.name.trim().toLowerCase(), p);
             });
 
@@ -1127,12 +1130,14 @@ export class ProductService {
                     const item = dto.products[i];
 
                     const rawSku = item.sku ? String(item.sku).trim() : '';
+                    const rawSecondaryCode = item.secondaryCode ? String(item.secondaryCode).trim() : '';
                     const rawName = item.name ? String(item.name).trim() : '';
                     const skuKey = rawSku ? rawSku.toLowerCase() : null;
+                    const secKey = rawSecondaryCode ? rawSecondaryCode.toLowerCase() : null;
                     const nameKey = rawName ? rawName.toLowerCase() : null;
 
-                    // Buscar producto existente por SKU o por Nombre
-                    const existingProduct = (skuKey ? skuMap.get(skuKey) : null) || (nameKey ? nameMap.get(nameKey) : null);
+                    // Buscar producto existente por SKU, por Código Secundario o por Nombre
+                    const existingProduct = (skuKey ? skuMap.get(skuKey) : null) || (secKey ? secCodeMap.get(secKey) : null) || (nameKey ? nameMap.get(nameKey) : null);
 
                     // Si no existe y no tiene nombre, no se puede crear
                     if (!existingProduct && !rawName) {
@@ -1221,8 +1226,10 @@ export class ProductService {
                             isActive: true
                         };
 
-                        // Actualizar nombre solo si vino explícito
+                        // Actualizar datos básicos si vinieron explícitos
                         if (rawName) updateData.name = rawName;
+                        if (rawSku) updateData.sku = rawSku;
+                        if (rawSecondaryCode) updateData.secondaryCode = rawSecondaryCode;
                         if (item.description && String(item.description).trim()) updateData.description = String(item.description).trim();
                         if (categoryId) updateData.categoryId = categoryId;
                         if (unitId) updateData.unitId = unitId;
@@ -1277,6 +1284,7 @@ export class ProductService {
                                 updatedById: userId,
                                 name: rawName,
                                 sku,
+                                secondaryCode: rawSecondaryCode || null,
                                 description: item.description || '',
                                 categoryId: categoryId!,
                                 unitId: unitId!,
@@ -1291,6 +1299,7 @@ export class ProductService {
                         });
                         productId = newProduct.id;
                         if (skuKey) skuMap.set(skuKey, newProduct);
+                        if (secKey) secCodeMap.set(secKey, newProduct);
                         if (nameKey) nameMap.set(nameKey, newProduct);
                         createdCount++;
                     }
