@@ -2472,7 +2472,8 @@ export async function executeAiTool(
                 const lineGross = unitPrice.mul(qty);
                 rawSubTotal = rawSubTotal.add(lineGross);
 
-                const taxRate = prod.tax?.rate ? new Decimal(prod.tax.rate) : new Decimal(0);
+                let taxRate = prod.tax?.rate ? new Decimal(prod.tax.rate) : new Decimal(0);
+                if (taxRate.gte(1)) taxRate = taxRate.div(100);
                 const lineTax = lineGross.mul(taxRate);
                 finalTaxAmount = finalTaxAmount.add(lineTax);
 

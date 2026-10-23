@@ -107,7 +107,8 @@ export class OrderService {
                 if (!product) throw new Error('Producto inválido');
 
                 const itemSubTotal = item.quantity * item.salePrice;
-                const taxRate = Number(product.tax?.rate || 0);
+                const rawTaxRate = Number(product.tax?.rate || 0);
+                const taxRate = rawTaxRate >= 1 ? rawTaxRate / 100 : rawTaxRate;
                 const itemTax = itemSubTotal * taxRate;
                 subTotal += itemSubTotal;
                 taxAmount += itemTax;

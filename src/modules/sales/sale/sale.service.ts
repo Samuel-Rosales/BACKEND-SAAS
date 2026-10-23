@@ -213,7 +213,8 @@ export class SaleService {
 
                 // Validamos si existe tax y si el rate es válido. 
                 // Convertimos tax.rate a Decimal por seguridad.
-                const taxRate = item.product.tax.rate ? new Decimal(item.product.tax.rate) : new Decimal(0);
+                let taxRate = item.product.tax.rate ? new Decimal(item.product.tax.rate) : new Decimal(0);
+                if (taxRate.gte(1)) taxRate = taxRate.div(100);
 
                 // rate > 0 ---> .gt(0)
                 if (taxRate.gt(0)) {

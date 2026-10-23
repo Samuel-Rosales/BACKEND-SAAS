@@ -75,7 +75,9 @@ export class QuotationService {
 
                 // Impuesto si aplica
                 if (product.tax && Number(product.tax.rate) > 0) {
-                    const lineTax = lineSubtotal.mul(new Prisma.Decimal(product.tax.rate)).div(100);
+                    let taxFraction = new Prisma.Decimal(product.tax.rate);
+                    if (taxFraction.gte(1)) taxFraction = taxFraction.div(100);
+                    const lineTax = lineSubtotal.mul(taxFraction);
                     taxAmount = taxAmount.add(lineTax);
                 }
 
