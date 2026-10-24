@@ -216,9 +216,17 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 
         // 2. Consulta Ultrarrápida de Tasa Oficial BCV
         if (/(?:a\s+c[uú]anto\s+est[aá]\s+el\s+d[oó]lar|tasa\s+bcv|precio\s+del\s+d[oó]lar|tasa\s+oficial|tasa\s+del\s+d[oó]lar|cu[aá]l\s+es\s+la\s+tasa)/i.test(cleanCmd) && !/(?:debo|pagu[eé]|gasto|factura|vender)/i.test(cleanCmd)) {
-            const currentRate = await resolveBusinessExchangeRate(businessId).catch(() => 80.00);
+            let numRate = 80.00;
+            try {
+                const rateRecord = await resolveBusinessExchangeRate(businessId);
+                if (rateRecord && rateRecord.rate) {
+                    numRate = Number(rateRecord.rate);
+                }
+            } catch {
+                numRate = 80.00;
+            }
             return {
-                text: `💵 **Tasa Oficial BCV Activa en el Sistema**:\n\nActualmente la tasa oficial activa del Banco Central de Venezuela es de **${currentRate.toFixed(2)} Bs./$ USD**.\n\nTodos los precios de su inventario, tickets de venta en caja y conversiones se calculan en tiempo real anclados a este valor.`,
+                text: `💵 **Tasa Oficial BCV Activa en el Sistema**:\n\nActualmente la tasa oficial activa del Banco Central de Venezuela es de **${numRate.toFixed(2)} Bs./$ USD**.\n\nTodos los precios de su inventario, tickets de venta en caja y conversiones se calculan en tiempo real anclados a este valor.`,
                 actions: [],
                 subagent: AI_SUBAGENTS.FISCAL_SENIAT,
                 suggestedOptions: [
