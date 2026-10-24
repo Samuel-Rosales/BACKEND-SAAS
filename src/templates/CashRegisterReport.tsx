@@ -9,6 +9,7 @@ const logoPath = path.resolve(__dirname, '../assets/logo.png');
 type PaymentMethodSummary = {
     method: string;
     type: string;
+    currency?: string;
     transactions: number;
     amountUSD: number;
     amountVES?: number;
@@ -411,7 +412,7 @@ const CashRegisterReport = ({
                     </View>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Total recaudado (VES)</Text>
-                        <Text style={styles.summaryValue}>{num(overview.totalVES)} Bs.</Text>
+                        <Text style={styles.summaryValue}>{ves(overview.totalVES)}</Text>
                     </View>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Efectivo inicial (USD)</Text>
@@ -442,15 +443,18 @@ const CashRegisterReport = ({
                     <Text style={[styles.tableHeadCell, styles.colPayPct, { textAlign: 'right' }]}>Participación</Text>
                 </View>
 
-                {overview.methods.map((m, i) => (
-                    <View style={i % 2 === 0 ? styles.tableRow : styles.tableRowAlt} key={i}>
-                        <Text style={[styles.tableCell, styles.colPayMethod]}>{m.method}</Text>
-                        <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
-                        <Text style={[styles.tableCell, styles.colPayAmtUSD]}>{usd(m.amountUSD)}</Text>
-                        <Text style={[styles.tableCell, styles.colPayAmtVES]}>{ves(m.amountVES ?? 0)}</Text>
-                        <Text style={[styles.tableCellLast, styles.colPayPct]}>{m.percentage.toFixed(2)}%</Text>
-                    </View>
-                ))}
+                {overview.methods.map((m, i) => {
+                    const isUSD = m.currency ? m.currency === 'USD' : (m.amountUSD > 0 && !(m.amountVES && m.amountVES > 0));
+                    return (
+                        <View style={i % 2 === 0 ? styles.tableRow : styles.tableRowAlt} key={i}>
+                            <Text style={[styles.tableCell, styles.colPayMethod]}>{m.method}</Text>
+                            <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
+                            <Text style={[styles.tableCell, styles.colPayAmtUSD]}>{isUSD ? usd(m.amountUSD) : '—'}</Text>
+                            <Text style={[styles.tableCell, styles.colPayAmtVES]}>{!isUSD ? ves(m.amountVES ?? 0) : '—'}</Text>
+                            <Text style={[styles.tableCellLast, styles.colPayPct]}>{m.percentage.toFixed(2)}%</Text>
+                        </View>
+                    );
+                })}
 
                 <View style={styles.tableTotalRow}>
                     <Text style={[styles.tableTotalCell, styles.colPayMethod]}>TOTAL GENERAL</Text>
@@ -477,7 +481,7 @@ const CashRegisterReport = ({
                             <Text style={styles.sellerCiText}>CI: {seller.ci ?? '—'}</Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={styles.sellerTotalText}>{usd(seller.totalUSD)}</Text>
+                            <Text style={styles.sellerTotalText}>{usd(seller.totalUSD)}  |  {ves(seller.totalVES)}</Text>
                             <Text style={styles.sellerSalesText}>
                                 {seller.totalSales} ventas · {seller.articlesCount} artículos
                             </Text>
@@ -492,7 +496,7 @@ const CashRegisterReport = ({
                         </View>
                         <View style={styles.sellerSummaryCell}>
                             <Text>Total en VES</Text>
-                            <Text style={styles.sellerSummaryValue}>{num(seller.totalVES)} Bs.</Text>
+                            <Text style={styles.sellerSummaryValue}>{ves(seller.totalVES)}</Text>
                         </View>
                         <View style={styles.sellerSummaryCell}>
                             <Text>N° Ventas</Text>

@@ -166,6 +166,7 @@ export class CashRegisterReportService {
 
             let totalUSD = new Decimal(0);
             let totalVES = new Decimal(0);
+            let totalEquivUSD = new Decimal(0);
             let cashPaymentsUSD = new Decimal(0);
             let cashRefundsUSD = new Decimal(0);
             const salesCount = new Set(payments.map(p => p.saleId)).size;
@@ -177,43 +178,42 @@ export class CashRegisterReportService {
                 transactions: number;
                 amountUSD: Decimal;
                 amountVES: Decimal;
+                equivUSD: Decimal;
             }>();
 
-            // Process payments
+            // Process payments (strict native currency separation: USD stays USD, VES stays VES)
             for (const pay of payments) {
                 const rate = new Decimal(pay.exchangeRate.rate);
                 const amt = new Decimal(pay.amount);
-                let amtUSD = new Decimal(0);
-                let amtVES = new Decimal(0);
+                const isUSD = pay.paymentMethod.currency === 'USD';
 
-                if (pay.paymentMethod.currency === 'USD') {
-                    amtUSD = amt;
-                    amtVES = amt.mul(rate);
-                } else {
-                    amtUSD = amt.div(rate);
-                    amtVES = amt;
-                }
+                const nativeUSD = isUSD ? amt : new Decimal(0);
+                const nativeVES = isUSD ? new Decimal(0) : amt;
+                const equivUSD = isUSD ? amt : amt.div(rate);
 
-                totalUSD = totalUSD.add(amtUSD);
-                totalVES = totalVES.add(amtVES);
+                totalUSD = totalUSD.add(nativeUSD);
+                totalVES = totalVES.add(nativeVES);
+                totalEquivUSD = totalEquivUSD.add(equivUSD);
 
                 if (pay.paymentMethod.type === 'CASH') {
-                    cashPaymentsUSD = cashPaymentsUSD.add(amtUSD);
+                    cashPaymentsUSD = cashPaymentsUSD.add(equivUSD);
                 }
 
                 const existing = methodStats.get(pay.paymentMethodId);
                 if (existing) {
                     existing.transactions += 1;
-                    existing.amountUSD = existing.amountUSD.add(amtUSD);
-                    existing.amountVES = existing.amountVES.add(amtVES);
+                    existing.amountUSD = existing.amountUSD.add(nativeUSD);
+                    existing.amountVES = existing.amountVES.add(nativeVES);
+                    existing.equivUSD = existing.equivUSD.add(equivUSD);
                 } else {
                     methodStats.set(pay.paymentMethodId, {
                         method: pay.paymentMethod.name,
                         type: pay.paymentMethod.type,
                         currency: pay.paymentMethod.currency,
                         transactions: 1,
-                        amountUSD: amtUSD,
-                        amountVES: amtVES
+                        amountUSD: nativeUSD,
+                        amountVES: nativeVES,
+                        equivUSD: equivUSD
                     });
                 }
             }
@@ -222,57 +222,58 @@ export class CashRegisterReportService {
             for (const ref of refunds) {
                 const rate = new Decimal(ref.exchangeRate.rate);
                 const amt = new Decimal(ref.amount);
-                let amtUSD = new Decimal(0);
-                let amtVES = new Decimal(0);
+                const isUSD = ref.paymentMethod.currency === 'USD';
 
-                if (ref.paymentMethod.currency === 'USD') {
-                    amtUSD = amt;
-                    amtVES = amt.mul(rate);
-                } else {
-                    amtUSD = amt.div(rate);
-                    amtVES = amt;
-                }
+                const nativeUSD = isUSD ? amt : new Decimal(0);
+                const nativeVES = isUSD ? new Decimal(0) : amt;
+                const equivUSD = isUSD ? amt : amt.div(rate);
 
-                // Subtract refunds from net collected totals
-                totalUSD = totalUSD.sub(amtUSD);
-                totalVES = totalVES.sub(amtVES);
+                // Subtract refunds from net collected totals in their native currency
+                totalUSD = totalUSD.sub(nativeUSD);
+                totalVES = totalVES.sub(nativeVES);
+                totalEquivUSD = totalEquivUSD.sub(equivUSD);
 
                 if (ref.paymentMethod.type === 'CASH') {
-                    cashRefundsUSD = cashRefundsUSD.add(amtUSD);
+                    cashRefundsUSD = cashRefundsUSD.add(equivUSD);
                 }
 
                 const existing = methodStats.get(ref.paymentMethodId);
                 if (existing) {
-                    existing.amountUSD = existing.amountUSD.sub(amtUSD);
-                    existing.amountVES = existing.amountVES.sub(amtVES);
+                    existing.amountUSD = existing.amountUSD.sub(nativeUSD);
+                    existing.amountVES = existing.amountVES.sub(nativeVES);
+                    existing.equivUSD = existing.equivUSD.sub(equivUSD);
                 } else {
                     methodStats.set(ref.paymentMethodId, {
                         method: ref.paymentMethod.name,
                         type: ref.paymentMethod.type,
                         currency: ref.paymentMethod.currency,
                         transactions: 1,
-                        amountUSD: amtUSD.negated(),
-                        amountVES: amtVES.negated()
+                        amountUSD: nativeUSD.negated(),
+                        amountVES: nativeVES.negated(),
+                        equivUSD: equivUSD.negated()
                     });
                 }
             }
 
-            // Map and format the payment methods
-            const totalUSDNumber = totalUSD.toNumber();
+            // Map and format the payment methods keeping strict native currency
+            const totalEquivUSDNumber = totalEquivUSD.toNumber();
             const methodsArray = Array.from(methodStats.values()).map(m => {
                 const amountVal = m.amountUSD.toNumber();
                 const amountVESVal = m.amountVES.toNumber();
-                const pct = totalUSDNumber > 0 ? (amountVal / totalUSDNumber) * 100 : 0;
+                const equivVal = m.equivUSD.toNumber();
+                const pct = totalEquivUSDNumber > 0 ? (equivVal / totalEquivUSDNumber) * 100 : 0;
                 return {
                     method: m.method,
                     type: m.type,
+                    currency: m.currency,
                     transactions: m.transactions,
-                    amountUSD: Number(amountVal.toFixed(2)),
-                    amountVES: Number(amountVESVal.toFixed(2)),
+                    amountUSD: m.currency === 'USD' ? Number(amountVal.toFixed(2)) : 0,
+                    amountVES: m.currency === 'VES' ? Number(amountVESVal.toFixed(2)) : 0,
                     percentage: Number(pct.toFixed(2)),
-                    color: getColorForPaymentType(m.type)
+                    color: getColorForPaymentType(m.type),
+                    _sortWeight: equivVal
                 };
-            }).sort((a, b) => b.amountUSD - a.amountUSD);
+            }).sort((a, b) => b._sortWeight - a._sortWeight).map(({ _sortWeight, ...rest }) => rest);
 
             // Final Cash Estimado = Apertura + Ventas en Efectivo - Egresos en Efectivo
             const payoutsUSD = cashRefundsUSD; // Salidas declaradas en efectivo
@@ -437,9 +438,7 @@ export class CashRegisterReportService {
                         const amt = new Decimal(pay.amount);
                         if (pay.paymentMethod.currency === 'USD') {
                             memberTotalUSD = memberTotalUSD.add(amt);
-                            memberTotalVES = memberTotalVES.add(amt.mul(rate));
                         } else {
-                            memberTotalUSD = memberTotalUSD.add(amt.div(rate));
                             memberTotalVES = memberTotalVES.add(amt);
                         }
                     }
