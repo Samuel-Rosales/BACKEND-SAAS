@@ -3,6 +3,7 @@ import { BusinessError } from '@/utils/catch-errors.util';
 import { CreateDispatchDto, ReceiveTransferDto } from './inter-branch-transfer.interface';
 import { MovementType, TransferStatus, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
+import { HashId } from '@/utils/hash-id';
 
 export class InterBranchTransferService {
 
@@ -15,14 +16,21 @@ export class InterBranchTransferService {
                 throw new BusinessError('Debe incluir al menos un artículo para despachar', 400);
             }
 
-            if (originBusinessId === data.destinationBusinessId) {
+            let destinationBusinessId = Number(data.destinationBusinessId);
+            if (isNaN(destinationBusinessId) || String(data.destinationBusinessId).length > 6) {
+                const hashId = new HashId();
+                const decoded = hashId.decode(String(data.destinationBusinessId));
+                if (decoded) destinationBusinessId = Number(decoded);
+            }
+
+            if (originBusinessId === destinationBusinessId) {
                 throw new BusinessError('La sucursal de destino no puede ser el mismo depósito origen', 400);
             }
 
             // Validar existencia de negocios
             const [originBusiness, destBusiness, originDepot] = await Promise.all([
                 prisma.business.findUnique({ where: { id: originBusinessId } }),
-                prisma.business.findUnique({ where: { id: data.destinationBusinessId } }),
+                prisma.business.findUnique({ where: { id: destinationBusinessId } }),
                 prisma.depot.findFirst({ where: { id: data.originDepotId, businessId: originBusinessId, isActive: true } })
             ]);
 
@@ -42,7 +50,7 @@ export class InterBranchTransferService {
                     data: {
                         transferNumber,
                         originBusinessId,
-                        destinationBusinessId: data.destinationBusinessId,
+                        destinationBusinessId,
                         createdById: memberId,
                         status: TransferStatus.PENDING_RECEIPT,
                         notes: data.notes || `Despacho hacia ${destBusiness.name}`

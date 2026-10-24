@@ -5,7 +5,7 @@ export interface DispatchItemInput {
 }
 
 export interface CreateDispatchDto {
-    destinationBusinessId: number;
+    destinationBusinessId: number | string;
     originDepotId: number;
     notes?: string;
     items: DispatchItemInput[];
