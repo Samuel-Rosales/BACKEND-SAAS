@@ -24,6 +24,9 @@ type CashRegisterDetail = {
     closeTime: string;
     initialAmount: number;
     finalAmount: number;
+    collectedUSD?: number;
+    collectedVES?: number;
+    collectedCasheaUSD?: number;
     salesCount: number;
     difference: number;
 };
@@ -388,13 +391,14 @@ const styles = StyleSheet.create({
     },
 
     // Cash register table columns
-    colRegId:     { flex: 1.2 },
-    colRegStatus: { flex: 1.0, textAlign: 'center' },
-    colRegOpen:   { flex: 2.0, textAlign: 'center' },
-    colRegClose:  { flex: 2.0, textAlign: 'center' },
-    colRegSales:  { flex: 0.8, textAlign: 'right' },
-    colRegInit:   { flex: 1.4, textAlign: 'right' },
-    colRegDiff:   { flex: 1.6, textAlign: 'right' },
+    colRegId:     { flex: 1.1 },
+    colRegStatus: { flex: 0.9, textAlign: 'center' },
+    colRegOpen:   { flex: 1.8, textAlign: 'center' },
+    colRegClose:  { flex: 1.8, textAlign: 'center' },
+    colRegSales:  { flex: 0.7, textAlign: 'right' },
+    colRegInit:   { flex: 1.2, textAlign: 'right' },
+    colRegUSD:    { flex: 1.4, textAlign: 'right' },
+    colRegVES:    { flex: 1.6, textAlign: 'right' },
 
     // Footer
     footer: {
@@ -742,7 +746,8 @@ const CashRegisterReport = ({
                                         <Text style={[styles.tableHeadCell, styles.colRegClose, { textAlign: 'center' }]}>Cierre</Text>
                                         <Text style={[styles.tableHeadCell, styles.colRegSales, { textAlign: 'right' }]}>Ventas</Text>
                                         <Text style={[styles.tableHeadCell, styles.colRegInit, { textAlign: 'right' }]}>Inicial</Text>
-                                        <Text style={[styles.tableHeadCell, styles.colRegDiff, { textAlign: 'right' }]}>Diferencia</Text>
+                                        <Text style={[styles.tableHeadCell, styles.colRegUSD, { textAlign: 'right' }]}>Cobrado (USD)</Text>
+                                        <Text style={[styles.tableHeadCell, styles.colRegVES, { textAlign: 'right' }]}>Cobrado (Bs.)</Text>
                                     </View>
 
                                     {seller.registers.map((reg, ri) => (
@@ -756,8 +761,11 @@ const CashRegisterReport = ({
                                             <Text style={[styles.tableCell, styles.colRegClose]}>{fmtDT(reg.closeTime)}</Text>
                                             <Text style={[styles.tableCell, styles.colRegSales]}>{reg.salesCount}</Text>
                                             <Text style={[styles.tableCell, styles.colRegInit]}>{usd(reg.initialAmount)}</Text>
-                                            <Text style={[styles.tableCellLast, styles.colRegDiff, { color: reg.difference < 0 ? C.red : reg.difference > 0 ? C.green : C.neutral, fontFamily: 'Helvetica-Bold' }]}>
-                                                {reg.difference > 0 ? '+' : ''}{usd(reg.difference)}
+                                            <Text style={[styles.tableCell, styles.colRegUSD, { color: C.green, fontFamily: 'Helvetica-Bold' }]}>
+                                                {usd(reg.collectedUSD ?? 0)}
+                                            </Text>
+                                            <Text style={[styles.tableCellLast, styles.colRegVES, { color: C.amber, fontFamily: 'Helvetica-Bold' }]}>
+                                                {ves(reg.collectedVES ?? 0)}
                                             </Text>
                                         </View>
                                     ))}

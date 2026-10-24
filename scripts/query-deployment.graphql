@@ -1,0 +1,13 @@
+query GetDeployment($id: String!) {
+  deployment(id: $id) {
+    id
+    status
+    environmentId
+    serviceId
+    canRedeploy
+    meta
+    suggestAddServiceDomain
+    createdAt
+    updatedAt
+  }
+}

@@ -634,30 +634,25 @@ export class CashRegisterReportService {
                 // Turnos de caja details
                 const registersDetails = memberRegisters.map(reg => {
                     const regPayments = reg.payments;
-                    const regRefunds = reg.refunds;
                     const regSalesCount = new Set(regPayments.map(p => p.saleId)).size;
 
-                    let difference = 0;
-                    if (reg.status === 'CLOSED') {
-                        const cashPaymentsUSD = regPayments
-                            .filter(p => p.paymentMethod.type === 'CASH' && !isCasheaPaymentMethod(p.paymentMethod.name))
-                            .reduce((sum, p) => {
-                                const amt = new Decimal(p.amount);
-                                const rate = new Decimal(p.exchangeRate.rate);
-                                return sum.add(p.paymentMethod.currency === 'USD' ? amt : amt.div(rate));
-                            }, new Decimal(0));
+                    let regCollectedUSD = new Decimal(0);
+                    let regCollectedVES = new Decimal(0);
+                    let regCollectedCasheaUSD = new Decimal(0);
 
-                        const cashRefundsUSD = regRefunds
-                            .filter(r => r.paymentMethod.type === 'CASH' && !isCasheaPaymentMethod(r.paymentMethod.name))
-                            .reduce((sum, r) => {
-                                const amt = new Decimal(r.amount);
-                                const rate = new Decimal(r.exchangeRate.rate);
-                                return sum.add(r.paymentMethod.currency === 'USD' ? amt : amt.div(rate));
-                            }, new Decimal(0));
+                    for (const p of regPayments) {
+                        const amt = new Decimal(p.amount);
+                        const rate = new Decimal(p.exchangeRate.rate);
+                        const isCashea = isCasheaPaymentMethod(p.paymentMethod.name);
+                        const isUSD = p.paymentMethod.currency === 'USD';
 
-                        const expectedCash = new Decimal(reg.initialAmount).add(cashPaymentsUSD).sub(cashRefundsUSD);
-                        const actualCash = new Decimal(reg.finalAmount || 0);
-                        difference = actualCash.sub(expectedCash).toNumber();
+                        if (isCashea) {
+                            regCollectedCasheaUSD = regCollectedCasheaUSD.add(isUSD ? amt : amt.div(rate));
+                        } else if (isUSD) {
+                            regCollectedUSD = regCollectedUSD.add(amt);
+                        } else {
+                            regCollectedVES = regCollectedVES.add(amt);
+                        }
                     }
 
                     return {
@@ -666,9 +661,12 @@ export class CashRegisterReportService {
                         openTime: reg.openTime.toISOString(),
                         closeTime: reg.closeTime ? reg.closeTime.toISOString() : '—',
                         initialAmount: Number(reg.initialAmount),
-                        finalAmount: reg.finalAmount ? Number(reg.finalAmount) : 0,
+                        finalAmount: Number(new Decimal(reg.initialAmount).add(regCollectedUSD).toFixed(2)),
+                        collectedUSD: Number(regCollectedUSD.toFixed(2)),
+                        collectedVES: Number(regCollectedVES.toFixed(2)),
+                        collectedCasheaUSD: Number(regCollectedCasheaUSD.toFixed(2)),
                         salesCount: regSalesCount,
-                        difference: Number(difference.toFixed(2))
+                        difference: 0
                     };
                 });
 

@@ -1,0 +1,10 @@
+<USER_REQUEST>
+Necesito que me hagas un análisis. Primero, la empresa que necesito que analices y lo segundo es la base de datos. Necesito que me confirmes que los artículos que están en este Excel sean los mismos que están en esta base de datos o si falta algo. Haz una comparación y me digas si faltan, si sobran y por qué faltan. 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-17T16:50:35-04:00.
+
+The user has uploaded 1 image(s):
+- C:/Users/e/.gemini/antigravity/brain/140b00e2-0bb3-408a-800c-3ce6d4d21781/.user_uploaded/media_1792270154298_2143f28e.png
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>
