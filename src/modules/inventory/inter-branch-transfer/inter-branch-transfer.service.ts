@@ -1,14 +1,25 @@
 import { prisma } from '@/configs';
 import { BusinessError } from '@/utils/catch-errors.util';
 import { CreateDispatchDto, ReceiveTransferDto } from './inter-branch-transfer.interface';
-import { MovementType, TransferStatus, Prisma } from '@prisma/client';
+import {
+    MovementType,
+    TransferStatus,
+    SaleType,
+    SaleStatus,
+    Conditions,
+    PaymentStatus,
+    PaymentType,
+    PurchaseStatus,
+    Prisma
+} from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
 import { HashId } from '@/utils/hash-id';
 
 export class InterBranchTransferService {
 
     /**
-     * 1. DESPACHO: Crea la nota de despacho y descuenta inventario del almacén origen
+     * 1. DESPACHO: Crea la nota de despacho, descuenta inventario del almacén origen
+     * y genera automáticamente la VENTA en el Depósito Central para reflejarse en Reportes de Ventas.
      */
     async createDispatch(originBusinessId: number, memberId: number, data: CreateDispatchDto) {
         try {
@@ -27,7 +38,7 @@ export class InterBranchTransferService {
                 throw new BusinessError('La sucursal de destino no puede ser el mismo depósito origen', 400);
             }
 
-            // Validar existencia de negocios
+            // Validar existencia de negocios y almacén
             const [originBusiness, destBusiness, originDepot] = await Promise.all([
                 prisma.business.findUnique({ where: { id: originBusinessId } }),
                 prisma.business.findUnique({ where: { id: destinationBusinessId } }),
@@ -43,21 +54,57 @@ export class InterBranchTransferService {
             const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             const transferNumber = `DESP-${dateStr}-${String(count + 1).padStart(4, '0')}`;
 
-            // Transacción atómica
+            // Transacción atómica integral
             const result = await prisma.$transaction(async (tx) => {
-                // 1. Crear cabecera de la transferencia
-                const transfer = await tx.interBranchTransfer.create({
-                    data: {
-                        transferNumber,
-                        originBusinessId,
-                        destinationBusinessId,
-                        createdById: memberId,
-                        status: TransferStatus.PENDING_RECEIPT,
-                        notes: data.notes || `Despacho hacia ${destBusiness.name}`
-                    }
+                // 1. Obtener o crear Cliente en el Negocio Origen que represente a la Sucursal Destino
+                let client = await tx.client.findFirst({
+                    where: { businessId: originBusinessId, name: destBusiness.name }
+                });
+                if (!client) {
+                    client = await tx.client.create({
+                        data: {
+                            businessId: originBusinessId,
+                            name: destBusiness.name,
+                            ci: destBusiness.document || `RIF-${destBusiness.id}`,
+                            address: destBusiness.address || 'Sucursal Receptora',
+                            phone: destBusiness.closingNotificationPhone || '',
+                            email: `sucursal_${destBusiness.id}@guardian.com.ve`,
+                            isActive: true
+                        }
+                    });
+                }
+
+                // 2. Obtener o crear Tasa de Cambio en Negocio Origen
+                let exchangeRate = await tx.exchangeRate.findFirst({
+                    where: { businessId: originBusinessId, isActive: true },
+                    orderBy: { createdAt: 'desc' }
+                });
+                if (!exchangeRate) {
+                    exchangeRate = await tx.exchangeRate.create({
+                        data: {
+                            businessId: originBusinessId,
+                            rate: new Decimal(1),
+                            source: 'MANUAL',
+                            isActive: true
+                        }
+                    });
+                }
+
+                // 3. Obtener Método de Pago activo
+                let paymentMethod = await tx.paymentMethod.findFirst({
+                    where: { isActive: true }
                 });
 
-                // 2. Procesar cada artículo (validar stock, descontar FEFO y crear ítems)
+                // 4. Pre-calcular importes y verificar stock de todos los productos
+                let totalSaleAmount = new Decimal(0);
+                const itemsToProcess: {
+                    product: any;
+                    qty: Decimal;
+                    unitPrice: Decimal;
+                    subTotal: Decimal;
+                    lots: any[];
+                }[] = [];
+
                 for (const item of data.items) {
                     const qty = new Decimal(item.quantity).abs();
                     if (qty.isZero() || qty.isNegative()) {
@@ -89,9 +136,86 @@ export class InterBranchTransferService {
                         );
                     }
 
+                    // Determinar precio de transferencia/venta (precio de venta del depósito, o costo)
+                    const unitPrice = (product.salePrice && new Decimal(product.salePrice).gt(0))
+                        ? new Decimal(product.salePrice)
+                        : (product.costPrice && new Decimal(product.costPrice).gt(0))
+                        ? new Decimal(product.costPrice)
+                        : new Decimal(1);
+
+                    const subTotal = unitPrice.mul(qty);
+                    totalSaleAmount = totalSaleAmount.add(subTotal);
+
+                    itemsToProcess.push({
+                        product,
+                        qty,
+                        unitPrice,
+                        subTotal,
+                        lots
+                    });
+                }
+
+                // 5. Correlativo de Factura / Venta
+                const lastSale = await tx.sale.findFirst({
+                    where: { businessId: originBusinessId },
+                    orderBy: { receiptNumber: 'desc' }
+                });
+                const receiptNumber = (lastSale?.receiptNumber || 0) + 1;
+
+                // 6. Registrar VENTA en el Depósito Central
+                const sale = await tx.sale.create({
+                    data: {
+                        businessId: originBusinessId,
+                        receiptNumber,
+                        memberId,
+                        clientId: client.id,
+                        exchangeRateId: exchangeRate.id,
+                        type: SaleType.WHOLESALE,
+                        status: SaleStatus.COMPLETED,
+                        conditions: Conditions.CASH,
+                        paymentStatus: PaymentStatus.PAID,
+                        subTotal: totalSaleAmount,
+                        taxAmount: new Decimal(0),
+                        discount: new Decimal(0),
+                        totalAmount: totalSaleAmount,
+                        remainingBalance: new Decimal(0),
+                        createdAt: new Date()
+                    }
+                });
+
+                // Registrar pago de la venta para que compute en ingresos y reportes
+                if (paymentMethod) {
+                    await tx.salePayment.create({
+                        data: {
+                            saleId: sale.id,
+                            paymentMethodId: paymentMethod.id,
+                            amount: totalSaleAmount,
+                            exchangeRateId: exchangeRate.id,
+                            reference: transferNumber,
+                            date: new Date()
+                        }
+                    });
+                }
+
+                // 7. Crear cabecera de la transferencia vinculada a la Venta
+                const transfer = await tx.interBranchTransfer.create({
+                    data: {
+                        transferNumber,
+                        originBusinessId,
+                        destinationBusinessId,
+                        saleId: sale.id,
+                        createdById: memberId,
+                        status: TransferStatus.PENDING_RECEIPT,
+                        notes: data.notes || `Despacho hacia ${destBusiness.name}`
+                    }
+                });
+
+                // 8. Procesar ítems (descontar lotes, registrar movimientos de almacén, ítems de venta e ítems de despacho)
+                for (const itemData of itemsToProcess) {
+                    const { product, qty, unitPrice, subTotal, lots } = itemData;
+
                     // Descontar por lotes
                     let remaining = new Decimal(qty);
-                    let lastUnitCost = product.costPrice;
 
                     for (const lot of lots) {
                         if (remaining.isZero()) break;
@@ -103,9 +227,7 @@ export class InterBranchTransferService {
                             data: { quantity: lotQty.sub(deduct) }
                         });
 
-                        lastUnitCost = lot.lotCost;
-
-                        // Registrar movimiento de salida
+                        // Registrar movimiento de salida en almacén
                         await tx.stockMovement.create({
                             data: {
                                 businessId: originBusinessId,
@@ -124,7 +246,18 @@ export class InterBranchTransferService {
                         remaining = remaining.sub(deduct);
                     }
 
-                    // Crear ítem de transferencia
+                    // Crear ítem de Venta
+                    await tx.saleItem.create({
+                        data: {
+                            saleId: sale.id,
+                            productId: product.id,
+                            quantity: qty,
+                            unitPrice,
+                            subTotal
+                        }
+                    });
+
+                    // Crear ítem de transferencia con el precio pactado de venta
                     await tx.interBranchTransferItem.create({
                         data: {
                             transferId: transfer.id,
@@ -132,7 +265,7 @@ export class InterBranchTransferService {
                             productName: product.name,
                             sku: product.sku,
                             quantitySent: qty,
-                            unitCost: lastUnitCost
+                            unitCost: unitPrice // El precio de venta del depósito es el costo unitario de la sucursal
                         }
                     });
                 }
@@ -142,7 +275,7 @@ export class InterBranchTransferService {
 
             return {
                 status: 201,
-                message: `Despacho ${result.transferNumber} generado exitosamente`,
+                message: `Despacho ${result.transferNumber} generado exitosamente y registrado como Venta en el Depósito`,
                 data: result
             };
         } catch (error: any) {
@@ -224,8 +357,9 @@ export class InterBranchTransferService {
     }
 
     /**
-     * 5. RECEPCIÓN Y AUDITORÍA: El receptor inspecciona, ingresa conformes, dañados y faltantes,
-     * y se carga el inventario únicamente con los artículos en buen estado.
+     * 5. RECEPCIÓN Y AUDITORÍA: El receptor inspecciona, ingresa conformes, dañados y faltantes.
+     * Carga el inventario únicamente con los artículos en buen estado, y genera automáticamente
+     * la COMPRA correspondiente en la sucursal para que coincida exactamente con la VENTA del depósito.
      */
     async receiveTransfer(destinationBusinessId: number, memberId: number, transferId: number, data: ReceiveTransferDto) {
         try {
@@ -253,7 +387,7 @@ export class InterBranchTransferService {
                 throw new BusinessError('Depósito destino de recepción no válido o inactivo', 404);
             }
 
-            // Buscar categoría y unidad base en la sucursal receptora para posibles productos nuevos
+            // Buscar o crear categoría y unidad base en la sucursal receptora
             let destCategory = await prisma.category.findFirst({
                 where: { businessId: destinationBusinessId, isActive: true }
             });
@@ -269,6 +403,12 @@ export class InterBranchTransferService {
             // Procesar en transacción atómica
             const updatedTransfer = await prisma.$transaction(async (tx) => {
                 let hasDiscrepancy = false;
+                let totalPurchaseCost = new Decimal(0);
+                const conformingProductsToPurchase: {
+                    destProduct: any;
+                    qtyReceived: Decimal;
+                    unitCost: Decimal;
+                }[] = [];
 
                 for (const itemInput of data.items) {
                     const originalItem = transfer.items.find((i) => i.id === itemInput.itemId);
@@ -306,6 +446,9 @@ export class InterBranchTransferService {
 
                     // Si hay mercancía recibida conforme, ingresarla al inventario de la sucursal
                     if (qtyReceived.gt(0)) {
+                        const itemCost = new Decimal(originalItem.unitCost);
+                        totalPurchaseCost = totalPurchaseCost.add(itemCost.mul(qtyReceived));
+
                         // Buscar o sincronizar el producto en la sucursal receptora
                         let destProduct = await tx.product.findFirst({
                             where: {
@@ -331,8 +474,8 @@ export class InterBranchTransferService {
                                     categoryId: destCategory!.id,
                                     unitId: originProd?.unitId || defaultUnit?.id || 1,
                                     taxId: originProd?.taxId || defaultTax?.id || 1,
-                                    costPrice: originalItem.unitCost,
-                                    salePrice: originProd?.salePrice || new Decimal(originalItem.unitCost).mul(1.3),
+                                    costPrice: itemCost,
+                                    salePrice: originProd?.salePrice || itemCost.mul(1.3),
                                     isActive: true,
                                     type: 'SIMPLE'
                                 }
@@ -345,7 +488,7 @@ export class InterBranchTransferService {
                                 depotId: destDepot.id,
                                 productId: destProduct.id,
                                 quantity: qtyReceived,
-                                lotCost: originalItem.unitCost,
+                                lotCost: itemCost,
                                 expirationDate: new Date('2099-12-31')
                             }
                         });
@@ -360,9 +503,102 @@ export class InterBranchTransferService {
                                 stockLotId: newLot.id,
                                 quantity: qtyReceived,
                                 type: MovementType.IN,
-                                historicalCost: originalItem.unitCost,
+                                historicalCost: itemCost,
                                 reason: `Recepción ${transfer.transferNumber} desde ${transfer.originBusiness.name}`,
                                 date: new Date()
+                            }
+                        });
+
+                        conformingProductsToPurchase.push({
+                            destProduct,
+                            qtyReceived,
+                            unitCost: itemCost
+                        });
+                    }
+                }
+
+                // REGISTRAR LA COMPRA en la sucursal receptora si hubo productos conformes
+                if (totalPurchaseCost.gt(0)) {
+                    // Buscar o crear Proveedor para el Depósito Central en esta sucursal
+                    let supplier = await tx.supplier.findFirst({
+                        where: { businessId: destinationBusinessId, nameCompany: transfer.originBusiness.name }
+                    });
+                    if (!supplier) {
+                        supplier = await tx.supplier.create({
+                            data: {
+                                businessId: destinationBusinessId,
+                                nameCompany: transfer.originBusiness.name,
+                                contactName: 'Encargado de Depósito',
+                                address: transfer.originBusiness.address || 'Depósito Central',
+                                phone: transfer.originBusiness.closingNotificationPhone || '04120000000',
+                                isActive: true
+                            }
+                        });
+                    }
+
+                    // Tasa de cambio de la sucursal
+                    let destRate = await tx.exchangeRate.findFirst({
+                        where: { businessId: destinationBusinessId, isActive: true },
+                        orderBy: { createdAt: 'desc' }
+                    });
+                    if (!destRate) {
+                        destRate = await tx.exchangeRate.create({
+                            data: {
+                                businessId: destinationBusinessId,
+                                rate: new Decimal(1),
+                                source: 'MANUAL',
+                                isActive: true
+                            }
+                        });
+                    }
+
+                    const taxRecord = defaultTax || await tx.tax.findFirst({ where: { isActive: true } });
+
+                    // Crear la COMPRA
+                    const purchase = await tx.purchase.create({
+                        data: {
+                            businessId: destinationBusinessId,
+                            supplierId: supplier.id,
+                            memberId,
+                            subTotal: totalPurchaseCost,
+                            taxAmount: new Decimal(0),
+                            totalCost: totalPurchaseCost,
+                            status: PurchaseStatus.COMPLETED,
+                            exchangeRateId: destRate.id,
+                            reference: transfer.transferNumber,
+                            observation: data.notes || `Despacho recibido desde ${transfer.originBusiness.name} (${transfer.transferNumber})`,
+                            conditions: Conditions.CASH,
+                            paymentStatus: PaymentStatus.PAID,
+                            taxId: taxRecord!.id,
+                            createdAt: new Date()
+                        }
+                    });
+
+                    // Registrar ítems de la compra
+                    for (const conf of conformingProductsToPurchase) {
+                        await tx.purchaseItem.create({
+                            data: {
+                                purchaseId: purchase.id,
+                                productId: conf.destProduct.id,
+                                depotId: destDepot.id,
+                                quantity: conf.qtyReceived,
+                                unitCost: conf.unitCost,
+                                expirationDate: new Date('2099-12-31')
+                            }
+                        });
+                    }
+
+                    // Registrar pago de la compra
+                    const destPaymentMethod = await tx.paymentMethod.findFirst({ where: { isActive: true } });
+                    if (destPaymentMethod) {
+                        await tx.purchasePayment.create({
+                            data: {
+                                purchaseId: purchase.id,
+                                paymentMethodId: destPaymentMethod.id,
+                                amount: totalPurchaseCost,
+                                exchangeRateId: destRate.id,
+                                reference: transfer.transferNumber,
+                                paymentDate: new Date()
                             }
                         });
                     }
@@ -391,7 +627,7 @@ export class InterBranchTransferService {
 
             return {
                 status: 200,
-                message: `Despacho ${updatedTransfer.transferNumber} recibido y cargado a inventario exitosamente (${updatedTransfer.status === TransferStatus.RECEIVED_FULL ? '100% Conforme' : 'Con Discrepancias/Averías Registradas'})`,
+                message: `Despacho ${updatedTransfer.transferNumber} recibido, cargado a inventario y registrado como Compra en la sucursal exitosamente (${updatedTransfer.status === TransferStatus.RECEIVED_FULL ? '100% Conforme' : 'Con Discrepancias/Averías'})`,
                 data: updatedTransfer
             };
         } catch (error: any) {
