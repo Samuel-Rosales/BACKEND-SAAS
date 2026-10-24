@@ -44,7 +44,8 @@ const getLocalMonthRangeUtc = (baseDateUtc: Date, tzOffsetMinutes: number, month
     };
 };
 
-function getColorForPaymentType(type: string): string {
+function getColorForPaymentType(type: string, isCashea = false): string {
+    if (isCashea) return 'bg-indigo-500';
     switch (type) {
         case 'CASH': return 'bg-emerald-500';
         case 'DEBIT_CARD':
@@ -54,6 +55,12 @@ function getColorForPaymentType(type: string): string {
         case 'TRANSFER': return 'bg-indigo-500';
         default: return 'bg-cool-gray-500';
     }
+}
+
+function isCasheaPaymentMethod(name?: string | null): boolean {
+    if (!name) return false;
+    const upper = name.trim().toUpperCase();
+    return upper.includes('CASHEA') || upper.includes('CACHEA');
 }
 
 export class CashRegisterReportService {
@@ -89,12 +96,26 @@ export class CashRegisterReportService {
         const sellerId = query.sellerId ? Number(query.sellerId) : undefined;
 
         try {
-            // Find all cash registers for the business and seller in the date range
+            // Find all cash registers active or with sales in the date range
             const registers = await prisma.cashRegister.findMany({
                 where: {
                     businessId,
                     ...(sellerId ? { memberId: sellerId } : {}),
-                    openTime: { gte: currentStart, lte: currentEnd }
+                    OR: [
+                        { openTime: { gte: currentStart, lte: currentEnd } },
+                        { closeTime: { gte: currentStart, lte: currentEnd } },
+                        {
+                            payments: {
+                                some: {
+                                    sale: {
+                                        businessId,
+                                        status: { not: 'CANCELLED' },
+                                        createdAt: { gte: currentStart, lte: currentEnd }
+                                    }
+                                }
+                            }
+                        }
+                    ]
                 },
                 select: {
                     id: true,
@@ -105,7 +126,42 @@ export class CashRegisterReportService {
                 }
             });
 
-            if (registers.length === 0) {
+            // Fetch all sale payments for sales in the date range (aligned with getSellersReport)
+            const payments = await prisma.salePayment.findMany({
+                where: {
+                    sale: {
+                        businessId,
+                        status: { not: 'CANCELLED' },
+                        ...(sellerId ? { memberId: sellerId } : {}),
+                        createdAt: { gte: currentStart, lte: currentEnd }
+                    }
+                },
+                include: {
+                    paymentMethod: true,
+                    exchangeRate: true,
+                    sale: { select: { memberId: true } }
+                }
+            });
+
+            // Fetch all refunds in the date range
+            const refunds = await prisma.creditNotePayment.findMany({
+                where: {
+                    creditNote: {
+                        sale: {
+                            businessId,
+                            status: { not: 'CANCELLED' },
+                            ...(sellerId ? { memberId: sellerId } : {})
+                        },
+                        createdAt: { gte: currentStart, lte: currentEnd }
+                    }
+                },
+                include: {
+                    paymentMethod: true,
+                    exchangeRate: true
+                }
+            });
+
+            if (registers.length === 0 && payments.length === 0 && refunds.length === 0) {
                 return {
                     status: 200,
                     message: 'Métricas de caja calculadas exitosamente (sin datos)',
@@ -114,59 +170,38 @@ export class CashRegisterReportService {
                         closedRegisters: 0,
                         totalUSD: 0,
                         totalVES: 0,
+                        totalCasheaUSD: 0,
+                        casheaTransactions: 0,
                         salesCount: 0,
                         activeSellers: 0,
                         initialCashUSD: 0,
                         finalCashUSD: 0,
                         payoutsUSD: 0,
-                        methods: []
+                        methods: [],
+                        methodsUSD: [],
+                        methodsVES: [],
+                        methodsCashea: []
                     }
                 };
             }
 
-            const registerIds = registers.map(r => r.id);
-
-            // Fetch all payments for these registers (excluding cancelled sales)
-            const payments = await prisma.salePayment.findMany({
-                where: {
-                    cashRegisterId: { in: registerIds },
-                    sale: {
-                        status: { not: 'CANCELLED' }
-                    }
-                },
-                include: {
-                    paymentMethod: true,
-                    exchangeRate: true
-                }
-            });
-
-            // Fetch all refunds for these registers (excluding refunds for cancelled sales whose payments were already excluded)
-            const refunds = await prisma.creditNotePayment.findMany({
-                where: {
-                    cashRegisterId: { in: registerIds },
-                    creditNote: {
-                        sale: {
-                            status: { not: 'CANCELLED' }
-                        }
-                    }
-                },
-                include: {
-                    paymentMethod: true,
-                    exchangeRate: true
-                }
-            });
-
             // Calculate general stats
             const openRegisters = registers.filter(r => r.status === 'OPEN').length;
             const closedRegisters = registers.filter(r => r.status === 'CLOSED').length;
-            const activeSellers = new Set(registers.map(r => r.memberId)).size;
-            
+            const activeSellerIds = new Set<number>([
+                ...registers.map(r => r.memberId),
+                ...payments.map(p => p.sale.memberId)
+            ]);
+            const activeSellers = activeSellerIds.size;
+
             // Initial Cash
             const initialCashUSD = registers.reduce((sum, r) => sum.add(new Decimal(r.initialAmount)), new Decimal(0));
 
             let totalUSD = new Decimal(0);
             let totalVES = new Decimal(0);
-            let totalEquivUSD = new Decimal(0);
+            let totalCasheaUSD = new Decimal(0);
+            let casheaTransactions = 0;
+
             let cashPaymentsUSD = new Decimal(0);
             let cashRefundsUSD = new Decimal(0);
             const salesCount = new Set(payments.map(p => p.saleId)).size;
@@ -175,45 +210,55 @@ export class CashRegisterReportService {
                 method: string;
                 type: string;
                 currency: string;
+                isCashea: boolean;
                 transactions: number;
                 amountUSD: Decimal;
                 amountVES: Decimal;
-                equivUSD: Decimal;
             }>();
 
-            // Process payments (strict native currency separation: USD stays USD, VES stays VES)
+            // Process payments: strict separation between 1) USD (non-Cashea), 2) VES, and 3) Financiamiento de Cashea
             for (const pay of payments) {
                 const rate = new Decimal(pay.exchangeRate.rate);
                 const amt = new Decimal(pay.amount);
+                const isCashea = isCasheaPaymentMethod(pay.paymentMethod.name);
                 const isUSD = pay.paymentMethod.currency === 'USD';
 
-                const nativeUSD = isUSD ? amt : new Decimal(0);
-                const nativeVES = isUSD ? new Decimal(0) : amt;
-                const equivUSD = isUSD ? amt : amt.div(rate);
+                let nativeUSD = new Decimal(0);
+                let nativeVES = new Decimal(0);
 
-                totalUSD = totalUSD.add(nativeUSD);
-                totalVES = totalVES.add(nativeVES);
-                totalEquivUSD = totalEquivUSD.add(equivUSD);
-
-                if (pay.paymentMethod.type === 'CASH') {
-                    cashPaymentsUSD = cashPaymentsUSD.add(equivUSD);
+                if (isCashea) {
+                    // Cashea financing is always tracked in its own separate bucket (in USD)
+                    nativeUSD = isUSD ? amt : amt.div(rate);
+                    totalCasheaUSD = totalCasheaUSD.add(nativeUSD);
+                    casheaTransactions += 1;
+                } else if (isUSD) {
+                    nativeUSD = amt;
+                    totalUSD = totalUSD.add(nativeUSD);
+                } else {
+                    nativeVES = amt;
+                    totalVES = totalVES.add(nativeVES);
                 }
 
+                if (!isCashea && pay.paymentMethod.type === 'CASH') {
+                    const equivCashUSD = isUSD ? amt : amt.div(rate);
+                    cashPaymentsUSD = cashPaymentsUSD.add(equivCashUSD);
+                }
+
+                const displayMethodName = isCashea ? 'Financiamiento de Cashea' : pay.paymentMethod.name;
                 const existing = methodStats.get(pay.paymentMethodId);
                 if (existing) {
                     existing.transactions += 1;
                     existing.amountUSD = existing.amountUSD.add(nativeUSD);
                     existing.amountVES = existing.amountVES.add(nativeVES);
-                    existing.equivUSD = existing.equivUSD.add(equivUSD);
                 } else {
                     methodStats.set(pay.paymentMethodId, {
-                        method: pay.paymentMethod.name,
+                        method: displayMethodName,
                         type: pay.paymentMethod.type,
-                        currency: pay.paymentMethod.currency,
+                        currency: isCashea ? 'USD' : pay.paymentMethod.currency,
+                        isCashea,
                         transactions: 1,
                         amountUSD: nativeUSD,
-                        amountVES: nativeVES,
-                        equivUSD: equivUSD
+                        amountVES: nativeVES
                     });
                 }
             }
@@ -222,61 +267,112 @@ export class CashRegisterReportService {
             for (const ref of refunds) {
                 const rate = new Decimal(ref.exchangeRate.rate);
                 const amt = new Decimal(ref.amount);
+                const isCashea = isCasheaPaymentMethod(ref.paymentMethod.name);
                 const isUSD = ref.paymentMethod.currency === 'USD';
 
-                const nativeUSD = isUSD ? amt : new Decimal(0);
-                const nativeVES = isUSD ? new Decimal(0) : amt;
-                const equivUSD = isUSD ? amt : amt.div(rate);
+                let nativeUSD = new Decimal(0);
+                let nativeVES = new Decimal(0);
 
-                // Subtract refunds from net collected totals in their native currency
-                totalUSD = totalUSD.sub(nativeUSD);
-                totalVES = totalVES.sub(nativeVES);
-                totalEquivUSD = totalEquivUSD.sub(equivUSD);
-
-                if (ref.paymentMethod.type === 'CASH') {
-                    cashRefundsUSD = cashRefundsUSD.add(equivUSD);
+                if (isCashea) {
+                    nativeUSD = isUSD ? amt : amt.div(rate);
+                    totalCasheaUSD = totalCasheaUSD.sub(nativeUSD);
+                } else if (isUSD) {
+                    nativeUSD = amt;
+                    totalUSD = totalUSD.sub(nativeUSD);
+                } else {
+                    nativeVES = amt;
+                    totalVES = totalVES.sub(nativeVES);
                 }
 
+                if (!isCashea && ref.paymentMethod.type === 'CASH') {
+                    const equivCashUSD = isUSD ? amt : amt.div(rate);
+                    cashRefundsUSD = cashRefundsUSD.add(equivCashUSD);
+                }
+
+                const displayMethodName = isCashea ? 'Financiamiento de Cashea' : ref.paymentMethod.name;
                 const existing = methodStats.get(ref.paymentMethodId);
                 if (existing) {
                     existing.amountUSD = existing.amountUSD.sub(nativeUSD);
                     existing.amountVES = existing.amountVES.sub(nativeVES);
-                    existing.equivUSD = existing.equivUSD.sub(equivUSD);
                 } else {
                     methodStats.set(ref.paymentMethodId, {
-                        method: ref.paymentMethod.name,
+                        method: displayMethodName,
                         type: ref.paymentMethod.type,
-                        currency: ref.paymentMethod.currency,
+                        currency: isCashea ? 'USD' : ref.paymentMethod.currency,
+                        isCashea,
                         transactions: 1,
                         amountUSD: nativeUSD.negated(),
-                        amountVES: nativeVES.negated(),
-                        equivUSD: equivUSD.negated()
+                        amountVES: nativeVES.negated()
                     });
                 }
             }
 
-            // Map and format the payment methods keeping strict native currency
-            const totalEquivUSDNumber = totalEquivUSD.toNumber();
-            const methodsArray = Array.from(methodStats.values()).map(m => {
-                const amountVal = m.amountUSD.toNumber();
-                const amountVESVal = m.amountVES.toNumber();
-                const equivVal = m.equivUSD.toNumber();
-                const pct = totalEquivUSDNumber > 0 ? (equivVal / totalEquivUSDNumber) * 100 : 0;
-                return {
-                    method: m.method,
-                    type: m.type,
-                    currency: m.currency,
-                    transactions: m.transactions,
-                    amountUSD: m.currency === 'USD' ? Number(amountVal.toFixed(2)) : 0,
-                    amountVES: m.currency === 'VES' ? Number(amountVESVal.toFixed(2)) : 0,
-                    percentage: Number(pct.toFixed(2)),
-                    color: getColorForPaymentType(m.type),
-                    _sortWeight: equivVal
-                };
-            }).sort((a, b) => b._sortWeight - a._sortWeight).map(({ _sortWeight, ...rest }) => rest);
+            const totalUSDNum = totalUSD.toNumber();
+            const totalVESNum = totalVES.toNumber();
+            const totalCasheaUSDNum = totalCasheaUSD.toNumber();
+
+            const allStats = Array.from(methodStats.values());
+
+            const methodsUSD = allStats
+                .filter(m => !m.isCashea && m.currency === 'USD')
+                .map(m => {
+                    const val = m.amountUSD.toNumber();
+                    const pct = totalUSDNum > 0 ? (val / totalUSDNum) * 100 : 0;
+                    return {
+                        method: m.method,
+                        type: m.type,
+                        currency: 'USD',
+                        isCashea: false,
+                        transactions: m.transactions,
+                        amountUSD: Number(val.toFixed(2)),
+                        amountVES: 0,
+                        percentage: Number(pct.toFixed(2)),
+                        color: getColorForPaymentType(m.type, false)
+                    };
+                })
+                .sort((a, b) => b.amountUSD - a.amountUSD);
+
+            const methodsVES = allStats
+                .filter(m => !m.isCashea && m.currency !== 'USD')
+                .map(m => {
+                    const val = m.amountVES.toNumber();
+                    const pct = totalVESNum > 0 ? (val / totalVESNum) * 100 : 0;
+                    return {
+                        method: m.method,
+                        type: m.type,
+                        currency: 'VES',
+                        isCashea: false,
+                        transactions: m.transactions,
+                        amountUSD: 0,
+                        amountVES: Number(val.toFixed(2)),
+                        percentage: Number(pct.toFixed(2)),
+                        color: getColorForPaymentType(m.type, false)
+                    };
+                })
+                .sort((a, b) => b.amountVES - a.amountVES);
+
+            const methodsCashea = allStats
+                .filter(m => m.isCashea)
+                .map(m => {
+                    const val = m.amountUSD.toNumber();
+                    const pct = totalCasheaUSDNum > 0 ? (val / totalCasheaUSDNum) * 100 : 100;
+                    return {
+                        method: 'Financiamiento de Cashea',
+                        type: m.type,
+                        currency: 'USD',
+                        isCashea: true,
+                        transactions: m.transactions,
+                        amountUSD: Number(val.toFixed(2)),
+                        amountVES: 0,
+                        percentage: Number(pct.toFixed(2)),
+                        color: getColorForPaymentType(m.type, true)
+                    };
+                });
+
+            const methodsArray = [...methodsUSD, ...methodsVES, ...methodsCashea];
 
             // Final Cash Estimado = Apertura + Ventas en Efectivo - Egresos en Efectivo
-            const payoutsUSD = cashRefundsUSD; // Salidas declaradas en efectivo
+            const payoutsUSD = cashRefundsUSD;
             const finalCashUSD = initialCashUSD.add(cashPaymentsUSD).sub(cashRefundsUSD);
 
             return {
@@ -287,12 +383,17 @@ export class CashRegisterReportService {
                     closedRegisters,
                     totalUSD: Number(totalUSD.toFixed(2)),
                     totalVES: Number(totalVES.toFixed(2)),
+                    totalCasheaUSD: Number(totalCasheaUSD.toFixed(2)),
+                    casheaTransactions,
                     salesCount,
                     activeSellers,
                     initialCashUSD: Number(initialCashUSD.toFixed(2)),
                     finalCashUSD: Number(finalCashUSD.toFixed(2)),
                     payoutsUSD: Number(payoutsUSD.toFixed(2)),
-                    methods: methodsArray
+                    methods: methodsArray,
+                    methodsUSD,
+                    methodsVES,
+                    methodsCashea
                 }
             };
 
@@ -427,19 +528,61 @@ export class CashRegisterReportService {
                 const memberSales = sales.filter(s => s.memberId === member.id);
                 const memberRegisters = registers.filter(r => r.memberId === member.id);
 
-                // Calculate totals collected from payments
+                // Calculate totals collected from payments separated into USD (non-Cashea), VES, and Financiamiento de Cashea
                 let memberTotalUSD = new Decimal(0);
                 let memberTotalVES = new Decimal(0);
+                let memberTotalCasheaUSD = new Decimal(0);
+                let memberCasheaTransactions = 0;
                 let articlesCount = 0;
+
+                const sellerMethodStats = new Map<number, {
+                    method: string;
+                    type: string;
+                    currency: string;
+                    isCashea: boolean;
+                    transactions: number;
+                    amountUSD: Decimal;
+                    amountVES: Decimal;
+                }>();
 
                 for (const sale of memberSales) {
                     for (const pay of sale.payments) {
                         const rate = new Decimal(pay.exchangeRate.rate);
                         const amt = new Decimal(pay.amount);
-                        if (pay.paymentMethod.currency === 'USD') {
-                            memberTotalUSD = memberTotalUSD.add(amt);
+                        const isCashea = isCasheaPaymentMethod(pay.paymentMethod.name);
+                        const isUSD = pay.paymentMethod.currency === 'USD';
+
+                        let nativeUSD = new Decimal(0);
+                        let nativeVES = new Decimal(0);
+
+                        if (isCashea) {
+                            nativeUSD = isUSD ? amt : amt.div(rate);
+                            memberTotalCasheaUSD = memberTotalCasheaUSD.add(nativeUSD);
+                            memberCasheaTransactions += 1;
+                        } else if (isUSD) {
+                            nativeUSD = amt;
+                            memberTotalUSD = memberTotalUSD.add(nativeUSD);
                         } else {
-                            memberTotalVES = memberTotalVES.add(amt);
+                            nativeVES = amt;
+                            memberTotalVES = memberTotalVES.add(nativeVES);
+                        }
+
+                        const displayMethodName = isCashea ? 'Financiamiento de Cashea' : pay.paymentMethod.name;
+                        const existing = sellerMethodStats.get(pay.paymentMethodId);
+                        if (existing) {
+                            existing.transactions += 1;
+                            existing.amountUSD = existing.amountUSD.add(nativeUSD);
+                            existing.amountVES = existing.amountVES.add(nativeVES);
+                        } else {
+                            sellerMethodStats.set(pay.paymentMethodId, {
+                                method: displayMethodName,
+                                type: pay.paymentMethod.type,
+                                currency: isCashea ? 'USD' : pay.paymentMethod.currency,
+                                isCashea,
+                                transactions: 1,
+                                amountUSD: nativeUSD,
+                                amountVES: nativeVES
+                            });
                         }
                     }
 
@@ -447,6 +590,42 @@ export class CashRegisterReportService {
                         articlesCount += Number(item.quantity);
                     }
                 }
+
+                const sellerStatsList = Array.from(sellerMethodStats.values());
+                const sellerMethodsUSD = sellerStatsList
+                    .filter(m => !m.isCashea && m.currency === 'USD')
+                    .map(m => ({
+                        method: m.method,
+                        type: m.type,
+                        currency: 'USD',
+                        transactions: m.transactions,
+                        amountUSD: Number(m.amountUSD.toFixed(2)),
+                        amountVES: 0
+                    }))
+                    .sort((a, b) => b.amountUSD - a.amountUSD);
+
+                const sellerMethodsVES = sellerStatsList
+                    .filter(m => !m.isCashea && m.currency !== 'USD')
+                    .map(m => ({
+                        method: m.method,
+                        type: m.type,
+                        currency: 'VES',
+                        transactions: m.transactions,
+                        amountUSD: 0,
+                        amountVES: Number(m.amountVES.toFixed(2))
+                    }))
+                    .sort((a, b) => b.amountVES - a.amountVES);
+
+                const sellerMethodsCashea = sellerStatsList
+                    .filter(m => m.isCashea)
+                    .map(m => ({
+                        method: 'Financiamiento de Cashea',
+                        type: m.type,
+                        currency: 'USD',
+                        transactions: m.transactions,
+                        amountUSD: Number(m.amountUSD.toFixed(2)),
+                        amountVES: 0
+                    }));
 
                 // Registers count
                 const openRegistersCount = memberRegisters.filter(r => r.status === 'OPEN').length;
@@ -461,7 +640,7 @@ export class CashRegisterReportService {
                     let difference = 0;
                     if (reg.status === 'CLOSED') {
                         const cashPaymentsUSD = regPayments
-                            .filter(p => p.paymentMethod.type === 'CASH')
+                            .filter(p => p.paymentMethod.type === 'CASH' && !isCasheaPaymentMethod(p.paymentMethod.name))
                             .reduce((sum, p) => {
                                 const amt = new Decimal(p.amount);
                                 const rate = new Decimal(p.exchangeRate.rate);
@@ -469,7 +648,7 @@ export class CashRegisterReportService {
                             }, new Decimal(0));
 
                         const cashRefundsUSD = regRefunds
-                            .filter(r => r.paymentMethod.type === 'CASH')
+                            .filter(r => r.paymentMethod.type === 'CASH' && !isCasheaPaymentMethod(r.paymentMethod.name))
                             .reduce((sum, r) => {
                                 const amt = new Decimal(r.amount);
                                 const rate = new Decimal(r.exchangeRate.rate);
@@ -548,6 +727,11 @@ export class CashRegisterReportService {
                     totalSales: memberSales.length,
                     totalUSD: Number(memberTotalUSD.toFixed(2)),
                     totalVES: Number(memberTotalVES.toFixed(2)),
+                    totalCasheaUSD: Number(memberTotalCasheaUSD.toFixed(2)),
+                    casheaTransactions: memberCasheaTransactions,
+                    methodsUSD: sellerMethodsUSD,
+                    methodsVES: sellerMethodsVES,
+                    methodsCashea: sellerMethodsCashea,
                     articlesCount,
                     cashRegistersCount: {
                         open: openRegistersCount,
@@ -559,8 +743,7 @@ export class CashRegisterReportService {
             });
 
             // Filter out members with no activity if they are not selected by sellerId specifically
-            // (Only keep members who opened a cash register or made a sale in this range)
-            const activeSellersReport = sellersReport.filter(seller => 
+            const activeSellersReport = sellersReport.filter(seller =>
                 sellerId || seller.totalSales > 0 || seller.registers.length > 0
             );
 
@@ -648,8 +831,8 @@ export class CashRegisterReportService {
             };
 
         } catch (error) {
-            console.error('Error generando datos para PDF de caja:', error);
-            return { status: 500, message: 'Error interno al generar PDF de caja', data: null };
+            console.error('Error preparando datos del PDF de caja:', error);
+            return { status: 500, message: 'Error interno al preparar el PDF', data: null };
         }
     }
 }

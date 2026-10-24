@@ -10,10 +10,11 @@ type PaymentMethodSummary = {
     method: string;
     type: string;
     currency?: string;
+    isCashea?: boolean;
     transactions: number;
     amountUSD: number;
     amountVES?: number;
-    percentage: number;
+    percentage?: number;
 };
 
 type CashRegisterDetail = {
@@ -34,6 +35,11 @@ type SellerReport = {
     totalSales: number;
     totalUSD: number;
     totalVES: number;
+    totalCasheaUSD?: number;
+    casheaTransactions?: number;
+    methodsUSD?: PaymentMethodSummary[];
+    methodsVES?: PaymentMethodSummary[];
+    methodsCashea?: PaymentMethodSummary[];
     articlesCount: number;
     registers: CashRegisterDetail[];
 };
@@ -48,12 +54,17 @@ export interface CashRegisterReportProps {
         closedRegisters: number;
         totalUSD: number;
         totalVES: number;
+        totalCasheaUSD?: number;
+        casheaTransactions?: number;
         salesCount: number;
         activeSellers: number;
         initialCashUSD: number;
         finalCashUSD: number;
         payoutsUSD: number;
         methods: PaymentMethodSummary[];
+        methodsUSD?: PaymentMethodSummary[];
+        methodsVES?: PaymentMethodSummary[];
+        methodsCashea?: PaymentMethodSummary[];
     };
     sellers: SellerReport[];
 }
@@ -78,6 +89,12 @@ const C = {
     totalBg: '#d0dce8',
     red: '#c0392b',
     green: '#1a6b3a',
+    indigo: '#3730a3',
+    indigoBg: '#eef2ff',
+    indigoBorder: '#c7d2fe',
+    amber: '#92400e',
+    amberBg: '#fffbeb',
+    emeraldBg: '#ecfdf5',
     neutral: '#2c3e50',
 };
 
@@ -97,8 +114,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: 20,
-        paddingBottom: 14,
+        marginBottom: 16,
+        paddingBottom: 12,
         borderBottomWidth: 2,
         borderBottomColor: C.accent,
     },
@@ -118,7 +135,7 @@ const styles = StyleSheet.create({
     sectionHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 16,
+        marginTop: 14,
         marginBottom: 6,
         paddingBottom: 4,
         borderBottomWidth: 1,
@@ -131,7 +148,14 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 0.8,
     },
-    sectionLine: { flex: 1, height: 0 },
+    subSectionTitle: {
+        fontSize: 8.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.accent,
+        marginTop: 8,
+        marginBottom: 4,
+        textTransform: 'uppercase',
+    },
 
     // ── Summary two-column table ──
     summaryGrid: {
@@ -177,16 +201,25 @@ const styles = StyleSheet.create({
         paddingHorizontal: 7,
         fontSize: 8.5,
         fontFamily: 'Helvetica-Bold',
-        color: C.accent,
+        color: C.green,
+        textAlign: 'right',
+    },
+    summaryValueIndigo: {
+        flex: 1,
+        paddingVertical: 5,
+        paddingHorizontal: 7,
+        fontSize: 8.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.indigo,
         textAlign: 'right',
     },
 
     // ── Generic table ──
-    table: { width: '100%', borderWidth: 1, borderColor: C.border },
+    table: { width: '100%', borderWidth: 1, borderColor: C.border, marginBottom: 6 },
     tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: C.borderLight },
-    tableRowLast: { flexDirection: 'row' },
     tableRowAlt: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: C.borderLight, backgroundColor: C.tableAlt },
     tableHead: { flexDirection: 'row', backgroundColor: C.tableHead },
+    tableHeadIndigo: { flexDirection: 'row', backgroundColor: C.indigo },
     tableHeadCell: {
         paddingVertical: 5,
         paddingHorizontal: 6,
@@ -215,6 +248,12 @@ const styles = StyleSheet.create({
         borderTopWidth: 1.5,
         borderTopColor: C.accentLight,
     },
+    tableTotalRowIndigo: {
+        flexDirection: 'row',
+        backgroundColor: C.indigoBg,
+        borderTopWidth: 1.5,
+        borderTopColor: C.indigoBorder,
+    },
     tableTotalCell: {
         paddingVertical: 5,
         paddingHorizontal: 6,
@@ -232,15 +271,14 @@ const styles = StyleSheet.create({
         color: C.accent,
     },
 
-    // Payment methods columns — flex-based proportions to avoid padding overflow
-    colPayMethod: { flex: 3.6 },
-    colPayTx:     { flex: 1.4, textAlign: 'right' },
-    colPayAmtUSD: { flex: 2.3, textAlign: 'right' },
-    colPayAmtVES: { flex: 2.7, textAlign: 'right' },
-    colPayPct:    { flex: 1.3, textAlign: 'right' },
+    // Payment methods columns
+    colPayMethod: { flex: 4.2 },
+    colPayTx:     { flex: 1.5, textAlign: 'right' },
+    colPayAmt:    { flex: 2.8, textAlign: 'right' },
+    colPayPct:    { flex: 1.5, textAlign: 'right' },
 
     // Seller block
-    sellerBlock: { marginTop: 12, marginBottom: 2 },
+    sellerBlock: { marginTop: 10, marginBottom: 4 },
     sellerHeaderRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -252,41 +290,104 @@ const styles = StyleSheet.create({
     },
     sellerNameText: { fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: C.white },
     sellerCiText: { fontSize: 7.5, color: '#a8c8e8', marginTop: 1 },
-    sellerTotalText: { fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#a8e8a8', textAlign: 'right' },
+    sellerTotalText: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#a8e8a8', textAlign: 'right' },
     sellerSalesText: { fontSize: 7.5, color: '#c8dce8', textAlign: 'right', marginTop: 1 },
 
-    // Seller summary mini-table
-    sellerSummaryTable: {
+    // Seller 3-column breakdown (USD, VES, Cashea)
+    sellerBreakdownGrid: {
         flexDirection: 'row',
         borderWidth: 1,
         borderTopWidth: 0,
         borderColor: C.border,
-        backgroundColor: C.subtotalBg,
+        backgroundColor: '#fafbfc',
     },
-    sellerSummaryCell: {
+    sellerBreakdownCol: {
         flex: 1,
-        paddingVertical: 4,
+        paddingVertical: 5,
         paddingHorizontal: 7,
-        fontSize: 7.5,
-        color: C.muted,
         borderRightWidth: 1,
         borderRightColor: C.borderLight,
     },
-    sellerSummaryValue: {
-        fontFamily: 'Helvetica-Bold',
-        color: C.text,
-        fontSize: 8.5,
-        marginTop: 1,
-    },
-    sellerSummaryCellLast: {
+    sellerBreakdownColLast: {
         flex: 1,
-        paddingVertical: 4,
+        paddingVertical: 5,
         paddingHorizontal: 7,
+        backgroundColor: C.indigoBg,
+    },
+    sellerBreakdownTitleUSD: {
+        fontSize: 7.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.green,
+        textTransform: 'uppercase',
+        marginBottom: 3,
+        paddingBottom: 2,
+        borderBottomWidth: 1,
+        borderBottomColor: C.borderLight,
+    },
+    sellerBreakdownTitleVES: {
+        fontSize: 7.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.amber,
+        textTransform: 'uppercase',
+        marginBottom: 3,
+        paddingBottom: 2,
+        borderBottomWidth: 1,
+        borderBottomColor: C.borderLight,
+    },
+    sellerBreakdownTitleCashea: {
+        fontSize: 7.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.indigo,
+        textTransform: 'uppercase',
+        marginBottom: 3,
+        paddingBottom: 2,
+        borderBottomWidth: 1,
+        borderBottomColor: C.indigoBorder,
+    },
+    sellerMethodLine: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingVertical: 1.5,
+    },
+    sellerMethodName: {
         fontSize: 7.5,
         color: C.muted,
     },
+    sellerMethodVal: {
+        fontSize: 7.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.text,
+    },
+    sellerSubtotalLine: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 4,
+        paddingTop: 3,
+        borderTopWidth: 1,
+        borderTopColor: C.border,
+    },
+    sellerSubtotalLabel: {
+        fontSize: 8,
+        fontFamily: 'Helvetica-Bold',
+        color: C.text,
+    },
+    sellerSubtotalValueUSD: {
+        fontSize: 8.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.green,
+    },
+    sellerSubtotalValueVES: {
+        fontSize: 8.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.amber,
+    },
+    sellerSubtotalValueCashea: {
+        fontSize: 8.5,
+        fontFamily: 'Helvetica-Bold',
+        color: C.indigo,
+    },
 
-    // Cash register table columns — flex-based proportions to avoid padding overflow
+    // Cash register table columns
     colRegId:     { flex: 1.2 },
     colRegStatus: { flex: 1.0, textAlign: 'center' },
     colRegOpen:   { flex: 2.0, textAlign: 'center' },
@@ -324,8 +425,6 @@ const ves = (v: number) => {
     return (isNeg ? '-' : '') + absVal + ' Bs.';
 };
 
-const num = (v: number) => new Intl.NumberFormat('es-VE').format(v || 0);
-
 const fmtDT = (iso: string) => {
     if (!iso || iso === '—') return '—';
     try {
@@ -348,212 +447,339 @@ const CashRegisterReport = ({
     sellerFilter,
     overview,
     sellers,
-}: CashRegisterReportProps) => (
-    <Document>
-        <Page size="A4" style={styles.page}>
+}: CashRegisterReportProps) => {
+    const methodsUSD = overview.methodsUSD ?? overview.methods.filter(m => !m.isCashea && (m.currency === 'USD' || (m.amountUSD > 0 && !(m.amountVES && m.amountVES > 0))));
+    const methodsVES = overview.methodsVES ?? overview.methods.filter(m => !m.isCashea && (m.currency === 'VES' || (m.amountVES && m.amountVES > 0)));
+    const methodsCashea = overview.methodsCashea ?? overview.methods.filter(m => m.isCashea);
+    const totalCasheaUSD = overview.totalCasheaUSD ?? methodsCashea.reduce((acc, m) => acc + (m.amountUSD || 0), 0);
 
-            {/* ══ HEADER ══════════════════════════════════════════════════ */}
-            <View style={styles.header}>
-                <View style={styles.headerLeft}>
-                    <Image src={logoUrl || logoPath} style={styles.logo} />
-                    <View style={styles.headerTitles}>
-                        <Text style={styles.reportTitle}>REPORTE DE CAJA</Text>
-                        <Text style={styles.reportSubtitle}>
-                            {sellerFilter
-                                ? `Filtrado por empleado: ${sellerFilter}`
-                                : 'Informe general de turnos y conciliación de pagos'}
+    return (
+        <Document>
+            <Page size="A4" style={styles.page}>
+
+                {/* ══ HEADER ══════════════════════════════════════════════════ */}
+                <View style={styles.header}>
+                    <View style={styles.headerLeft}>
+                        <Image src={logoUrl || logoPath} style={styles.logo} />
+                        <View style={styles.headerTitles}>
+                            <Text style={styles.reportTitle}>REPORTE DE CAJA</Text>
+                            <Text style={styles.reportSubtitle}>
+                                {sellerFilter
+                                    ? `Filtrado por empleado: ${sellerFilter}`
+                                    : 'Informe general de turnos y conciliación de pagos por moneda nativa'}
+                            </Text>
+                            <Text style={styles.businessName}>{businessName}</Text>
+                        </View>
+                    </View>
+                    <View style={styles.headerRight}>
+                        <View style={styles.metaRow}>
+                            <Text style={styles.metaLabel}>Período</Text>
+                            <Text style={styles.metaValue}>{dateRange.from}  —  {dateRange.to}</Text>
+                        </View>
+                        <View style={styles.metaRow}>
+                            <Text style={styles.metaLabel}>Fecha de emisión</Text>
+                            <Text style={styles.metaValue}>{new Date().toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}</Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* ══ I. RESUMEN EJECUTIVO ═════════════════════════════════════ */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>I. Resumen General</Text>
+                </View>
+
+                <View style={styles.summaryGrid}>
+                    {/* Left column */}
+                    <View style={styles.summaryColumn}>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Cajas abiertas</Text>
+                            <Text style={styles.summaryValue}>{overview.openRegisters}</Text>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Cajas cerradas</Text>
+                            <Text style={styles.summaryValue}>{overview.closedRegisters}</Text>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Vendedores activos</Text>
+                            <Text style={styles.summaryValue}>{overview.activeSellers}</Text>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>N° de ventas</Text>
+                            <Text style={styles.summaryValue}>{overview.salesCount}</Text>
+                        </View>
+                        <View style={styles.summaryRowLast}>
+                            <Text style={styles.summaryLabel}>Financiamiento de Cashea (Aparte)</Text>
+                            <Text style={styles.summaryValueIndigo}>{usd(totalCasheaUSD)}</Text>
+                        </View>
+                    </View>
+
+                    {/* Right column */}
+                    <View style={styles.summaryColumn}>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Total recaudado en Dólares (USD)</Text>
+                            <Text style={styles.summaryValueAccent}>{usd(overview.totalUSD)}</Text>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Total recaudado en Bolívares (Bs.)</Text>
+                            <Text style={styles.summaryValue}>{ves(overview.totalVES)}</Text>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Efectivo inicial (USD)</Text>
+                            <Text style={styles.summaryValue}>{usd(overview.initialCashUSD)}</Text>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Efectivo final estimado (USD)</Text>
+                            <Text style={styles.summaryValue}>{usd(overview.finalCashUSD)}</Text>
+                        </View>
+                        <View style={styles.summaryRowLast}>
+                            <Text style={styles.summaryLabel}>Devoluciones en efectivo</Text>
+                            <Text style={styles.summaryValue}>{usd(overview.payoutsUSD)}</Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* ══ II. CONCILIACIÓN DE MÉTODOS DE PAGO (POR MONEDA Y CASHEA APARTE) ══ */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>II. Conciliación de Métodos de Pago</Text>
+                </View>
+
+                {/* II.A: Desglose en Dólares (USD - Sin Cashea) */}
+                <Text style={styles.subSectionTitle}>1. Desglose de Ingresos en Dólares (USD — Efectivo / Zelle / Divisas)</Text>
+                <View style={styles.table}>
+                    <View style={styles.tableHead}>
+                        <Text style={[styles.tableHeadCell, styles.colPayMethod]}>Método de Pago en Dólares</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayTx]}>Transacciones</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayAmt]}>Monto Recibido (USD)</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayPct]}>% del Total USD</Text>
+                    </View>
+                    {methodsUSD.length === 0 ? (
+                        <View style={styles.tableRow}>
+                            <Text style={[styles.tableCellLast, { flex: 1, color: C.muted }]}>Sin cobros registrados en métodos en Dólares (USD) en este período.</Text>
+                        </View>
+                    ) : (
+                        methodsUSD.map((m, i) => (
+                            <View style={i % 2 === 0 ? styles.tableRow : styles.tableRowAlt} key={i}>
+                                <Text style={[styles.tableCell, styles.colPayMethod]}>{m.method}</Text>
+                                <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
+                                <Text style={[styles.tableCell, styles.colPayAmt, { fontFamily: 'Helvetica-Bold', color: C.green }]}>{usd(m.amountUSD)}</Text>
+                                <Text style={[styles.tableCellLast, styles.colPayPct]}>{(m.percentage ?? 0).toFixed(2)}%</Text>
+                            </View>
+                        ))
+                    )}
+                    <View style={styles.tableTotalRow}>
+                        <Text style={[styles.tableTotalCell, styles.colPayMethod]}>TOTAL RECAUDADO EN DÓLARES (USD)</Text>
+                        <Text style={[styles.tableTotalCell, styles.colPayTx]}>
+                            {methodsUSD.reduce((a, m) => a + m.transactions, 0)}
                         </Text>
-                        <Text style={styles.businessName}>{businessName}</Text>
-                    </View>
-                </View>
-                <View style={styles.headerRight}>
-                    <View style={styles.metaRow}>
-                        <Text style={styles.metaLabel}>Período</Text>
-                        <Text style={styles.metaValue}>{dateRange.from}  —  {dateRange.to}</Text>
-                    </View>
-                    <View style={styles.metaRow}>
-                        <Text style={styles.metaLabel}>Fecha de emisión</Text>
-                        <Text style={styles.metaValue}>{new Date().toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' })}</Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* ══ I. RESUMEN EJECUTIVO ═════════════════════════════════════ */}
-            <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>I. Resumen General</Text>
-            </View>
-
-            <View style={styles.summaryGrid}>
-                {/* Left column */}
-                <View style={styles.summaryColumn}>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Cajas abiertas</Text>
-                        <Text style={styles.summaryValue}>{overview.openRegisters}</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Cajas cerradas</Text>
-                        <Text style={styles.summaryValue}>{overview.closedRegisters}</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Vendedores activos</Text>
-                        <Text style={styles.summaryValue}>{overview.activeSellers}</Text>
-                    </View>
-                    <View style={styles.summaryRowLast}>
-                        <Text style={styles.summaryLabel}>N° de ventas</Text>
-                        <Text style={styles.summaryValue}>{overview.salesCount}</Text>
+                        <Text style={[styles.tableTotalCell, styles.colPayAmt, { color: C.green }]}>{usd(overview.totalUSD)}</Text>
+                        <Text style={[styles.tableTotalCellLast, styles.colPayPct]}>100.00%</Text>
                     </View>
                 </View>
 
-                {/* Right column */}
-                <View style={styles.summaryColumn}>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Total recaudado (USD)</Text>
-                        <Text style={styles.summaryValueAccent}>{usd(overview.totalUSD)}</Text>
+                {/* II.B: Desglose en Bolívares (Bs.) */}
+                <Text style={styles.subSectionTitle}>2. Desglose de Ingresos en Bolívares (Bs. — Punto de Venta / Pago Móvil / Efectivo Bs)</Text>
+                <View style={styles.table}>
+                    <View style={styles.tableHead}>
+                        <Text style={[styles.tableHeadCell, styles.colPayMethod]}>Método de Pago en Bolívares</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayTx]}>Transacciones</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayAmt]}>Monto Recibido (Bs.)</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayPct]}>% del Total Bs.</Text>
                     </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Total recaudado (VES)</Text>
-                        <Text style={styles.summaryValue}>{ves(overview.totalVES)}</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Efectivo inicial (USD)</Text>
-                        <Text style={styles.summaryValue}>{usd(overview.initialCashUSD)}</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Efectivo final estimado (USD)</Text>
-                        <Text style={styles.summaryValue}>{usd(overview.finalCashUSD)}</Text>
-                    </View>
-                    <View style={styles.summaryRowLast}>
-                        <Text style={styles.summaryLabel}>Devoluciones en efectivo</Text>
-                        <Text style={styles.summaryValue}>{usd(overview.payoutsUSD)}</Text>
+                    {methodsVES.length === 0 ? (
+                        <View style={styles.tableRow}>
+                            <Text style={[styles.tableCellLast, { flex: 1, color: C.muted }]}>Sin cobros registrados en métodos en Bolívares (Bs.) en este período.</Text>
+                        </View>
+                    ) : (
+                        methodsVES.map((m, i) => (
+                            <View style={i % 2 === 0 ? styles.tableRow : styles.tableRowAlt} key={i}>
+                                <Text style={[styles.tableCell, styles.colPayMethod]}>{m.method}</Text>
+                                <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
+                                <Text style={[styles.tableCell, styles.colPayAmt, { fontFamily: 'Helvetica-Bold', color: C.amber }]}>{ves(m.amountVES ?? 0)}</Text>
+                                <Text style={[styles.tableCellLast, styles.colPayPct]}>{(m.percentage ?? 0).toFixed(2)}%</Text>
+                            </View>
+                        ))
+                    )}
+                    <View style={styles.tableTotalRow}>
+                        <Text style={[styles.tableTotalCell, styles.colPayMethod]}>TOTAL RECAUDADO EN BOLÍVARES (Bs.)</Text>
+                        <Text style={[styles.tableTotalCell, styles.colPayTx]}>
+                            {methodsVES.reduce((a, m) => a + m.transactions, 0)}
+                        </Text>
+                        <Text style={[styles.tableTotalCell, styles.colPayAmt, { color: C.amber }]}>{ves(overview.totalVES)}</Text>
+                        <Text style={[styles.tableTotalCellLast, styles.colPayPct]}>100.00%</Text>
                     </View>
                 </View>
-            </View>
 
-            {/* ══ II. CONCILIACIÓN DE MÉTODOS DE PAGO ═════════════════════ */}
-            <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>II. Conciliación de Métodos de Pago</Text>
-            </View>
-
-            <View style={styles.table}>
-                <View style={styles.tableHead}>
-                    <Text style={[styles.tableHeadCell, styles.colPayMethod]}>Método de Pago</Text>
-                    <Text style={[styles.tableHeadCell, styles.colPayTx, { textAlign: 'right' }]}>Transacciones</Text>
-                    <Text style={[styles.tableHeadCell, styles.colPayAmtUSD, { textAlign: 'right' }]}>Monto (USD)</Text>
-                    <Text style={[styles.tableHeadCell, styles.colPayAmtVES, { textAlign: 'right' }]}>Monto (Bs.)</Text>
-                    <Text style={[styles.tableHeadCell, styles.colPayPct, { textAlign: 'right' }]}>Participación</Text>
+                {/* II.C: Sección Aparte — Financiamiento de Cashea */}
+                <Text style={[styles.subSectionTitle, { color: C.indigo }]}>3. Sección Aparte: Financiamiento de Cashea (No entra en Efectivo USD ni en Bolívares)</Text>
+                <View style={[styles.table, { borderColor: C.indigoBorder }]}>
+                    <View style={styles.tableHeadIndigo}>
+                        <Text style={[styles.tableHeadCell, styles.colPayMethod]}>Concepto de Financiamiento</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayTx]}>Operaciones</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayAmt]}>Monto Financiado</Text>
+                        <Text style={[styles.tableHeadCell, styles.colPayPct]}>Participación</Text>
+                    </View>
+                    {methodsCashea.length === 0 ? (
+                        <View style={styles.tableRow}>
+                            <Text style={[styles.tableCellLast, { flex: 1, color: C.muted }]}>Sin operaciones de Financiamiento de Cashea en este período.</Text>
+                        </View>
+                    ) : (
+                        methodsCashea.map((m, i) => (
+                            <View style={styles.tableRow} key={i}>
+                                <Text style={[styles.tableCell, styles.colPayMethod, { fontFamily: 'Helvetica-Bold', color: C.indigo }]}>Financiamiento de Cashea</Text>
+                                <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
+                                <Text style={[styles.tableCell, styles.colPayAmt, { fontFamily: 'Helvetica-Bold', color: C.indigo }]}>{usd(m.amountUSD)}</Text>
+                                <Text style={[styles.tableCellLast, styles.colPayPct]}>100.00%</Text>
+                            </View>
+                        ))
+                    )}
+                    <View style={styles.tableTotalRowIndigo}>
+                        <Text style={[styles.tableTotalCell, styles.colPayMethod, { color: C.indigo }]}>TOTAL FINANCIAMIENTO DE CASHEA</Text>
+                        <Text style={[styles.tableTotalCell, styles.colPayTx, { color: C.indigo }]}>
+                            {methodsCashea.reduce((a, m) => a + m.transactions, 0)}
+                        </Text>
+                        <Text style={[styles.tableTotalCell, styles.colPayAmt, { color: C.indigo }]}>{usd(totalCasheaUSD)}</Text>
+                        <Text style={[styles.tableTotalCellLast, styles.colPayPct, { color: C.indigo }]}>100.00%</Text>
+                    </View>
                 </View>
 
-                {overview.methods.map((m, i) => {
-                    const isUSD = m.currency ? m.currency === 'USD' : (m.amountUSD > 0 && !(m.amountVES && m.amountVES > 0));
+                {/* ══ III. DESGLOSE POR VENDEDOR ═══════════════════════════════ */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>III. Desglose por Empleado</Text>
+                </View>
+
+                {sellers.map((seller) => {
+                    const sUSD = seller.methodsUSD ?? [];
+                    const sVES = seller.methodsVES ?? [];
+                    const sCashea = seller.methodsCashea ?? [];
+                    const sTotalCashea = seller.totalCasheaUSD ?? sCashea.reduce((a, m) => a + (m.amountUSD || 0), 0);
+
                     return (
-                        <View style={i % 2 === 0 ? styles.tableRow : styles.tableRowAlt} key={i}>
-                            <Text style={[styles.tableCell, styles.colPayMethod]}>{m.method}</Text>
-                            <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
-                            <Text style={[styles.tableCell, styles.colPayAmtUSD]}>{isUSD ? usd(m.amountUSD) : '—'}</Text>
-                            <Text style={[styles.tableCell, styles.colPayAmtVES]}>{!isUSD ? ves(m.amountVES ?? 0) : '—'}</Text>
-                            <Text style={[styles.tableCellLast, styles.colPayPct]}>{m.percentage.toFixed(2)}%</Text>
+                        <View key={seller.id} style={styles.sellerBlock} wrap={false}>
+                            {/* Seller header bar */}
+                            <View style={styles.sellerHeaderRow}>
+                                <View>
+                                    <Text style={styles.sellerNameText}>{seller.name}</Text>
+                                    <Text style={styles.sellerCiText}>CI: {seller.ci ?? '—'}</Text>
+                                </View>
+                                <View style={{ alignItems: 'flex-end' }}>
+                                    <Text style={styles.sellerTotalText}>
+                                        Dólares: {usd(seller.totalUSD)}  |  Bolívares: {ves(seller.totalVES)}
+                                        {sTotalCashea > 0 ? `  |  Cashea: ${usd(sTotalCashea)}` : ''}
+                                    </Text>
+                                    <Text style={styles.sellerSalesText}>
+                                        {seller.totalSales} ventas · {seller.articlesCount} artículos vendidos
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {/* 3-Column Breakdown: 1) Cómo llegamos a los USD, 2) Cómo llegamos a los Bs., 3) Financiamiento de Cashea */}
+                            <View style={styles.sellerBreakdownGrid}>
+                                {/* Col 1: Dólares (USD) */}
+                                <View style={styles.sellerBreakdownCol}>
+                                    <Text style={styles.sellerBreakdownTitleUSD}>¿Cómo llegamos a los Dólares (USD)?</Text>
+                                    {sUSD.length === 0 ? (
+                                        <Text style={styles.sellerMethodName}>Sin pagos en USD</Text>
+                                    ) : (
+                                        sUSD.map((m, idx) => (
+                                            <View style={styles.sellerMethodLine} key={idx}>
+                                                <Text style={styles.sellerMethodName}>• {m.method} ({m.transactions})</Text>
+                                                <Text style={styles.sellerMethodVal}>{usd(m.amountUSD)}</Text>
+                                            </View>
+                                        ))
+                                    )}
+                                    <View style={styles.sellerSubtotalLine}>
+                                        <Text style={styles.sellerSubtotalLabel}>Total en USD:</Text>
+                                        <Text style={styles.sellerSubtotalValueUSD}>{usd(seller.totalUSD)}</Text>
+                                    </View>
+                                </View>
+
+                                {/* Col 2: Bolívares (Bs.) */}
+                                <View style={styles.sellerBreakdownCol}>
+                                    <Text style={styles.sellerBreakdownTitleVES}>¿Cómo llegamos a los Bolívares (Bs.)?</Text>
+                                    {sVES.length === 0 ? (
+                                        <Text style={styles.sellerMethodName}>Sin pagos en Bolívares</Text>
+                                    ) : (
+                                        sVES.map((m, idx) => (
+                                            <View style={styles.sellerMethodLine} key={idx}>
+                                                <Text style={styles.sellerMethodName}>• {m.method} ({m.transactions})</Text>
+                                                <Text style={styles.sellerMethodVal}>{ves(m.amountVES ?? 0)}</Text>
+                                            </View>
+                                        ))
+                                    )}
+                                    <View style={styles.sellerSubtotalLine}>
+                                        <Text style={styles.sellerSubtotalLabel}>Total en Bs.:</Text>
+                                        <Text style={styles.sellerSubtotalValueVES}>{ves(seller.totalVES)}</Text>
+                                    </View>
+                                </View>
+
+                                {/* Col 3: Financiamiento de Cashea (Aparte) */}
+                                <View style={styles.sellerBreakdownColLast}>
+                                    <Text style={styles.sellerBreakdownTitleCashea}>Sección Aparte: Cashea</Text>
+                                    {sCashea.length === 0 ? (
+                                        <Text style={styles.sellerMethodName}>Sin financiamiento Cashea</Text>
+                                    ) : (
+                                        sCashea.map((m, idx) => (
+                                            <View style={styles.sellerMethodLine} key={idx}>
+                                                <Text style={styles.sellerMethodName}>• Financiamiento de Cashea ({m.transactions})</Text>
+                                                <Text style={styles.sellerMethodVal}>{usd(m.amountUSD)}</Text>
+                                            </View>
+                                        ))
+                                    )}
+                                    <View style={[styles.sellerSubtotalLine, { borderTopColor: C.indigoBorder }]}>
+                                        <Text style={[styles.sellerSubtotalLabel, { color: C.indigo }]}>Total Cashea:</Text>
+                                        <Text style={styles.sellerSubtotalValueCashea}>{usd(sTotalCashea)}</Text>
+                                    </View>
+                                </View>
+                            </View>
+
+                            {/* Cash registers (turnos) */}
+                            {seller.registers.length > 0 && (
+                                <View style={[styles.table, { borderTopWidth: 0, marginBottom: 0 }]}>
+                                    <View style={styles.tableHead}>
+                                        <Text style={[styles.tableHeadCell, styles.colRegId]}>Turno</Text>
+                                        <Text style={[styles.tableHeadCell, styles.colRegStatus, { textAlign: 'center' }]}>Estado</Text>
+                                        <Text style={[styles.tableHeadCell, styles.colRegOpen, { textAlign: 'center' }]}>Apertura</Text>
+                                        <Text style={[styles.tableHeadCell, styles.colRegClose, { textAlign: 'center' }]}>Cierre</Text>
+                                        <Text style={[styles.tableHeadCell, styles.colRegSales, { textAlign: 'right' }]}>Ventas</Text>
+                                        <Text style={[styles.tableHeadCell, styles.colRegInit, { textAlign: 'right' }]}>Inicial</Text>
+                                        <Text style={[styles.tableHeadCell, styles.colRegDiff, { textAlign: 'right' }]}>Diferencia</Text>
+                                    </View>
+
+                                    {seller.registers.map((reg, ri) => (
+                                        <View
+                                            style={ri % 2 === 0 ? styles.tableRow : styles.tableRowAlt}
+                                            key={reg.id}
+                                        >
+                                            <Text style={[styles.tableCell, styles.colRegId]}>{reg.id}</Text>
+                                            <Text style={[styles.tableCell, styles.colRegStatus]}>{statusLabel(reg.status)}</Text>
+                                            <Text style={[styles.tableCell, styles.colRegOpen]}>{fmtDT(reg.openTime)}</Text>
+                                            <Text style={[styles.tableCell, styles.colRegClose]}>{fmtDT(reg.closeTime)}</Text>
+                                            <Text style={[styles.tableCell, styles.colRegSales]}>{reg.salesCount}</Text>
+                                            <Text style={[styles.tableCell, styles.colRegInit]}>{usd(reg.initialAmount)}</Text>
+                                            <Text style={[styles.tableCellLast, styles.colRegDiff, { color: reg.difference < 0 ? C.red : reg.difference > 0 ? C.green : C.neutral, fontFamily: 'Helvetica-Bold' }]}>
+                                                {reg.difference > 0 ? '+' : ''}{usd(reg.difference)}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
                         </View>
                     );
                 })}
 
-                <View style={styles.tableTotalRow}>
-                    <Text style={[styles.tableTotalCell, styles.colPayMethod]}>TOTAL GENERAL</Text>
-                    <Text style={[styles.tableTotalCell, styles.colPayTx]}>
-                        {overview.methods.reduce((a, m) => a + m.transactions, 0)}
+                {/* ══ FOOTER ══════════════════════════════════════════════════ */}
+                <View style={styles.footer} fixed>
+                    <Text style={styles.footerText}>
+                        {businessName} · Reporte de Caja · {dateRange.from} — {dateRange.to}
                     </Text>
-                    <Text style={[styles.tableTotalCell, styles.colPayAmtUSD]}>{usd(overview.totalUSD)}</Text>
-                    <Text style={[styles.tableTotalCell, styles.colPayAmtVES]}>{ves(overview.totalVES)}</Text>
-                    <Text style={[styles.tableTotalCellLast, styles.colPayPct]}>100.00%</Text>
+                    <Text
+                        style={styles.footerText}
+                        render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
+                    />
                 </View>
-            </View>
-
-            {/* ══ III. DESGLOSE POR VENDEDOR ═══════════════════════════════ */}
-            <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>III. Desglose por Empleado</Text>
-            </View>
-
-            {sellers.map((seller) => (
-                <View key={seller.id} style={styles.sellerBlock} wrap={false}>
-                    {/* Seller header bar */}
-                    <View style={styles.sellerHeaderRow}>
-                        <View>
-                            <Text style={styles.sellerNameText}>{seller.name}</Text>
-                            <Text style={styles.sellerCiText}>CI: {seller.ci ?? '—'}</Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={styles.sellerTotalText}>{usd(seller.totalUSD)}  |  {ves(seller.totalVES)}</Text>
-                            <Text style={styles.sellerSalesText}>
-                                {seller.totalSales} ventas · {seller.articlesCount} artículos
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* Seller summary row */}
-                    <View style={styles.sellerSummaryTable}>
-                        <View style={styles.sellerSummaryCell}>
-                            <Text>Total en USD</Text>
-                            <Text style={styles.sellerSummaryValue}>{usd(seller.totalUSD)}</Text>
-                        </View>
-                        <View style={styles.sellerSummaryCell}>
-                            <Text>Total en VES</Text>
-                            <Text style={styles.sellerSummaryValue}>{ves(seller.totalVES)}</Text>
-                        </View>
-                        <View style={styles.sellerSummaryCell}>
-                            <Text>N° Ventas</Text>
-                            <Text style={styles.sellerSummaryValue}>{seller.totalSales}</Text>
-                        </View>
-                        <View style={styles.sellerSummaryCellLast}>
-                            <Text>Artículos</Text>
-                            <Text style={styles.sellerSummaryValue}>{seller.articlesCount}</Text>
-                        </View>
-                    </View>
-
-                    {/* Cash registers (turnos) */}
-                    {seller.registers.length > 0 && (
-                        <View style={[styles.table, { borderTopWidth: 0 }]}>
-                            <View style={styles.tableHead}>
-                                <Text style={[styles.tableHeadCell, styles.colRegId]}>Turno</Text>
-                                <Text style={[styles.tableHeadCell, styles.colRegStatus, { textAlign: 'center' }]}>Estado</Text>
-                                <Text style={[styles.tableHeadCell, styles.colRegOpen, { textAlign: 'center' }]}>Apertura</Text>
-                                <Text style={[styles.tableHeadCell, styles.colRegClose, { textAlign: 'center' }]}>Cierre</Text>
-                                <Text style={[styles.tableHeadCell, styles.colRegSales, { textAlign: 'right' }]}>Ventas</Text>
-                                <Text style={[styles.tableHeadCell, styles.colRegInit, { textAlign: 'right' }]}>Inicial</Text>
-                                <Text style={[styles.tableHeadCell, styles.colRegDiff, { textAlign: 'right' }]}>Diferencia</Text>
-                            </View>
-
-                            {seller.registers.map((reg, ri) => (
-                                <View
-                                    style={ri % 2 === 0 ? styles.tableRow : styles.tableRowAlt}
-                                    key={reg.id}
-                                >
-                                    <Text style={[styles.tableCell, styles.colRegId]}>{reg.id}</Text>
-                                    <Text style={[styles.tableCell, styles.colRegStatus]}>{statusLabel(reg.status)}</Text>
-                                    <Text style={[styles.tableCell, styles.colRegOpen]}>{fmtDT(reg.openTime)}</Text>
-                                    <Text style={[styles.tableCell, styles.colRegClose]}>{fmtDT(reg.closeTime)}</Text>
-                                    <Text style={[styles.tableCell, styles.colRegSales]}>{reg.salesCount}</Text>
-                                    <Text style={[styles.tableCell, styles.colRegInit]}>{usd(reg.initialAmount)}</Text>
-                                    <Text style={[styles.tableCellLast, styles.colRegDiff, { color: reg.difference < 0 ? C.red : reg.difference > 0 ? C.green : C.neutral, fontFamily: 'Helvetica-Bold' }]}>
-                                        {reg.difference > 0 ? '+' : ''}{usd(reg.difference)}
-                                    </Text>
-                                </View>
-                            ))}
-                        </View>
-                    )}
-                </View>
-            ))}
-
-            {/* ══ FOOTER ══════════════════════════════════════════════════ */}
-            <View style={styles.footer} fixed>
-                <Text style={styles.footerText}>
-                    {businessName} · Reporte de Caja · {dateRange.from} — {dateRange.to}
-                </Text>
-                <Text
-                    style={styles.footerText}
-                    render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
-                />
-            </View>
-        </Page>
-    </Document>
-);
+            </Page>
+        </Document>
+    );
+};
 
 export default CashRegisterReport;
