@@ -171,6 +171,13 @@ model Business {
   managerMemberId              Int?
   managerMember                BusinessMember? @relation("BusinessManagerCommission", fields: [managerMemberId], references: [id])
 
+  // DEPÓSITO PRINCIPAL Y EXENCIÓN DE COBRO
+  billingExempt    Boolean @default(false)
+  isWarehouseHub   Boolean @default(false)
+
+  transfersSent     InterBranchTransfer[] @relation("TransfersSent")
+  transfersReceived InterBranchTransfer[] @relation("TransfersReceived")
+
   // Relaciones
   exchangeRates ExchangeRate[] // Historial de tasas creadas por este negocio
 
@@ -1234,3 +1241,53 @@ model BusinessAiUsage {
   @@index([businessId, periodMonth])
 }
 
+
+enum TransferStatus {
+  PENDING_RECEIPT
+  RECEIVED_FULL
+  RECEIVED_PARTIAL
+  REJECTED
+  CANCELLED
+}
+
+model InterBranchTransfer {
+  id                     Int             @id @default(autoincrement())
+  transferNumber         String          @unique
+  originBusinessId       Int
+  destinationBusinessId  Int
+  saleId                 Int?
+  createdById            Int
+  status                 TransferStatus  @default(PENDING_RECEIPT)
+  notes                  String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  receivedAt             DateTime?
+  receivedById           Int?
+  receivingNotes         String?
+
+  originBusiness         Business        @relation("TransfersSent", fields: [originBusinessId], references: [id])
+  destinationBusiness    Business        @relation("TransfersReceived", fields: [destinationBusinessId], references: [id])
+  items                  InterBranchTransferItem[]
+
+  @@index([originBusinessId])
+  @@index([destinationBusinessId])
+  @@index([status])
+}
+
+model InterBranchTransferItem {
+  id                 Int             @id @default(autoincrement())
+  transferId         Int
+  productId          Int
+  productName        String
+  sku                String?
+  quantitySent       Decimal         @db.Decimal(12, 2)
+  quantityReceived   Decimal         @default(0) @db.Decimal(12, 2)
+  quantityDamaged    Decimal         @default(0) @db.Decimal(12, 2)
+  quantityMissing    Decimal         @default(0) @db.Decimal(12, 2)
+  unitCost           Decimal         @default(0) @db.Decimal(15, 2)
+  damagedReason      String?
+
+  transfer           InterBranchTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@index([transferId])
+}

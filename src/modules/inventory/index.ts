@@ -5,3 +5,4 @@ export * from './product-presentation';
 export * from './stock-lot';
 export * from './stock-movement';
 export * from './measurement-unit';
+export * from './inter-branch-transfer';

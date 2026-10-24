@@ -17,6 +17,9 @@ export const checkSubscriptionsDaily = async (): Promise<number> => {
                 businessId: {
                     notIn: [6, 11]
                 },
+                business: {
+                    billingExempt: false
+                },
                 endDate: {
                     lt: now
                 }

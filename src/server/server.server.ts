@@ -7,7 +7,7 @@ import { UserRoute, RoleRoute, AuthRoute, BusinessMemberRoute, ContactRoute, Per
 
 import { BusinessCategoryRoute, SubscriptionRoute, BusinessRoute, SubscriptionPaymentRoute, SubscriptionPaymentMethodRoute, SubscriptionPlanRoute } from '../modules/platform';
 
-import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute } from '../modules/inventory';
+import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRoute, MeasurementUnitRoute, ProductPresentationRoute, InterBranchTransferRoute } from '../modules/inventory';
 
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute, ExpenseRoute, ExpenseCategoryRoute } from '../modules/finance';
 
@@ -170,6 +170,7 @@ export class Server {
         this.app.use(this.paths.measurementUnits, MeasurementUnitRoute);
         this.app.use(this.paths.stockLot, StockLotRoute);
         this.app.use(this.paths.stockMovement, StockMovementRoute);
+        this.app.use(this.paths.interBranchTransfer, InterBranchTransferRoute);
         this.app.use(this.paths.exchangeRates, ExchangeRateRoute);
         this.app.use(this.paths.paymentMethods, PaymentMethodRoute);
         this.app.use(this.paths.cashRegisters, CashRegisterRoute);
