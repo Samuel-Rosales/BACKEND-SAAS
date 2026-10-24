@@ -14,11 +14,20 @@ export interface AiChatAction {
     params?: Record<string, any>;
 }
 
+export interface AiSubagentInfo {
+    id: string;
+    name: string;
+    badge: string;
+    role?: string;
+}
+
 export interface AiChatResponse {
     text: string;
     actions: AiChatAction[];
     modelUsed?: string;
     usage?: BusinessAiUsageInfo;
+    subagent?: AiSubagentInfo;
+    suggestedOptions?: string[];
 }
 
 export interface ToolExecutionResult {

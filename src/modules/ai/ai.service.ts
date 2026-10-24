@@ -1,7 +1,42 @@
 import axios from 'axios';
 import { AI_TOOL_DECLARATIONS, executeAiTool } from './ai.tools';
-import { ChatHistoryMessage, AiChatResponse, AiChatAction } from './ai.interface';
+import { ChatHistoryMessage, AiChatResponse, AiChatAction, AiSubagentInfo } from './ai.interface';
 import { AiUsageService, BusinessAiUsageInfo } from './ai.usage.service';
+import { resolveBusinessExchangeRate } from '@/utils';
+import { prisma } from '@/configs';
+
+export const AI_SUBAGENTS: Record<string, AiSubagentInfo> = {
+    FINANCIAL_AUDITOR: {
+        id: 'financial-auditor',
+        name: 'Auditor Financiero & Fugas',
+        badge: '📊 Auditor Financiero & Fugas',
+        role: 'Arqueos de caja ciegos, margen de ganancia, costos COGS y dinero dormido'
+    },
+    INVENTORY_SPECIALIST: {
+        id: 'inventory-specialist',
+        name: 'Perito de Inventario & Almacenes',
+        badge: '📦 Perito de Inventario',
+        role: 'Control de existencias, stock crítico, valorización y productos estancados'
+    },
+    FISCAL_SENIAT: {
+        id: 'fiscal-seniat',
+        name: 'Inspector Fiscal & Tasa BCV',
+        badge: '🧾 Fiscal SENIAT & BCV',
+        role: 'Cumplimiento fiscal, tasa oficial BCV, libro de ventas y facturación legal'
+    },
+    COLLECTIONS_MANAGER: {
+        id: 'collections-manager',
+        name: 'Comisario de Cobranzas & Cashea',
+        badge: '💳 Gestor de Cobranzas',
+        role: 'Cuentas por cobrar, moras del 10%, abonos y cobranzas por WhatsApp'
+    },
+    OPERATIVE_TUTOR: {
+        id: 'operative-tutor',
+        name: 'Tutor Interactivo Guardián',
+        badge: '🎓 Tutor Interactivo Guardián',
+        role: 'Guía paso a paso y manual interactivo de todas las pantallas del sistema'
+    }
+};
 
 export class AiService {
     private apiKey: string;
@@ -11,8 +46,9 @@ export class AiService {
 
     constructor() {
         this.apiKey = process.env.GEMINI_API_KEY || '';
-        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
-        this.fallbackModels = ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite'];
+        // Por defecto usar Gemini 3.8 Flash con latencia ultra baja (Thinking Budget 0)
+        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+        this.fallbackModels = ['gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite'];
         this.usageService = new AiUsageService();
     }
 
@@ -97,7 +133,7 @@ RUTAS Y PROCEDIMIENTOS CLAVE DEL SISTEMA:
 GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 ============================================================
 - Consultas de Ventas del período / hoy: 'consultar_resumen_ventas'
-- Unidades vendidas de un producto ("¿cuántas neveras vendí hoy?"): 'consultar_ventas_por_producto'
+- Unidades vendidas de un producto: 'consultar_ventas_por_producto'
 - Inversión, valor comercial y ganancia potencial del inventario: 'consultar_valorizacion_inventario'
 - Ranking de más vendidos: 'consultar_top_productos_mas_vendidos'
 - Cuentas por cobrar y lista de deudores: 'consultar_cuentas_por_cobrar_y_deudores'
@@ -119,21 +155,13 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 - Cobranza por WhatsApp con enlace directo: 'generar_mensaje_cobranza_whatsapp'
 - Registro de gasto por comando: 'ejecutar_crear_gasto'
 - Cambio de precio de producto por comando: 'ejecutar_cambiar_precio_producto'
-- ABONAR / PAGAR A CLIENTE POR COMANDO (ej: "abónale 20 dólares a Pedro", "Pedro pagó 50"): 'ejecutar_abonar_a_cliente'
-- SUGERENCIA PREDICTIVA DE COMPRAS Y REPOSICIÓN A PROVEEDORES (ej: "sugiéreme qué comprar", "qué productos se van a agotar"): 'sugerir_reposicion_compras_proveedores'
-- RESUMEN EJECUTIVO DE APERTURA MATUTINO (ej: "cómo arrancamos hoy", "resumen de apertura", "briefing del día"): 'consultar_resumen_apertura_matutino'
-- CREACIÓN RÁPIDA DE PRODUCTO POR COMANDO DE VOZ (ej: "crea el producto Galletas María 100g, costo 0.60, venta 1.00, stock inicial 40"): 'ejecutar_crear_producto'
-- AUDITORÍA FORENSE DE FRAUDE Y ANULACIONES DE CAJA (ej: "audita si hay ventas anuladas o sospecha de fraude en cajas"): 'auditar_fraude_y_anulaciones_caja'
-- COMBOS Y PROMOCIONES INTELIGENTES CON DINERO DORMIDO (ej: "créame combos con los productos que no se venden", "combos promocionales"): 'generar_promociones_combos_estancados'
-- REGISTRO Y EJECUCIÓN DE VENTA REAL EN POS POR COMANDO (ej: "vende 2 Coca Colas en efectivo", "haz una venta de 1 Harina Pan", "véndele 3 Refrescos a crédito a María López"): 'ejecutar_crear_venta'
-
-COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
-1. Si el usuario te dice: "Abónale X dólares a [Cliente]" o "[Cliente] pagó X dólares", invoca 'ejecutar_abonar_a_cliente' con el nombre del cliente y el monto numérico en USD.
-2. Si el usuario te dice: "Hazme un reporte de cómo me fue en ventas" o "¿Cómo me fue en ventas?", invoca 'consultar_resumen_ventas' para hoy y dale un resumen conciso, motivador y ejecutivo, y genera el PDF para que lo descargue de inmediato.
-3. Si el usuario te dice: "¿Cómo arrancamos hoy?" o "Resumen de apertura", invoca 'consultar_resumen_apertura_matutino'.
-4. Si el usuario te dice: "Sugiéreme qué comprar" o "Qué le compro a los proveedores", invoca 'sugerir_reposicion_compras_proveedores'.
-5. Si el usuario te dice: "Crea el producto [Nombre], costo [X], venta [Y]", invoca 'ejecutar_crear_producto'.
-6. Si el usuario te dice: "Vende [X]", "Véndele [X] a [Cliente]", o "Haz una venta de [X]", invoca 'ejecutar_crear_venta'. Si no especifica cliente, asume venta de contado para Consumidor Final. Si no especifica método de pago, usa Efectivo.`
+- ABONAR / PAGAR A CLIENTE POR COMANDO: 'ejecutar_abonar_a_cliente'
+- SUGERENCIA PREDICTIVA DE COMPRAS Y REPOSICIÓN A PROVEEDORES: 'sugerir_reposicion_compras_proveedores'
+- RESUMEN EJECUTIVO DE APERTURA MATUTINO: 'consultar_resumen_apertura_matutino'
+- CREACIÓN RÁPIDA DE PRODUCTO POR COMANDO DE VOZ: 'ejecutar_crear_producto'
+- AUDITORÍA FORENSE DE FRAUDE Y ANULACIONES DE CAJA: 'auditar_fraude_y_anulaciones_caja'
+- COMBOS Y PROMOCIONES INTELIGENTES CON DINERO DORMIDO: 'generar_promociones_combos_estancados'
+- REGISTRO Y EJECUCIÓN DE VENTA REAL EN POS POR COMANDO: 'ejecutar_crear_venta'`
                 }
             ]
         };
@@ -159,13 +187,57 @@ COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
             throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno del servidor.');
         }
 
+        const cleanCmd = (userMessage || '').trim().toLowerCase();
+
+        // =========================================================================
+        // MOTOR FAST-PATH FORENSE (< 5 MS) - INSPIRADO EN LA ARQUITECTURA DE ARMANDO
+        // =========================================================================
+
+        // 1. Saludos y Bienvenida Inmediata
+        if (/^(hola|buenos d[ií]as|buenas tardes|buenas noches|qu[eé] tal|qui[eé]n eres|hey guardi[aá]n|hola guardi[aá]n)$/i.test(cleanCmd)) {
+            const biz = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { name: true }
+            }).catch(() => null);
+
+            const bizName = biz?.name || 'su empresa';
+            return {
+                text: `¡Hola! Soy **Guardián AI**, el copiloto operativo y analista financiero oficial de **${bizName}**.\n\nTengo conexión en tiempo real con sus puntos de venta, inventarios, cajas y cuentas por cobrar. ¿Qué consulta o acción operativa desea realizar hoy?`,
+                actions: [],
+                subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
+                suggestedOptions: [
+                    '📊 ¿Cómo me fue en ventas hoy?',
+                    '💳 Cuentas por cobrar y deudores',
+                    '📦 Stock bajo / agotado',
+                    '💵 Consultar Tasa Oficial BCV'
+                ]
+            };
+        }
+
+        // 2. Consulta Ultrarrápida de Tasa Oficial BCV
+        if (/(?:a\s+c[uú]anto\s+est[aá]\s+el\s+d[oó]lar|tasa\s+bcv|precio\s+del\s+d[oó]lar|tasa\s+oficial|tasa\s+del\s+d[oó]lar|cu[aá]l\s+es\s+la\s+tasa)/i.test(cleanCmd) && !/(?:debo|pagu[eé]|gasto|factura|vender)/i.test(cleanCmd)) {
+            const currentRate = await resolveBusinessExchangeRate(businessId).catch(() => 80.00);
+            return {
+                text: `💵 **Tasa Oficial BCV Activa en el Sistema**:\n\nActualmente la tasa oficial activa del Banco Central de Venezuela es de **${currentRate.toFixed(2)} Bs./$ USD**.\n\nTodos los precios de su inventario, tickets de venta en caja y conversiones se calculan en tiempo real anclados a este valor.`,
+                actions: [],
+                subagent: AI_SUBAGENTS.FISCAL_SENIAT,
+                suggestedOptions: [
+                    '📊 Ventas de hoy en USD y Bs',
+                    '🏷️ Inversión y valor de inventario',
+                    '💳 Cuentas por cobrar'
+                ]
+            };
+        }
+
         // Control y limitación de cuota mensual de IA por empresa
         const usage = await this.usageService.checkAndIncrementUsage(businessId, tzOffset);
         if (!usage.allowed) {
             return {
                 text: `⚠️ **Límite Mensual de Consultas Alcanzado**\n\nTu empresa ha alcanzado el límite de **${usage.monthlyLimit} consultas mensuales** asignadas con Guardián AI para este período (${usage.periodMonth}).\n\nPara ampliar tu cupo de consultas mensuales o consultar los planes superiores de Guardián, por favor comunícate con el administrador del sistema.`,
                 actions: [],
-                usage
+                subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
+                usage,
+                suggestedOptions: ['Ver planes de suscripción']
             };
         }
 
@@ -196,12 +268,16 @@ COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
             }
         ];
 
+        // Se configura thinkingBudget: 0 para máxima velocidad y ultra-baja latencia
         const initialPayload = {
             system_instruction: systemInstruction,
             contents,
             tools: toolsConfig,
             generationConfig: {
-                temperature: 0.1
+                temperature: 0.1,
+                thinkingConfig: {
+                    thinkingBudget: 0
+                }
             }
         };
 
@@ -286,7 +362,10 @@ COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
                 system_instruction: systemInstruction,
                 contents: followUpContents,
                 generationConfig: {
-                    temperature: 0.1
+                    temperature: 0.1,
+                    thinkingConfig: {
+                        thinkingBudget: 0
+                    }
                 }
             };
 
@@ -322,10 +401,28 @@ COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
                 }
             }
 
+            // Asignación de subagente según herramientas ejecutadas
+            const toolNames = functionCalls.map((fc: any) => fc.functionCall.name);
+            let activeSubagent = AI_SUBAGENTS.FINANCIAL_AUDITOR;
+            let suggestedOptions: string[] = ['📊 Ventas de hoy', '📄 PDF de ventas', '🔍 Auditar caja'];
+
+            if (toolNames.some((t: string) => t.includes('inventario') || t.includes('stock') || t.includes('producto') || t.includes('almacen') || t.includes('compras'))) {
+                activeSubagent = AI_SUBAGENTS.INVENTORY_SPECIALIST;
+                suggestedOptions = ['📦 Productos con bajo stock', '🏷️ Inversión total de inventario', '🛒 Sugerir compras a proveedor'];
+            } else if (toolNames.some((t: string) => t.includes('cobranza') || t.includes('credito') || t.includes('deudor') || t.includes('abonar') || t.includes('whatsapp'))) {
+                activeSubagent = AI_SUBAGENTS.COLLECTIONS_MANAGER;
+                suggestedOptions = ['📲 Mensaje cobranza WhatsApp', '💰 Cobranza recaudada hoy', '💳 Principales deudores'];
+            } else if (toolNames.some((t: string) => t.includes('empresa') || t.includes('fiscal') || t.includes('seniat') || t.includes('tasa'))) {
+                activeSubagent = AI_SUBAGENTS.FISCAL_SENIAT;
+                suggestedOptions = ['💵 Tasa oficial BCV', '📊 Resumen de ventas', '⚙️ Datos de la empresa'];
+            }
+
             return {
                 text: finalReplyText || fallbackText || 'Operación ejecutada exitosamente.',
                 actions: collectedActions,
                 modelUsed: candidateModel,
+                subagent: activeSubagent,
+                suggestedOptions,
                 usage
             };
         }
@@ -337,10 +434,27 @@ COMANDOS POR VOZ Y ACCIONES RÁPIDAS:
             .join('\n')
             .trim();
 
+        // Determinar subagente para respuesta tutorial / conversacional
+        let convSubagent = AI_SUBAGENTS.OPERATIVE_TUTOR;
+        let convOptions = ['📊 ¿Cómo me fue en ventas?', '💳 Cuentas por cobrar', '📦 Stock bajo'];
+
+        if (/(?:inventario|stock|producto|almac[eé]n|mercanc[ií]a)/i.test(cleanCmd)) {
+            convSubagent = AI_SUBAGENTS.INVENTORY_SPECIALIST;
+            convOptions = ['📦 Ver stock crítico', '🏷️ Valorizar inventario', '➕ Crear producto por voz'];
+        } else if (/(?:cr[eé]dito|cobranza|deuda|deudor|mora|cuota)/i.test(cleanCmd)) {
+            convSubagent = AI_SUBAGENTS.COLLECTIONS_MANAGER;
+            convOptions = ['💳 Ver lista de deudores', '📲 Cobranza WhatsApp', '💰 Cobranzas de hoy'];
+        } else if (/(?:caja|anula|fraude|fuga|gasto|dinero)/i.test(cleanCmd)) {
+            convSubagent = AI_SUBAGENTS.FINANCIAL_AUDITOR;
+            convOptions = ['🔒 Cierre de caja ciego', '🔍 Auditar anulaciones', '💸 Registrar gasto'];
+        }
+
         return {
             text: directText || 'Disculpa, no pude procesar la solicitud.',
             actions: collectedActions,
             modelUsed: candidateModel,
+            subagent: convSubagent,
+            suggestedOptions: convOptions,
             usage
         };
     }

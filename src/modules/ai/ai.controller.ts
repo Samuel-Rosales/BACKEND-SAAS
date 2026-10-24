@@ -28,6 +28,8 @@ export class AiController {
                 message: result.text,
                 actions: result.actions,
                 modelUsed: result.modelUsed,
+                subagent: result.subagent,
+                suggestedOptions: result.suggestedOptions,
                 usage: result.usage
             });
         } catch (error: any) {
@@ -49,12 +51,12 @@ export class AiController {
         }
 
         try {
-            const usage = await aiService.getUsage(businessId, tzOffset);
-            return res.status(200).json(usage);
+            const info = await aiService.getUsage(businessId, tzOffset);
+            return res.status(200).json(info);
         } catch (error: any) {
-            console.error('[Guardián AI] Error al consultar uso:', error.message);
+            console.error('[Guardián AI] Error obteniendo uso:', error.message);
             return res.status(500).json({
-                error: error.message || 'Error al consultar cuota de IA.'
+                error: error.message || 'Error consultando cuota de uso.'
             });
         }
     };
