@@ -6,35 +6,35 @@ import { resolveBusinessExchangeRate } from '@/utils';
 import { prisma } from '@/configs';
 
 export const AI_SUBAGENTS: Record<string, AiSubagentInfo> = {
-    FINANCIAL_AUDITOR: {
-        id: 'financial-auditor',
-        name: 'Auditor Financiero & Fugas',
-        badge: '📊 Auditor Financiero & Fugas',
-        role: 'Arqueos de caja ciegos, margen de ganancia, costos COGS y dinero dormido'
+    SALES_BILLING: {
+        id: 'ventas-facturacion',
+        name: 'Especialista en Ventas & POS',
+        badge: '🛒 Especialista en Ventas & POS',
+        role: 'Tickets de caja, facturación SENIAT, tasa oficial BCV, comisiones y metas comerciales'
     },
     INVENTORY_SPECIALIST: {
-        id: 'inventory-specialist',
-        name: 'Perito de Inventario & Almacenes',
-        badge: '📦 Perito de Inventario',
-        role: 'Control de existencias, stock crítico, valorización y productos estancados'
-    },
-    FISCAL_SENIAT: {
-        id: 'fiscal-seniat',
-        name: 'Inspector Fiscal & Tasa BCV',
-        badge: '🧾 Fiscal SENIAT & BCV',
-        role: 'Cumplimiento fiscal, tasa oficial BCV, libro de ventas y facturación legal'
+        id: 'perito-inventario',
+        name: 'Perito de Inventario & Stock',
+        badge: '📦 Perito de Inventario & Stock',
+        role: 'Existencias, valorización en USD/Bs, alertas de stock mínimo y rotación de productos'
     },
     COLLECTIONS_MANAGER: {
-        id: 'collections-manager',
-        name: 'Comisario de Cobranzas & Cashea',
-        badge: '💳 Gestor de Cobranzas',
-        role: 'Cuentas por cobrar, moras del 10%, abonos y cobranzas por WhatsApp'
+        id: 'gestor-cobranzas',
+        name: 'Gestor de Créditos & Cobranzas',
+        badge: '💳 Gestor de Créditos & Cobranzas',
+        role: 'Cuentas por cobrar, control de morosos, cobranza por WhatsApp y abonos en cascada'
+    },
+    FINANCIAL_AUDITOR: {
+        id: 'auditor-financiero',
+        name: 'Auditor Financiero & Cajas',
+        badge: '📊 Auditor Financiero & Cajas',
+        role: 'Arqueos ciegos, margen de ganancia, gastos operativos, fugas y balance contable'
     },
     OPERATIVE_TUTOR: {
-        id: 'operative-tutor',
-        name: 'Tutor Interactivo Guardián',
-        badge: '🎓 Tutor Interactivo Guardián',
-        role: 'Guía paso a paso y manual interactivo de todas las pantallas del sistema'
+        id: 'tutor-sistema',
+        name: 'Tutor Operativo del Sistema',
+        badge: '🖥️ Tutor Operativo del Sistema',
+        role: 'Guía interactiva paso a paso para operar y administrar el software Guardián'
     }
 };
 
@@ -228,7 +228,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
             return {
                 text: `💵 **Tasa Oficial BCV Activa en el Sistema**:\n\nActualmente la tasa oficial activa del Banco Central de Venezuela es de **${numRate.toFixed(2)} Bs./$ USD**.\n\nTodos los precios de su inventario, tickets de venta en caja y conversiones se calculan en tiempo real anclados a este valor.`,
                 actions: [],
-                subagent: AI_SUBAGENTS.FISCAL_SENIAT,
+                subagent: AI_SUBAGENTS.SALES_BILLING,
                 suggestedOptions: [
                     '📊 Ventas de hoy en USD y Bs',
                     '🏷️ Inversión y valor de inventario',
@@ -414,15 +414,18 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
             let activeSubagent = AI_SUBAGENTS.FINANCIAL_AUDITOR;
             let suggestedOptions: string[] = ['📊 Ventas de hoy', '📄 PDF de ventas', '🔍 Auditar caja'];
 
-            if (toolNames.some((t: string) => t.includes('inventario') || t.includes('stock') || t.includes('producto') || t.includes('almacen') || t.includes('compras'))) {
+            if (toolNames.some((t: string) => t.includes('inventario') || t.includes('stock') || t.includes('producto') || t.includes('almacen') || t.includes('compras') || t.includes('reposicion') || t.includes('precio') || t.includes('combo'))) {
                 activeSubagent = AI_SUBAGENTS.INVENTORY_SPECIALIST;
                 suggestedOptions = ['📦 Productos con bajo stock', '🏷️ Inversión total de inventario', '🛒 Sugerir compras a proveedor'];
-            } else if (toolNames.some((t: string) => t.includes('cobranza') || t.includes('credito') || t.includes('deudor') || t.includes('abonar') || t.includes('whatsapp'))) {
+            } else if (toolNames.some((t: string) => t.includes('cobranza') || t.includes('credito') || t.includes('deudor') || t.includes('abonar') || t.includes('whatsapp') || t.includes('cliente'))) {
                 activeSubagent = AI_SUBAGENTS.COLLECTIONS_MANAGER;
                 suggestedOptions = ['📲 Mensaje cobranza WhatsApp', '💰 Cobranza recaudada hoy', '💳 Principales deudores'];
-            } else if (toolNames.some((t: string) => t.includes('empresa') || t.includes('fiscal') || t.includes('seniat') || t.includes('tasa'))) {
-                activeSubagent = AI_SUBAGENTS.FISCAL_SENIAT;
-                suggestedOptions = ['💵 Tasa oficial BCV', '📊 Resumen de ventas', '⚙️ Datos de la empresa'];
+            } else if (toolNames.some((t: string) => t.includes('caja') || t.includes('gasto') || t.includes('fuga') || t.includes('financiero') || t.includes('ingreso') || t.includes('apertura') || t.includes('fraude'))) {
+                activeSubagent = AI_SUBAGENTS.FINANCIAL_AUDITOR;
+                suggestedOptions = ['🔒 Estado de cajas hoy', '💸 Registrar gasto operativo', '📉 Auditar fugas y dinero dormido'];
+            } else if (toolNames.some((t: string) => t.includes('venta') || t.includes('comision') || t.includes('cotizacion') || t.includes('tasa') || t.includes('empresa') || t.includes('fiscal') || t.includes('seniat'))) {
+                activeSubagent = AI_SUBAGENTS.SALES_BILLING;
+                suggestedOptions = ['💵 Tasa oficial BCV', '📊 Resumen de ventas hoy', '📄 PDF de ventas'];
             }
 
             return {
@@ -442,19 +445,22 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
             .join('\n')
             .trim();
 
-        // Determinar subagente para respuesta tutorial / conversacional
+        // Determinar subagente para respuesta tutorial / conversacional de software administrativo
         let convSubagent = AI_SUBAGENTS.OPERATIVE_TUTOR;
         let convOptions = ['📊 ¿Cómo me fue en ventas?', '💳 Cuentas por cobrar', '📦 Stock bajo'];
 
-        if (/(?:inventario|stock|producto|almac[eé]n|mercanc[ií]a)/i.test(cleanCmd)) {
+        if (/(?:inventario|stock|producto|almac[eé]n|mercanc[ií]a|precio)/i.test(cleanCmd)) {
             convSubagent = AI_SUBAGENTS.INVENTORY_SPECIALIST;
             convOptions = ['📦 Ver stock crítico', '🏷️ Valorizar inventario', '➕ Crear producto por voz'];
-        } else if (/(?:cr[eé]dito|cobranza|deuda|deudor|mora|cuota)/i.test(cleanCmd)) {
+        } else if (/(?:cr[eé]dito|cobranza|deuda|deudor|mora|cuota|abonar)/i.test(cleanCmd)) {
             convSubagent = AI_SUBAGENTS.COLLECTIONS_MANAGER;
             convOptions = ['💳 Ver lista de deudores', '📲 Cobranza WhatsApp', '💰 Cobranzas de hoy'];
-        } else if (/(?:caja|anula|fraude|fuga|gasto|dinero)/i.test(cleanCmd)) {
+        } else if (/(?:caja|anula|fraude|fuga|gasto|dinero|financier)/i.test(cleanCmd)) {
             convSubagent = AI_SUBAGENTS.FINANCIAL_AUDITOR;
             convOptions = ['🔒 Cierre de caja ciego', '🔍 Auditar anulaciones', '💸 Registrar gasto'];
+        } else if (/(?:venta|factura|ticket|pos|vender|comisi[oó]n|seniat|bcv|tasa)/i.test(cleanCmd)) {
+            convSubagent = AI_SUBAGENTS.SALES_BILLING;
+            convOptions = ['📊 Ventas de hoy', '💵 Tasa oficial BCV', '📄 PDF de ventas'];
         }
 
         return {
