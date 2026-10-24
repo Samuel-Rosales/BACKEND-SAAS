@@ -72,6 +72,7 @@ export class Server {
             measurementUnits: `${this.prefix}/inventory/measurement-unit`,
             stockLot: `${this.prefix}/inventory/stock-lot`,
             stockMovement: `${this.prefix}/inventory/stock-movement`,
+            interBranchTransfer: `${this.prefix}/inventory/inter-branch-transfer`,
 
             // MÓDULO FINANCE
             exchangeRates: `${this.prefix}/finance/exchange-rate`,
