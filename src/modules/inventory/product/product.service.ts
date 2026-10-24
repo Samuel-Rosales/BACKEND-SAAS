@@ -101,7 +101,7 @@ export class ProductService {
             // =================================================================
             // FASE 1: VALIDACIONES BÁSICAS (Paralelizadas)
             // =================================================================
-            const [business, category, unit, tax, existingSku, initialDepot] = await Promise.all([
+            const [business, category, unit, tax, existingSku, existingSec, initialDepot] = await Promise.all([
                 prisma.business.findUnique({ where: { id: businessId } }),
                 prisma.category.findFirst({ where: { id: data.categoryId, businessId } }),
                 prisma.measurementUnit.findUnique({ where: { id: data.unitId } }),
@@ -124,7 +124,7 @@ export class ProductService {
             if (!unit) return { message: 'Unidad inválida', status: 404, data: null };
             if (!tax) return { message: 'Impuesto inválido', status: 404, data: null };
             if (existingSku) return { message: `SKU "${data.sku}" ya existe`, status: 400, data: null };
-            const existingSec = existingSku ? null : (data.secondaryCode ? await prisma.product.findFirst({ where: { secondaryCode: data.secondaryCode, businessId } }) : null);
+
             if (existingSec) return { message: `El código secundario "${data.secondaryCode}" ya existe`, status: 400, data: null };
             if (hasInitialStock && !initialDepot) {
                 return { message: 'Depósito inicial inválido o no pertenece al negocio', status: 404, data: null };
@@ -583,6 +583,7 @@ export class ProductService {
                 id: product.id,
                 name: product.name,
                 sku: product.sku,
+                secondaryCode: product.secondaryCode,
                 description: product.description,
                 imageUrl: product.imageUrl,
                 type: product.type,
