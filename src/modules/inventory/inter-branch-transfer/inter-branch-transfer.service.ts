@@ -10,6 +10,7 @@ import {
     PaymentStatus,
     PaymentType,
     PurchaseStatus,
+    InstallmentStatus,
     Prisma
 } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
@@ -162,6 +163,13 @@ export class InterBranchTransferService {
                 });
                 const receiptNumber = (lastSale?.receiptNumber || 0) + 1;
 
+                // Determinar si el despacho es a Crédito o de Contado
+                const isCredit = data.conditions === 'CREDIT';
+                const creditDays = data.creditDays && Number(data.creditDays) > 0 ? Number(data.creditDays) : 30;
+                const dueDate = data.paymentDueDate 
+                    ? new Date(data.paymentDueDate) 
+                    : new Date(Date.now() + creditDays * 24 * 60 * 60 * 1000);
+
                 // 6. Registrar VENTA en el Depósito Central
                 const sale = await tx.sale.create({
                     data: {
@@ -172,19 +180,33 @@ export class InterBranchTransferService {
                         exchangeRateId: exchangeRate.id,
                         type: SaleType.WHOLESALE,
                         status: SaleStatus.COMPLETED,
-                        conditions: Conditions.CASH,
-                        paymentStatus: PaymentStatus.PAID,
+                        conditions: isCredit ? Conditions.CREDIT : Conditions.CASH,
+                        paymentStatus: isCredit ? PaymentStatus.PENDING : PaymentStatus.PAID,
                         subTotal: totalSaleAmount,
                         taxAmount: new Decimal(0),
                         discount: new Decimal(0),
                         totalAmount: totalSaleAmount,
-                        remainingBalance: new Decimal(0),
+                        remainingBalance: isCredit ? totalSaleAmount : new Decimal(0),
+                        paymentDueDate: isCredit ? dueDate : null,
                         createdAt: new Date()
                     }
                 });
 
-                // Registrar pago de la venta para que compute en ingresos y reportes
-                if (paymentMethod) {
+                if (isCredit) {
+                    // Si es a Crédito: Crear cuota en Cuentas por Cobrar (NO crear SalePayment)
+                    await tx.saleInstallment.create({
+                        data: {
+                            saleId: sale.id,
+                            number: 1,
+                            amount: totalSaleAmount,
+                            dueDate: dueDate,
+                            status: InstallmentStatus.PENDING,
+                            amountPaid: new Decimal(0),
+                            paidAt: null
+                        }
+                    });
+                } else if (paymentMethod) {
+                    // Si es de Contado: Registrar pago de la venta para que compute en ingresos y caja
                     await tx.salePayment.create({
                         data: {
                             saleId: sale.id,
@@ -304,7 +326,20 @@ export class InterBranchTransferService {
                 orderBy: { createdAt: 'desc' }
             });
 
-            return { status: 200, message: 'Despachos pendientes obtenidos', data: transfers };
+            // Enriquecer con información de la venta vinculada (Condición de pago: CONTADO vs CRÉDITO)
+            const saleIds = transfers.map(t => t.saleId).filter(Boolean) as number[];
+            const sales = saleIds.length > 0 ? await prisma.sale.findMany({
+                where: { id: { in: saleIds } },
+                select: { id: true, conditions: true, paymentStatus: true, paymentDueDate: true, totalAmount: true }
+            }) : [];
+            const saleMap = new Map(sales.map(s => [s.id, s]));
+
+            const enriched = transfers.map(t => ({
+                ...t,
+                sale: t.saleId ? saleMap.get(t.saleId) || null : null
+            }));
+
+            return { status: 200, message: 'Despachos pendientes obtenidos', data: enriched };
         } catch (error: any) {
             console.error('InterBranchTransferService.getPendingTransfers error:', error);
             return { status: 500, message: 'Error al obtener despachos pendientes', data: [] };
@@ -327,7 +362,19 @@ export class InterBranchTransferService {
                 orderBy: { createdAt: 'desc' }
             });
 
-            return { status: 200, message: 'Despachos enviados obtenidos', data: transfers };
+            const saleIds = transfers.map(t => t.saleId).filter(Boolean) as number[];
+            const sales = saleIds.length > 0 ? await prisma.sale.findMany({
+                where: { id: { in: saleIds } },
+                select: { id: true, conditions: true, paymentStatus: true, paymentDueDate: true, totalAmount: true }
+            }) : [];
+            const saleMap = new Map(sales.map(s => [s.id, s]));
+
+            const enriched = transfers.map(t => ({
+                ...t,
+                sale: t.saleId ? saleMap.get(t.saleId) || null : null
+            }));
+
+            return { status: 200, message: 'Despachos enviados obtenidos', data: enriched };
         } catch (error: any) {
             console.error('InterBranchTransferService.getSentTransfers error:', error);
             return { status: 500, message: 'Error al obtener despachos enviados', data: [] };
@@ -349,7 +396,16 @@ export class InterBranchTransferService {
             });
 
             if (!transfer) return { status: 404, message: 'Despacho no encontrado', data: null };
-            return { status: 200, message: 'Detalle de despacho obtenido', data: transfer };
+
+            let sale = null;
+            if (transfer.saleId) {
+                sale = await prisma.sale.findUnique({
+                    where: { id: transfer.saleId },
+                    select: { id: true, conditions: true, paymentStatus: true, paymentDueDate: true, totalAmount: true }
+                });
+            }
+
+            return { status: 200, message: 'Detalle de despacho obtenido', data: { ...transfer, sale } };
         } catch (error: any) {
             console.error('InterBranchTransferService.getTransferById error:', error);
             return { status: 500, message: 'Error al obtener detalle de despacho', data: null };
@@ -554,6 +610,11 @@ export class InterBranchTransferService {
 
                     const taxRecord = defaultTax || await tx.tax.findFirst({ where: { isActive: true } });
 
+                    // Consultar venta de origen vinculada para conocer condición (CONTADO vs CRÉDITO) y fecha de vencimiento
+                    let originSale = transfer.saleId ? await tx.sale.findUnique({ where: { id: transfer.saleId } }) : null;
+                    const isCredit = originSale ? originSale.conditions === Conditions.CREDIT : false;
+                    const purchaseDueDate = originSale?.paymentDueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
                     // Crear la COMPRA
                     const purchase = await tx.purchase.create({
                         data: {
@@ -567,8 +628,10 @@ export class InterBranchTransferService {
                             exchangeRateId: destRate.id,
                             reference: transfer.transferNumber,
                             observation: data.notes || `Despacho recibido desde ${transfer.originBusiness.name} (${transfer.transferNumber})`,
-                            conditions: Conditions.CASH,
-                            paymentStatus: PaymentStatus.PAID,
+                            conditions: isCredit ? Conditions.CREDIT : Conditions.CASH,
+                            paymentStatus: isCredit ? PaymentStatus.PENDING : PaymentStatus.PAID,
+                            remainingBalance: isCredit ? totalPurchaseCost : new Decimal(0),
+                            paymentDueDate: isCredit ? purchaseDueDate : new Date(),
                             taxId: taxRecord!.id,
                             createdAt: new Date()
                         }
@@ -588,19 +651,47 @@ export class InterBranchTransferService {
                         });
                     }
 
-                    // Registrar pago de la compra
-                    const destPaymentMethod = await tx.paymentMethod.findFirst({ where: { isActive: true } });
-                    if (destPaymentMethod) {
-                        await tx.purchasePayment.create({
+                    if (isCredit) {
+                        // Si es a Crédito: Crear cuota en Cuentas por Pagar de la sucursal receptora (NO crear PurchasePayment)
+                        await tx.purchaseInstallment.create({
                             data: {
                                 purchaseId: purchase.id,
-                                paymentMethodId: destPaymentMethod.id,
+                                number: 1,
                                 amount: totalPurchaseCost,
-                                exchangeRateId: destRate.id,
-                                reference: transfer.transferNumber,
-                                paymentDate: new Date()
+                                dueDate: purchaseDueDate,
+                                status: InstallmentStatus.PENDING
                             }
                         });
+
+                        // Si hubo discrepancia en la recepción y era a crédito, ajustar el saldo de la venta en el Depósito Central
+                        if (hasDiscrepancy && originSale) {
+                            await tx.sale.update({
+                                where: { id: originSale.id },
+                                data: {
+                                    remainingBalance: totalPurchaseCost,
+                                    totalAmount: totalPurchaseCost
+                                }
+                            });
+                            await tx.saleInstallment.updateMany({
+                                where: { saleId: originSale.id, number: 1 },
+                                data: { amount: totalPurchaseCost }
+                            });
+                        }
+                    } else {
+                        // Si es de Contado: Registrar pago de la compra
+                        const destPaymentMethod = await tx.paymentMethod.findFirst({ where: { isActive: true } });
+                        if (destPaymentMethod) {
+                            await tx.purchasePayment.create({
+                                data: {
+                                    purchaseId: purchase.id,
+                                    paymentMethodId: destPaymentMethod.id,
+                                    amount: totalPurchaseCost,
+                                    exchangeRateId: destRate.id,
+                                    reference: transfer.transferNumber,
+                                    paymentDate: new Date()
+                                }
+                            });
+                        }
                     }
                 }
 

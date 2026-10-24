@@ -8,6 +8,9 @@ export interface CreateDispatchDto {
     destinationBusinessId: number | string;
     originDepotId: number;
     notes?: string;
+    conditions?: 'CASH' | 'CREDIT';
+    creditDays?: number;
+    paymentDueDate?: string;
     items: DispatchItemInput[];
 }
 
