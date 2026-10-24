@@ -350,20 +350,26 @@ const styles = StyleSheet.create({
     sellerMethodLine: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        alignItems: 'flex-start',
         paddingVertical: 1.5,
     },
     sellerMethodName: {
         fontSize: 7.5,
         color: C.muted,
+        flex: 1,
+        paddingRight: 6,
     },
     sellerMethodVal: {
         fontSize: 7.5,
         fontFamily: 'Helvetica-Bold',
         color: C.text,
+        textAlign: 'right',
+        flexShrink: 0,
     },
     sellerSubtotalLine: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        alignItems: 'center',
         marginTop: 4,
         paddingTop: 3,
         borderTopWidth: 1,
@@ -373,21 +379,29 @@ const styles = StyleSheet.create({
         fontSize: 8,
         fontFamily: 'Helvetica-Bold',
         color: C.text,
+        flex: 1,
+        paddingRight: 6,
     },
     sellerSubtotalValueUSD: {
         fontSize: 8.5,
         fontFamily: 'Helvetica-Bold',
         color: C.green,
+        textAlign: 'right',
+        flexShrink: 0,
     },
     sellerSubtotalValueVES: {
         fontSize: 8.5,
         fontFamily: 'Helvetica-Bold',
         color: C.amber,
+        textAlign: 'right',
+        flexShrink: 0,
     },
     sellerSubtotalValueCashea: {
         fontSize: 8.5,
         fontFamily: 'Helvetica-Bold',
         color: C.indigo,
+        textAlign: 'right',
+        flexShrink: 0,
     },
 
     // Cash register table columns
