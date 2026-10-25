@@ -1,0 +1,20 @@
+query GetEnvironments($projectId: String!) {
+  environments(projectId: $projectId) {
+    edges {
+      node {
+        id
+        name
+        isEphemeral
+        serviceInstances {
+          edges {
+            node {
+              id
+              serviceId
+              environmentId
+            }
+          }
+        }
+      }
+    }
+  }
+}

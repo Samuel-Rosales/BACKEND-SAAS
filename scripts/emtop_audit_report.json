@@ -1,0 +1,2681 @@
+{
+  "summary": {
+    "businessId": 63,
+    "businessName": "EMTOP SHOP 2025 C.A.",
+    "totalExcelRows": 1121,
+    "totalDbProducts": 1109,
+    "matchedCount": 1113,
+    "missingInDbCount": 8,
+    "surplusInDbCount": 5,
+    "duplicateExcelSkusCount": 0,
+    "exactStockMatchesCount": 883,
+    "stockDiscrepanciesCount": 230,
+    "explainedBySalesCount": 138,
+    "unexplainedDiscrepanciesCount": 92,
+    "costDiscrepanciesCount": 11,
+    "excelTotals": {
+      "units": 5028,
+      "valuationCalculated": 59860.18199999996,
+      "valuationExcelCol": 59860.18199999996
+    },
+    "dbTotals": {
+      "units": 5582,
+      "valuation": 68404.19530000004
+    }
+  },
+  "missingInDb": [
+    {
+      "row": 1121,
+      "category": "",
+      "sku": "ULMDL0811",
+      "name": "TALADRO PERCUTOR 810W",
+      "costPrice": 31.16,
+      "stock": 14,
+      "costTotal": 436.24,
+      "pisoVenta": 1,
+      "almacen": 13
+    },
+    {
+      "row": 1122,
+      "category": "",
+      "sku": "ULMDL0906",
+      "name": "TALADRO PERCUTOR 900W",
+      "costPrice": 32.2,
+      "stock": 3,
+      "costTotal": 96.60000000000001,
+      "pisoVenta": 1,
+      "almacen": 2
+    },
+    {
+      "row": 1123,
+      "category": "",
+      "sku": "EACD11011525",
+      "name": "JUEGO DE DISCO DE CORTE 25 PZAS",
+      "costPrice": 7.25,
+      "stock": 9,
+      "costTotal": 65.25,
+      "pisoVenta": 4,
+      "almacen": 5
+    },
+    {
+      "row": 1124,
+      "category": "",
+      "sku": "ENGV0102",
+      "name": "GUANTES DE NITRILO",
+      "costPrice": 0.53,
+      "stock": 3,
+      "costTotal": 1.59,
+      "pisoVenta": 3,
+      "almacen": 0
+    },
+    {
+      "row": 1125,
+      "category": "",
+      "sku": "ULCKL2059",
+      "name": "KIT COMBINADO INDUSTRIAL INALAMBRICO",
+      "costPrice": 231.4,
+      "stock": 1,
+      "costTotal": 231.4,
+      "pisoVenta": 1,
+      "almacen": 0
+    },
+    {
+      "row": 1126,
+      "category": "",
+      "sku": "UELBNLI3508",
+      "name": "CLAVADORA INALAMBRICA PARA CLAVOS DE ACABADO",
+      "costPrice": 139.88,
+      "stock": 1,
+      "costTotal": 139.88,
+      "pisoVenta": 1,
+      "almacen": 0
+    },
+    {
+      "row": 1127,
+      "category": "",
+      "sku": "ELGS208501",
+      "name": "SIERRA DE CALAR INALAMBRICA",
+      "costPrice": 53.74,
+      "stock": 2,
+      "costTotal": 107.48,
+      "pisoVenta": 1,
+      "almacen": 1
+    },
+    {
+      "row": 1128,
+      "category": "",
+      "sku": "EHTSV01H09",
+      "name": "JUEGO DE 9 PZAS DE HERRAMIENTAS MANUALES AISLADA",
+      "costPrice": 29.13,
+      "stock": 5,
+      "costTotal": 145.65,
+      "pisoVenta": 1,
+      "almacen": 4
+    }
+  ],
+  "surplusInDb": [
+    {
+      "id": 5726,
+      "sku": "ULWSBD110016344",
+      "name": "TALADRO",
+      "categoryName": "1. Herramientas Inalámbricas",
+      "costPrice": 13,
+      "salePrice": 16.9,
+      "currentStock": 43,
+      "stockByDepot": {
+        "66": {
+          "depotName": "PISO DE VENTAS",
+          "qty": 20
+        },
+        "67": {
+          "depotName": "ALMACEN",
+          "qty": 23
+        }
+      }
+    },
+    {
+      "id": 5781,
+      "sku": "ulagr17181",
+      "name": "esmeril angular 710w",
+      "categoryName": "2. Herramientas Eléctricas",
+      "costPrice": 24.78,
+      "salePrice": 26.41,
+      "currentStock": 14,
+      "stockByDepot": {
+        "66": {
+          "depotName": "PISO DE VENTAS",
+          "qty": 14
+        }
+      }
+    },
+    {
+      "id": 5783,
+      "sku": "ulwppv03701",
+      "name": "BOMBA DE AGUA PERIFERICA 0.5HP34.20",
+      "categoryName": "7. Bombas y Equipos de Agua",
+      "costPrice": 34.2,
+      "salePrice": 40.95,
+      "currentStock": 2,
+      "stockByDepot": {
+        "66": {
+          "depotName": "PISO DE VENTAS",
+          "qty": 2
+        }
+      }
+    },
+    {
+      "id": 5785,
+      "sku": "06-006-012",
+      "name": "RAMPLUG EXPANSIVO TAQUETE 3/8\"",
+      "categoryName": "9. Consumibles",
+      "costPrice": 0.38,
+      "salePrice": 0.83,
+      "currentStock": 0,
+      "stockByDepot": {
+        "66": {
+          "depotName": "PISO DE VENTAS",
+          "qty": 0
+        }
+      }
+    },
+    {
+      "id": 7236,
+      "sku": "01-008-006",
+      "name": "DISCO DE RESINA DIAMANTADO HUMEDO #100",
+      "categoryName": "9. Consumibles",
+      "costPrice": 2.22,
+      "salePrice": 3.47,
+      "currentStock": 2,
+      "stockByDepot": {
+        "66": {
+          "depotName": "PISO DE VENTAS",
+          "qty": 2
+        }
+      }
+    }
+  ],
+  "duplicateExcelSkus": [],
+  "explainedBySales": [
+    {
+      "sku": "EACD121155",
+      "name": "EMTOP DISCO ABRASIVO CORTE METAL CENTRO PLANO 4-1/2\"x 3/64\"x 7/8\" (G)",
+      "excelStock": 0,
+      "dbStock": 10,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 10
+    },
+    {
+      "sku": "EACD192302",
+      "name": "EMTOP DISCO ABRASIVO CORTE METAL CENTRO HUNDIDO 9\" 230MMX1.9MM (G)",
+      "excelStock": 24,
+      "dbStock": 22,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EACD211550",
+      "name": "EMTOP SET DISCOS ABRASIVOS CORTE METAL CENTRO PLANO 4-1/2\" 115MMX1.2MM 50PCS (G)",
+      "excelStock": 5,
+      "dbStock": 4,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EACD601151",
+      "name": "EMTOP DISCO DE DESBASTE 4-1/2\"x 3/64\"x 7/8\" (G)",
+      "excelStock": 0,
+      "dbStock": 19,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 20
+    },
+    {
+      "sku": "EALB2001",
+      "name": "EMTOP BATERIA ALCALINA AA 1.5V 4 UNIDADES (G)",
+      "excelStock": 97,
+      "dbStock": 96,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EAPR15001",
+      "name": "EMTOP LIJADORA ROTATIVA NEUMATICA 6\" 150MM 10500RPM (G)",
+      "excelStock": 0,
+      "dbStock": 6,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "EASG04001",
+      "name": "EMTOP PISTOLA PULVERIZADORA DE AIRE GRAVEDAD 400CC 1.5MM 180-250MM (G)",
+      "excelStock": 10,
+      "dbStock": 9,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EASGT8501",
+      "name": "EMTOP PISTOLA CON CALIBRADOR PARA INFLAR NEUMATICOS 123PSI 8.5BAR (G)",
+      "excelStock": 2,
+      "dbStock": 1,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EAWH130601",
+      "name": "EMTOP LLAVE AJUSTABLE MANGO DE GOMA 6\" 150MM 0-24MM (G)",
+      "excelStock": 4,
+      "dbStock": 3,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EBCR2401",
+      "name": "EMTOP CIZALLA 24\" (G)",
+      "excelStock": 0,
+      "dbStock": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "EBPK12153",
+      "name": "EMTOP BATERIA DE IONES DE LITIO S12 1.5AH USB TIPO C 12V (G)",
+      "excelStock": 0,
+      "dbStock": 7,
+      "soldSinceOct5": 5,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "EBST04302",
+      "name": "EMTOP JUEGOS DE PUNTAS DESTORNILLADOR 43 PIEZAS (G)",
+      "excelStock": 0,
+      "dbStock": 6,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "EBTL08001",
+      "name": "EMTOP CUCHARA ALBAÑILERIA  8\" 200MM (G)",
+      "excelStock": 4,
+      "dbStock": 3,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ECBK110",
+      "name": "EMTOP BLOQUE DE CADENA 1 TON X 3 MTS (G)",
+      "excelStock": 0,
+      "dbStock": 2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "ECBK120",
+      "name": "EMTOP BLOQUE DE CADENA 2 TON X 3 MTS (G)",
+      "excelStock": 0,
+      "dbStock": 2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "ECBK130",
+      "name": "EMTOP BLOQUE DE CADENA 3 TON X 3 MTS (G)",
+      "excelStock": 0,
+      "dbStock": 2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "ECBK150",
+      "name": "EMTOP BLOQUE DE CADENA 5 TON X 3 MTS (G)",
+      "excelStock": 1,
+      "dbStock": 2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 1
+    },
+    {
+      "sku": "ECGD07630",
+      "name": "EMTOP JUEGO DE DISCO CORTE Y DESBASTE 76MM 3\" 30PCS (G)",
+      "excelStock": 4,
+      "dbStock": 3,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ECSR0408",
+      "name": "EMTOP DESTORNILLADOR INALAMBRICO 1/4\" 4N.M 240RPM 4V USB TIPO C (G)",
+      "excelStock": 5,
+      "dbStock": 4,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ECSS10801",
+      "name": "EMTOP SET LLAVES COMBINADAS 6-19MM 8PCS (G)",
+      "excelStock": 6,
+      "dbStock": 4,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EDDCH81151",
+      "name": "EMTOP DISCO DIAMANTE ULTRAFINO HUMEDO BORDE MALLA 115MM 4-1/2\" 22.2MM (G)",
+      "excelStock": 0,
+      "dbStock": 50,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 50
+    },
+    {
+      "sku": "EDMR160013",
+      "name": "EMTOP MULTIMETRO DIGITAL CAT. III 600V 6000 CUENTAS (G)",
+      "excelStock": 2,
+      "dbStock": 6,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "EDMR762001",
+      "name": "EMTOP PINZA AMPERIMETRICA DIGITAL DE 4000 COUNTS 400A (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EEWSFC08101",
+      "name": "EMTOP ALAMBRE DE SOLDADURA CON NUCLEO FUNDENTE ACERO AL CARBONO  0.8MM 1KG (G)",
+      "excelStock": 0,
+      "dbStock": 8,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 8
+    },
+    {
+      "sku": "EFDS1153",
+      "name": "EMTOP DISCO FLAP ALTA RESISTENCIA P40 4-1/2\" 115MM*22MM (G)",
+      "excelStock": 15,
+      "dbStock": 13,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EFSD0101",
+      "name": "EMTOP PROTECTOR FACIAL RESISTENTE A IMPACTOS 390MM X 206MM (G)",
+      "excelStock": 12,
+      "dbStock": 10,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EGCS24621",
+      "name": "EMTOP MOTOSIERRA A GASOLINA 24\" 62CC 2.4KW (G)",
+      "excelStock": 1,
+      "dbStock": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "EHAMAX0600",
+      "name": "EMTOP HACHA FORJADA 390MM 600G (G)",
+      "excelStock": 2,
+      "dbStock": 6,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "EHAMSH50",
+      "name": "EMTOP MAZO FORJADO CABO DE FIBRA 11LB 90CM (G)",
+      "excelStock": 0,
+      "dbStock": 2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "EHASF1801",
+      "name": "EMTOP SIERRA DE PODA PLEGABLE 7TPI DIENTE TRIPLE (G)",
+      "excelStock": 2,
+      "dbStock": 8,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "EHFB2403",
+      "name": "EMTOP HOJA DE SIERRA BIMETALICA 12\" 300MM 24T (G)",
+      "excelStock": 80,
+      "dbStock": 78,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EHJK1101",
+      "name": "EMTOP GATO HIDRAULICO TIPO BOTELLA 10 TON (G)",
+      "excelStock": 2,
+      "dbStock": 1,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EHKY3092",
+      "name": "EMTOP LLAVES TORX EXTRA LARGAS 9 PCS T10-T50 (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EHRRTB2713",
+      "name": "EMTOP BOLSO DE HERRAMIENTAS CON RUEDAS 27\" MAX.25KG (G)",
+      "excelStock": 0,
+      "dbStock": 1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 1
+    },
+    {
+      "sku": "EHSP761204",
+      "name": "EMTOP PAPEL DE LIJA GRIT 120 (G)",
+      "excelStock": 6,
+      "dbStock": 5,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EHSP762404",
+      "name": "EMTOP PAPEL DE LIJA GRIT 240 (G)",
+      "excelStock": 3,
+      "dbStock": 1,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EHTS01081",
+      "name": "EMTOP SET HERRAMIENTAS MANUALES 8PCS (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "EHTS41658",
+      "name": "EMTOP JUEGO DE HERRAMIENTAS COMBINADAS 165 PIEZAS (G)",
+      "excelStock": 0,
+      "dbStock": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "EJSBT1501",
+      "name": "EMTOP SET CUCHILLAS DE SIERRA CALADORA PARA MADERA 15PCS (G)",
+      "excelStock": 3,
+      "dbStock": 2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ELAD1031",
+      "name": "EMTOP ESCALERA DOMESTICA 3 PELDAÑOS 629MM 150KG (G)",
+      "excelStock": 4,
+      "dbStock": 3,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ELAD1091",
+      "name": "EMTOP ESCALERAS DOMESTICA 9 PELDAÑOS 1936MM 150KG (G)",
+      "excelStock": 0,
+      "dbStock": 1,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "ELAD3051",
+      "name": "EMTOP ESCALERAS DOBLE 2X5 PELDAÑOS 150KG (G)",
+      "excelStock": 1,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "ELGS206501",
+      "name": "EMTOP SIERRA CALADORA INALAMBRICA 65MM 2400RPM (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ELPRSJ1001",
+      "name": "EMTOP ALICATE DE MANDIBULA RECTA ACERO AL CARBONO 10\" APERTURA 0-50MM (MODELO 2) (G)",
+      "excelStock": 0,
+      "dbStock": 1,
+      "soldSinceOct5": 5,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "ELRS202108",
+      "name": "EMTOP SIERRA ALTERNATIVA INALAMBRICA 12MM/210MM 2800RPM 20V (G)",
+      "excelStock": 2,
+      "dbStock": 1,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EMASC1251",
+      "name": "EMTOP BASE SOPORTE PARA ESMERIL DE 4\"- 4 1/2\"- 5\" CON AJUSTE DE 0-45° 190x 235MM (G)",
+      "excelStock": 0,
+      "dbStock": 6,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "EMFL7508",
+      "name": "EMTOP LINTERNA LED 350 LUMENS 20MTS (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "EMGY35031",
+      "name": "EMTOP MEDIDOR DE VIENTO 80 - 40 M/S (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "EMHR5710",
+      "name": "EMTOP KIT REMACHADORA DE TUERCAS 10.5\" (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "EMKR1G50",
+      "name": "EMTOP VENTOSA CARGA ABS MAX 50KG DIAMETRO 115MM (G)",
+      "excelStock": 0,
+      "dbStock": 6,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "EMPCR46801",
+      "name": "EMTOP CRIPEADORA PARA ENCHUFES MODULARES 8\" 4P/6P/8P (G)",
+      "excelStock": 3,
+      "dbStock": 8,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "EMTB1501",
+      "name": "EMTOP SET ACCESORIOS PARA MULTIHERRAMIENTA 15PCS (G)",
+      "excelStock": 7,
+      "dbStock": 5,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EMTM35031",
+      "name": "EMTOP MEDIDOR DE TEMPERATURA -20C° A 60C° Y HUMEDAD 0¬100% DIGITAL (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "EMTP80832",
+      "name": "EMTOP CINTA MÉTRICA DE ACERO 8Mx 32MM (G)",
+      "excelStock": 0,
+      "dbStock": 5,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "EMTT1B01",
+      "name": "EMTOP SET DE TERMINALES 100 PIEZAS PVC, LATÓN Y ALUMINIO (G)",
+      "excelStock": 10,
+      "dbStock": 9,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EMTVM2001",
+      "name": "EMTOP MAQUINA VIBRATORIA INALAMBRICA PARA BALDOSAS 20V 60KG (G)",
+      "excelStock": 0,
+      "dbStock": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "EMUR1B01",
+      "name": "EMTOP JUEGO SURTIDO DE TUBOS TERMORRETRACTILES 120 PZS (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "EMXTQ932",
+      "name": "EMTOP JUEGO DE TORNILLOS Y ANCLAJES DE PLÁSTICO AZUL 8 X 38 MM (5/16\" X 1-1/2\") 4,8 X 38 MM (#10 X 1-1/2\") 18PCS (G)",
+      "excelStock": 1,
+      "dbStock": 13,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ENAL0110",
+      "name": "EMTOP GRAPAS 10*11.3*0.7MM 1000PCS (G)",
+      "excelStock": 3,
+      "dbStock": 13,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ENAL0210",
+      "name": "EMTOP GRAPAS 10*11.3*1.2MM 1000 PCS PARA ESGU1001 (G)",
+      "excelStock": 0,
+      "dbStock": 23,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 24
+    },
+    {
+      "sku": "EPBX1211",
+      "name": "EMTOP ORGANIZADOR PLASTICO APILABLE 12\" 305MM*230MM*65MM (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EPBX1402",
+      "name": "EMTOP CAJA HERRAMIENTAS PLASTICO BROCHE METAL 14\" 356*168*150MM CARGA MAX. 10KG 740GR. (G)",
+      "excelStock": 3,
+      "dbStock": 2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EPBXS101",
+      "name": "EMTOP CAJA HERRAMIENTAS PLASTICA APILABLE 16\" 410x320x148MM (G)",
+      "excelStock": 0,
+      "dbStock": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "EPBXS102",
+      "name": "EMTOP CAJA HERRAMIENTAS PLASTICA APILABLE 19\" 480x320x148MM (G)",
+      "excelStock": 0,
+      "dbStock": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "EPCR4201",
+      "name": "EMTOP CORTADOR TUBO PVC 193MM CORTE 3-42MM (G)",
+      "excelStock": 3,
+      "dbStock": 2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EPLRD0711",
+      "name": "EMTOP ALICATE CORTE DIAGONAL 7\" 180MM (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "EPLRE0721",
+      "name": "EMTOP TENAZA CORTE FRONTAL EXTREMO INDUSTRIAL 7\" 180MM (G)",
+      "excelStock": 10,
+      "dbStock": 9,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EPLRR0821",
+      "name": "EMTOP TENAZA CORTE ENTERO FRONTAL INDUSTRIAL 8\" 200MM (G)",
+      "excelStock": 7,
+      "dbStock": 6,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EPLRR1021",
+      "name": "EMTOP TENAZA CORTE ENTERO INDUSTRIAL 10\" 250MM (G)",
+      "excelStock": 11,
+      "dbStock": 10,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EPLS0331",
+      "name": "EMTOP SET 3 ALICATES AISLADOS 2X6\"/160MM 1X8\"/200MM (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "EPSA038501",
+      "name": "EMTOP TIJERA DE PODAR 8.5\" 220MM (G)",
+      "excelStock": 0,
+      "dbStock": 9,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 10
+    },
+    {
+      "sku": "EPTE28138",
+      "name": "EMTOP PALUSTRA LISA PARA YESO 280X130MM (G)",
+      "excelStock": 26,
+      "dbStock": 25,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EPTES28138",
+      "name": "EMTOP PALUSTRA CON DIENTES PARA YESO 280X130MM 10X10MM (G)",
+      "excelStock": 2,
+      "dbStock": 1,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EPWH3601",
+      "name": "EMTOP LLAVE DE TUBO INDUSTRIAL 36\" DIAMETRO SUJECION 85MM (G)",
+      "excelStock": 0,
+      "dbStock": 2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "EQCS11231",
+      "name": "EMTOP SET DE CONECTORES RAPIDOS DE MANGUERA 1/2\"-3/4\" 3PCS (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ERBTL039",
+      "name": "EMTOP BOTAS DE LLUVIA AZUL IMPERMEABLE PVC TALLA 39 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTL040",
+      "name": "EMTOP BOTAS DE LLUVIA AZUL IMPERMEABLE PVC TALLA 40 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTL041",
+      "name": "EMTOP BOTAS DE LLUVIA AZUL IMPERMEABLE PVC TALLA 41 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTL042",
+      "name": "EMTOP BOTAS DE LLUVIA AZUL IMPERMEABLE PVC TALLA 42 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTL043",
+      "name": "EMTOP BOTAS DE LLUVIA AZUL IMPERMEABLE PVC TALLA 43 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTL044",
+      "name": "EMTOP BOTAS DE LLUVIA AZUL IMPERMEABLE PVC TALLA 44 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTW040",
+      "name": "EMTOP BOTAS DE LLUVIA BLANCA IMPERMEABLE PVC TALLA 40 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTW041",
+      "name": "EMTOP BOTAS DE LLUVIA BLANCA IMPERMEABLE PVC TALLA 41 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTW042",
+      "name": "EMTOP BOTAS DE LLUVIA BLANCA IMPERMEABLE PVC TALLA 42 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTW043",
+      "name": "EMTOP BOTAS DE LLUVIA BLANCA IMPERMEABLE PVC TALLA 43 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTW044",
+      "name": "EMTOP BOTAS DE LLUVIA BLANCA IMPERMEABLE PVC TALLA 44 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERBTW045",
+      "name": "EMTOP BOTAS DE LLUVIA BLANCA IMPERMEABLE PVC TALLA 45 (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ERSB1111DF",
+      "name": "EMTOP HOJAS SIERRA RECIPROCA PARA MADERA CON CLAVOS 6TPI 9\" 225MM 5PCS (G)",
+      "excelStock": 3,
+      "dbStock": 2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ERSB922EF",
+      "name": "EMTOP SET HOJAS SIERRA RECIPROCA PARA METAL 18TPI 6\" 150MM 2PCS (G)",
+      "excelStock": 16,
+      "dbStock": 14,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ERWH0141",
+      "name": "EMTOP LLAVE DE RATCHET 1/4\" 158MM 72T (G)",
+      "excelStock": 10,
+      "dbStock": 9,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ESCT12191",
+      "name": "EMTOP DADO HEXAGONAL 1/2\" 19MM (G)",
+      "excelStock": 5,
+      "dbStock": 4,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ESDRH0203",
+      "name": "EMTOP SET DESTORNILLADOR 2 EN 1 INTERCAMBIABLES MAGNETICOS PH1+SL5 5.35X135MM (G)",
+      "excelStock": 13,
+      "dbStock": 12,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ESDRH0902",
+      "name": "EMTOP SET DESTORNILLADORES INTERCAMBIABLES 9PCS (G)",
+      "excelStock": 0,
+      "dbStock": 6,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "ESGG0101",
+      "name": "EMTOP GAFAS DE SEGURIDAD (G)",
+      "excelStock": 0,
+      "dbStock": 11,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ESGU2001",
+      "name": "EMTOP PISTOLA GRAPADORA DE HIERRO 4-14MM (G)",
+      "excelStock": 4,
+      "dbStock": 16,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ESH501415",
+      "name": "EMTOP ARNES DE SEGURIDAD 14MMX150CM (G)",
+      "excelStock": 1,
+      "dbStock": 11,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 10
+    },
+    {
+      "sku": "ESHT0801",
+      "name": "EMTOP CASCO DE SEGURIDAD AMARILLO 380G (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ESHT0802",
+      "name": "EMTOP CASCO DE SEGURIDAD BLANCO 380G SUSPENSION DE 6PTS (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ESKB1801",
+      "name": "EMTOP SET DE HOJAS DE CUCHILLA 18MM X 100MM 10PCS ESNK18102/ESNK18302 (G)",
+      "excelStock": 0,
+      "dbStock": 22,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 24
+    },
+    {
+      "sku": "ESKT12281",
+      "name": "EMTOP SET DE RATCHET Y DADOS DE 1/2\" 28PCS (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ESLR1041",
+      "name": "EMTOP ESCALERAS DE ACERO 4 PELDAÑOS 830*490*1290MM 150KG (G)",
+      "excelStock": 0,
+      "dbStock": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "ESNK09101",
+      "name": "EMTOP CUCHILLA DE HOJA DESPRENDIBLE CON BLOQUEO AUTOMATICO 150MM 9X80MM (G)",
+      "excelStock": 16,
+      "dbStock": 15,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ESNK18102",
+      "name": "EMTOP CUCHILLA DE HOJA DESPRENDIBLE 173MM 18MM X 100MM (G)",
+      "excelStock": 20,
+      "dbStock": 18,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ESPP41602",
+      "name": "EMTOP PULVERIZADOR DE MOCHILA 16L 4.5BAR (G)",
+      "excelStock": 10,
+      "dbStock": 9,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ESPP42002",
+      "name": "EMTOP PULVERIZADOR DE MOCHILA 20L 4.5BAR (G)",
+      "excelStock": 0,
+      "dbStock": 6,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 6
+    },
+    {
+      "sku": "ESST0202",
+      "name": "EMTOP SET DESTONILLADORES MAGNETICOS 125MM 2PCS (G)",
+      "excelStock": 0,
+      "dbStock": 23,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 24
+    },
+    {
+      "sku": "ESSTGT0202",
+      "name": "EMTOP SET DESTORNILLADORES DE IMPACTO MAGNETICOS 6X125MM 2PCS (G)",
+      "excelStock": 2,
+      "dbStock": 1,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ESSTJS061",
+      "name": "EMTOP SET DESTORNILLADORES AISLADOS 1000V 6 PCS (G)",
+      "excelStock": 5,
+      "dbStock": 4,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ETHW6061",
+      "name": "EMTOP SET LLAVES HEXAGONALES CON MANGO EN T 8 PCS (G)",
+      "excelStock": 5,
+      "dbStock": 4,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ETHW6063",
+      "name": "EMTOP SET LLAVES TORX CON MANGO EN T 8 PCS (G)",
+      "excelStock": 3,
+      "dbStock": 2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ETPL33001",
+      "name": "EMTOP TESTER LAPIZ DIGITAL CA 12V-300V (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "EWGV0101",
+      "name": "EMTOP GUANTES DE PUNTOS Y PUNTOS DE PVC ANTI-RESBALANTE TALLA 10 (XL) (G)",
+      "excelStock": 6,
+      "dbStock": 54,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 48
+    },
+    {
+      "sku": "EXGV0102",
+      "name": "EMTOP GUANTES DE LATEX POLIESTER XL (G)",
+      "excelStock": 2,
+      "dbStock": 1,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "EXGV0301XL",
+      "name": "EMTOP GUANTES RESISTENTES A CORTES LATEX XL PROTECCION 4X43C (G)",
+      "excelStock": 12,
+      "dbStock": 11,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "LWL2025",
+      "name": "EMTOP REFLECTOR LED PORTATIL INALAMBRICO 20W 1800 LUMENS (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULAGR17181",
+      "name": "EMTOP ESMERIL ANGULAR 710W 115MM 4-1/2\" 12000RPM (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ULAGR24093",
+      "name": "EMTOP ESMERIL ANGULAR 2400W 230MM 9\" 6400RPM (G)",
+      "excelStock": 6,
+      "dbStock": 5,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULAHE1501",
+      "name": "EMTOP MAGUERA DE AIRE 15MTS (G)",
+      "excelStock": 12,
+      "dbStock": 11,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULAPR1402",
+      "name": "EMTOP PULIDORA ANGULAR 1400W 7\" 1500-3600RPM VELOCIDAD VARIABLE (G)",
+      "excelStock": 0,
+      "dbStock": 12,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    },
+    {
+      "sku": "ULCDL205582",
+      "name": "EMTOP TALADRO INALAMBRICO COMPACTO 55M.M 0-500/0-2000 RPM 20V (G)",
+      "excelStock": 1,
+      "dbStock": 5,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ULCFS35528",
+      "name": "EMTOP SIERRA CORTADA 355MM 3900RPM 2400W (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULCIDL20668",
+      "name": "EMTOP TALADRO DE IMPACTO INALAMBRICO 66.N.M 0-500/0-2000 RPM 20V (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ULCIWL2045",
+      "name": "EMTOP LLAVE DE IMPACTO INALAMBRICA 1/2\" 405N.M 0-2200/0-2600/0-3000 RPM 20V (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ULCKL20256",
+      "name": "EMTOP KIT COMBINADO INALAMBRICO 2PCS 20V TALADRO DE IMPACTO 66N-M ESMERIL ANGULAR 4-1/2 1200W (G)",
+      "excelStock": 3,
+      "dbStock": 2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULCKL20286",
+      "name": "EMTOP KIT COMBINADO INALAMBRICO 2PCS 20V TALADRO DE IMPACTO 66N-M LLAVE DE IMPACTO 405N-M (G)",
+      "excelStock": 0,
+      "dbStock": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "ULDBRH1701",
+      "name": "EMTOP MARTILLO DE DEMOLICIÓN 1700W 1400LPM 45J 16KG (G)",
+      "excelStock": 0,
+      "dbStock": 1,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "ULESL01606",
+      "name": "EMTOP SOLDADOR ELECTRICO TEMPERATURA AJUSTABLE MEDIANTE ROTACIÓN 70W (G)",
+      "excelStock": 3,
+      "dbStock": 2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULFSR2402",
+      "name": "EMTOP LIJADORA DE PALMA 240W 110*100MM 14000RPM INCLUYE 5 LIJAS (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULHPW1401",
+      "name": "EMTOP HIDROJET ALTA PRESION 1400W 130BAR 1900PSI 5.5L/MIN (G)",
+      "excelStock": 2,
+      "dbStock": 5,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ULHPW1601",
+      "name": "EMTOP HIDROJET ALTA PRESION 1600W 140BAR 2030PSI 5.5L/MIN (G)",
+      "excelStock": 0,
+      "dbStock": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ULHPW2011",
+      "name": "EMTOP HIDROJET ALTA PRESION 2000W 160BAR 2320PSI 6.0L/MIN (G)",
+      "excelStock": 0,
+      "dbStock": 3,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 4
+    },
+    {
+      "sku": "ULMDL1101",
+      "name": "EMTOP TALADRO DE IMPACTO 1100W 1/2\" 2800RPM (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULRHRP1052",
+      "name": "EMTOP ROTOMARTILLO 1050W 26MM 1\" 1100RPM 4.5J (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULTSW26001",
+      "name": "EMTOP SIERRA DE MESA 2600W 254MM 10\" 4800RPM (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULVCR1401",
+      "name": "EMTOP ASPIRADORA INDUSTRIAL PARA USO EN HUMEDO Y SECO 1400W 30L 16-18KPA 110-120V (G)",
+      "excelStock": 3,
+      "dbStock": 5,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 3
+    },
+    {
+      "sku": "ULWDEM20611",
+      "name": "EMTOP MAQUINA DE SOLDADURA INVERTER MMA/TIG LIFT 200A (G)",
+      "excelStock": 3,
+      "dbStock": 5,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 2
+    },
+    {
+      "sku": "ULWPPQ07508",
+      "name": "EMTOP BOMBA SUMERGIBLE PARA AGUAS RESIDUALES 750W 1.0HP 216L/MIN 7MTS (G)",
+      "excelStock": 1,
+      "dbStock": 0,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0
+    },
+    {
+      "sku": "ULWSBD11001",
+      "name": "EMTOP CAJA CONTROL PARA BOMBA SUMERGIBLE POZO PROFUNDO 4\" 1.5HP ULWPPD11001 (G)",
+      "excelStock": 1,
+      "dbStock": 13,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 12
+    }
+  ],
+  "unexplainedDiscrepancies": [
+    {
+      "sku": "EACD121151",
+      "name": "EMTOP DISCO ABRASIVO CORTE METAL CENTRO PLANO 115MMX1.2MM  4 1/2\" (G)",
+      "excelStock": 73,
+      "excelPiso": 23,
+      "excelAlmacen": 50,
+      "dbStock": 56,
+      "stockDiff": -17,
+      "soldSinceOct5": 3,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -3,
+        "IN": 59
+      }
+    },
+    {
+      "sku": "EACD121251",
+      "name": "EMTOP DISCO ABRASIVO CORTE METAL CENTRO PLANO 5\" 125MMX1.2MM (G)",
+      "excelStock": 64,
+      "excelPiso": 14,
+      "excelAlmacen": 50,
+      "dbStock": 62,
+      "stockDiff": -2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 62
+      }
+    },
+    {
+      "sku": "EALB3001",
+      "name": "EMTOP BATERIA ALCALINA AAA 1.5V (G)",
+      "excelStock": 40,
+      "excelPiso": 40,
+      "excelAlmacen": 0,
+      "dbStock": 34,
+      "stockDiff": -6,
+      "soldSinceOct5": 5,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -5,
+        "IN": 39
+      }
+    },
+    {
+      "sku": "EASG04012",
+      "name": "EMTOP PISTOLA PULVERIZADORA DE AIRE GRAVEDAD AJUSTABLE 400CC 1.5MM 180-250MM (G)",
+      "excelStock": 8,
+      "excelPiso": 1,
+      "excelAlmacen": 7,
+      "dbStock": 5,
+      "stockDiff": -3,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -1,
+        "IN": 6
+      }
+    },
+    {
+      "sku": "EASG06001",
+      "name": "EMTOP PISTOLA PULVERIZADORA DE AIRE ALTO VOLUMEN BAJA PRESION 600CC 1.4MM (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 0,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {}
+    },
+    {
+      "sku": "EASGW10011",
+      "name": "EMTOP PISTOLA DE LAVADO DE AIRE 750CC 0.75L BOQUILLA 215MM 4BAR 2PCS (G)",
+      "excelStock": 6,
+      "excelPiso": 1,
+      "excelAlmacen": 5,
+      "dbStock": 2,
+      "stockDiff": -4,
+      "soldSinceOct5": 3,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -3,
+        "IN": 5
+      }
+    },
+    {
+      "sku": "EASP1271",
+      "name": "EMTOP TIJERA DE AVIACION LARGA CORTE RECTO 12\" 300MM (G)",
+      "excelStock": 14,
+      "excelPiso": 5,
+      "excelAlmacen": 9,
+      "dbStock": 13,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 13
+      }
+    },
+    {
+      "sku": "EASS3001",
+      "name": "EMTOP SILICON SELLADOR BLANCO 300ML/UNIDAD (G)",
+      "excelStock": 13,
+      "excelPiso": 3,
+      "excelAlmacen": 10,
+      "dbStock": 12,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 12
+      }
+    },
+    {
+      "sku": "EAWH130801",
+      "name": "EMTOP LLAVE AJUSTABLE MANGO DE GOMA 8\" 200MM 0-30MM (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 0,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {}
+    },
+    {
+      "sku": "EBCR0801",
+      "name": "EMTOP MINI CIZALLA 8\" (G)",
+      "excelStock": 9,
+      "excelPiso": 7,
+      "excelAlmacen": 2,
+      "dbStock": 8,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 8
+      }
+    },
+    {
+      "sku": "EBPK20011",
+      "name": "EMTOP BATERIA DE IONES DE LITIO 2.0AH 20V (G)",
+      "excelStock": 8,
+      "excelPiso": 8,
+      "excelAlmacen": 0,
+      "dbStock": 4,
+      "stockDiff": -4,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 5,
+        "OUT": -1
+      }
+    },
+    {
+      "sku": "ECBN155001",
+      "name": "EMTOP CLAVADORA CLAVOS NEUMATICA GA18 15-50MM (G)",
+      "excelStock": 4,
+      "excelPiso": 1,
+      "excelAlmacen": 3,
+      "dbStock": 2,
+      "stockDiff": -2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3,
+        "OUT": -1
+      }
+    },
+    {
+      "sku": "ECCL191602",
+      "name": "EMTOP CINCEL PALA CORTE FRIO 12\" 305MM*16MM*19MM GRIP 5/8\" (G)",
+      "excelStock": 7,
+      "excelPiso": 1,
+      "excelAlmacen": 6,
+      "dbStock": 6,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 6
+      }
+    },
+    {
+      "sku": "ECHS112501",
+      "name": "EMTOP CINCEL PUNTA ROTOMARTILLO SDS PLUS 14*250MM (G)",
+      "excelStock": 6,
+      "excelPiso": 6,
+      "excelAlmacen": 0,
+      "dbStock": 11,
+      "stockDiff": 5,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 6,
+      "movements": {
+        "IN": 11
+      }
+    },
+    {
+      "sku": "ECHS122501",
+      "name": "EMTOP CINCEL PALA ROTOMARTILLO SDS PLUS 14*250*20MM (G)",
+      "excelStock": 3,
+      "excelPiso": 3,
+      "excelAlmacen": 0,
+      "dbStock": 2,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 2
+      }
+    },
+    {
+      "sku": "ECIDL206681",
+      "name": "EMTOP TALADRO DE IMPACTO INALAMBRICO COMPACTO 66N.M 13MM 30000RPM 20V (G)",
+      "excelStock": 4,
+      "excelPiso": 1,
+      "excelAlmacen": 3,
+      "dbStock": 3,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "ECIDL209681",
+      "name": "EMTOP TALADRO DE IMPACTO INALAMBRICO 96N.M 30000RPM 13MM 20V (G)",
+      "excelStock": 4,
+      "excelPiso": 1,
+      "excelAlmacen": 3,
+      "dbStock": 7,
+      "stockDiff": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 7
+      }
+    },
+    {
+      "sku": "ECIWL20401",
+      "name": "EMTOP LLAVE DE IMPACTO INALAMBRICA 1/2\" 400N.M 0-2100/0-2500/0-2900 RPM 20V (G)",
+      "excelStock": 2,
+      "excelPiso": 1,
+      "excelAlmacen": 1,
+      "dbStock": 5,
+      "stockDiff": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4,
+      "movements": {
+        "IN": 5
+      }
+    },
+    {
+      "sku": "ECSS11201",
+      "name": "EMTOP SET LLAVES COMBINADAS 6-24MM 12 PCS (G)",
+      "excelStock": 9,
+      "excelPiso": 1,
+      "excelAlmacen": 8,
+      "dbStock": 7,
+      "stockDiff": -2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -1,
+        "IN": 8
+      }
+    },
+    {
+      "sku": "ECSS11202",
+      "name": "EMTOP SET LLAVES COMBINADAS 6-32MM 12PCS (G)",
+      "excelStock": 4,
+      "excelPiso": 1,
+      "excelAlmacen": 3,
+      "dbStock": 3,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "EDDC021151",
+      "name": "EMTOP DISCO DIAMANTE HUMEDO CORTE PRECISO 4-1/2\" 115MM*22.2MM (G)",
+      "excelStock": 25,
+      "excelPiso": 14,
+      "excelAlmacen": 11,
+      "dbStock": 70,
+      "stockDiff": 45,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 70
+      }
+    },
+    {
+      "sku": "EDDC021152",
+      "name": "EMTOP DISCO DIAMANTE HUMEDO CORTE PRECISO 4-1/2\" 115MM*22.2MM (G)",
+      "excelStock": 45,
+      "excelPiso": 13,
+      "excelAlmacen": 32,
+      "dbStock": 70,
+      "stockDiff": 25,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 70
+      }
+    },
+    {
+      "sku": "EDDC021251",
+      "name": "EMTOP DISCO DIAMANTE HUMEDO CORTE PRECISO 5\" 125MM*22.2MM (G)",
+      "excelStock": 25,
+      "excelPiso": 12,
+      "excelAlmacen": 13,
+      "dbStock": 74,
+      "stockDiff": 49,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 74
+      }
+    },
+    {
+      "sku": "EDDC021252",
+      "name": "EMTOP DISCO DIAMANTE HUMEDO CORTE PRECISO 5\" 125MM*22.2MM (G)",
+      "excelStock": 49,
+      "excelPiso": 15,
+      "excelAlmacen": 34,
+      "dbStock": 74,
+      "stockDiff": 25,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 74
+      }
+    },
+    {
+      "sku": "EDDCH31801",
+      "name": "EMTOP DISCO DIAMANTE ULTRAFINO HUMEDO INDUSTRIAL 7\" 180MM*22.2MM (G)",
+      "excelStock": 5,
+      "excelPiso": 5,
+      "excelAlmacen": 0,
+      "dbStock": 4,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 4
+      }
+    },
+    {
+      "sku": "EDES10801",
+      "name": "EMTOP SET LLAVES DOBLE BOCA 6-22MM 8PCS (G)",
+      "excelStock": 16,
+      "excelPiso": 1,
+      "excelAlmacen": 15,
+      "dbStock": 15,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 15
+      }
+    },
+    {
+      "sku": "EEAR5211-2",
+      "name": "EMTOP BROCAS PARA PERFORADORA DE SUELO 150MM*80CM EEAR5211-1 (G)",
+      "excelStock": 6,
+      "excelPiso": 1,
+      "excelAlmacen": 5,
+      "dbStock": 5,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 5
+      }
+    },
+    {
+      "sku": "EFDS1157",
+      "name": "EMTOP DISCO FLAP ABRASIVO CIRCONIO P60 4-1/2\" 115MM*22.2MM (G)",
+      "excelStock": 12,
+      "excelPiso": 2,
+      "excelAlmacen": 10,
+      "dbStock": 10,
+      "stockDiff": -2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 10
+      }
+    },
+    {
+      "sku": "EFDS1158",
+      "name": "EMTOP DISCO FLAP ABRASIVO CIRCONIO P80 4-1/2\" 115MM*22.2MM (G)",
+      "excelStock": 12,
+      "excelPiso": 2,
+      "excelAlmacen": 10,
+      "dbStock": 10,
+      "stockDiff": -2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 10
+      }
+    },
+    {
+      "sku": "EGTC5212",
+      "name": "EMTOP DESMALEZADORA A GASOLINA 52CC 2.2HP MOTOR 2T 9000RPM 1200ML (G)",
+      "excelStock": 2,
+      "excelPiso": 1,
+      "excelAlmacen": 1,
+      "dbStock": 0,
+      "stockDiff": -2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -1,
+        "IN": 1
+      }
+    },
+    {
+      "sku": "EHAMCH0802",
+      "name": "EMTOP MINI MARTILLO FORJADO TIPO GARRA 8OZ/220G (G)",
+      "excelStock": 5,
+      "excelPiso": 1,
+      "excelAlmacen": 4,
+      "dbStock": 3,
+      "stockDiff": -2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "EHAMSH1500",
+      "name": "EMTOP MARTILLO MAZO DE PIEDRA FORJADO 1500G (G)",
+      "excelStock": 7,
+      "excelPiso": 1,
+      "excelAlmacen": 6,
+      "dbStock": 6,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 6
+      }
+    },
+    {
+      "sku": "EHGN20031",
+      "name": "EMTOP PISTOLA DE CALOR INALAMBRICA AJUSTABLE LCD 30-550°C 20V (G)",
+      "excelStock": 2,
+      "excelPiso": 1,
+      "excelAlmacen": 1,
+      "dbStock": 3,
+      "stockDiff": 1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "EHJK1061",
+      "name": "EMTOP GATO HIDRAULICO TIPO BOTELLA 6 TON (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 0,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {}
+    },
+    {
+      "sku": "EHJK20301",
+      "name": "EMTOP GATO HIDRAULICO DE GARAJE 3TON (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 3,
+      "stockDiff": 2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "EHJK20302",
+      "name": "EMTOP GATO HIDRAULICO DE GARAJE 3TON (G)",
+      "excelStock": 2,
+      "excelPiso": 1,
+      "excelAlmacen": 1,
+      "dbStock": 3,
+      "stockDiff": 1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "EHKY2092",
+      "name": "EMTOP LLAVES HEXAGONALES LARGAS PUNTA DE ESFERA 9 PCS 1.5MM-10MM (G)",
+      "excelStock": 0,
+      "excelPiso": 0,
+      "excelAlmacen": 0,
+      "dbStock": 4,
+      "stockDiff": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 4
+      }
+    },
+    {
+      "sku": "EHPS0101",
+      "name": "EMTOP PISTOLA HIDROJET CONECTOR RAPIDO 460MM (G)",
+      "excelStock": 2,
+      "excelPiso": 1,
+      "excelAlmacen": 1,
+      "dbStock": 1,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 1
+      }
+    },
+    {
+      "sku": "EHRR103",
+      "name": "EMTOP REMACHADORA MANUAL 10.5\" (G)",
+      "excelStock": 0,
+      "excelPiso": 0,
+      "excelAlmacen": 0,
+      "dbStock": 11,
+      "stockDiff": 11,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -1,
+        "IN": 12
+      }
+    },
+    {
+      "sku": "EHSW0071",
+      "name": "EMTOP SET SIERRA PERFORADORA CIRCULARES PARA MADERA BI-METALICAS 7PCS (G)",
+      "excelStock": 9,
+      "excelPiso": 4,
+      "excelAlmacen": 5,
+      "dbStock": 8,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 8
+      }
+    },
+    {
+      "sku": "EHTS00911",
+      "name": "EMTOP JUEGO HERRAMIENTAS 91 PCS (G)",
+      "excelStock": 4,
+      "excelPiso": 1,
+      "excelAlmacen": 3,
+      "dbStock": 3,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "EKCK1301",
+      "name": "EMTOP PORTABROCA DE LLAVE 1.5-13MM 1/2\" 20UNF (G)",
+      "excelStock": 10,
+      "excelPiso": 5,
+      "excelAlmacen": 5,
+      "dbStock": 9,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 9
+      }
+    },
+    {
+      "sku": "ELHT20018",
+      "name": "EMTOP CORTASETOS INALAMBRICO 460MM 2800RPM 20V (G)",
+      "excelStock": 2,
+      "excelPiso": 1,
+      "excelAlmacen": 1,
+      "dbStock": 1,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 1
+      }
+    },
+    {
+      "sku": "EMQB1345",
+      "name": "EMTOP BARRETA DE DEMOLICION HEXAGONAL PATA DE CABRA 18\" 450MM 16MM (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 0,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {}
+    },
+    {
+      "sku": "EMQP9431",
+      "name": "EMTOP JUEGO DE PISTOLAS DE AIRE COMPRIMIDO 20 PIEZAS (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 5,
+      "stockDiff": 4,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 6,
+      "movements": {
+        "IN": 6,
+        "OUT": -1
+      }
+    },
+    {
+      "sku": "EMTP13101",
+      "name": "EMTOP CINTA METRICA 3MTSX16MM (G)",
+      "excelStock": 23,
+      "excelPiso": 6,
+      "excelAlmacen": 17,
+      "dbStock": 21,
+      "stockDiff": -2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 22,
+        "OUT": -1
+      }
+    },
+    {
+      "sku": "EMTP73001",
+      "name": "EMTOP CINTA METRICA FIBRA DE VIDRIO 30MTS*12.5MM (G)",
+      "excelStock": 0,
+      "excelPiso": 0,
+      "excelAlmacen": 0,
+      "dbStock": 11,
+      "stockDiff": 11,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 11
+      }
+    },
+    {
+      "sku": "EMWB8A10",
+      "name": "EMTOP CARRETILLA DE MANO PLEGABLE 100KG 60 X 385 X 640 MM RUEDAS: 125 MM (G)",
+      "excelStock": 5,
+      "excelPiso": 1,
+      "excelAlmacen": 4,
+      "dbStock": 4,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 4
+      }
+    },
+    {
+      "sku": "EMXP1305",
+      "name": "EMTOP CINTA SELLADORA DE ROSCAS DE PTFE 19MM 3/4\" X 0.075MM X 13M (G)",
+      "excelStock": 13,
+      "excelPiso": 7,
+      "excelAlmacen": 6,
+      "dbStock": 9,
+      "stockDiff": -4,
+      "soldSinceOct5": 3,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 12,
+        "OUT": -3
+      }
+    },
+    {
+      "sku": "EPBX1511",
+      "name": "EMTOP ORGANIZADOR PLASTICO APILABLE 15\" 370 MM (14,5”) X 290 MM (11,4”) X 65 MM (2,5”) (G)",
+      "excelStock": 10,
+      "excelPiso": 5,
+      "excelAlmacen": 5,
+      "dbStock": 9,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 9
+      }
+    },
+    {
+      "sku": "EPBX2002",
+      "name": "EMTOP CAJA HERRAMIENTAS PLASTICO BROCHE METAL 20\" 508*296*261MM CARGA MAX. 15KG. 2190GR (G)",
+      "excelStock": 2,
+      "excelPiso": 1,
+      "excelAlmacen": 1,
+      "dbStock": 1,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 1
+      }
+    },
+    {
+      "sku": "EPDKH8001",
+      "name": "EMTOP CANDADO DE BLOQUE LATON ANTI CIZALLA 80MM 568G (G)",
+      "excelStock": 5,
+      "excelPiso": 3,
+      "excelAlmacen": 2,
+      "dbStock": 4,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 4
+      }
+    },
+    {
+      "sku": "EPDKH9001",
+      "name": "EMTOP CANDADO DE BLOQUE LATON ANTI CIZALLA 90MM 609G (G)",
+      "excelStock": 5,
+      "excelPiso": 5,
+      "excelAlmacen": 0,
+      "dbStock": 4,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 4
+      }
+    },
+    {
+      "sku": "EPDKR3001",
+      "name": "EMTOP CANDADO HIERRO GRILLETE CORTO 32MM (G)",
+      "excelStock": 6,
+      "excelPiso": 6,
+      "excelAlmacen": 0,
+      "dbStock": 5,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 5
+      }
+    },
+    {
+      "sku": "EPHE955001",
+      "name": "EMTOP MANGUERA PVC REFORZADA DE MALLA INTERNA 5/8\" 15MTS 300PSI (G)",
+      "excelStock": 1,
+      "excelPiso": 0,
+      "excelAlmacen": 1,
+      "dbStock": 37,
+      "stockDiff": 36,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -2,
+        "IN": 39
+      }
+    },
+    {
+      "sku": "EPLRD0611",
+      "name": "EMTOP ALICATE CORTE DIAGONAL 6\" 160MM (G)",
+      "excelStock": 7,
+      "excelPiso": 4,
+      "excelAlmacen": 3,
+      "dbStock": 4,
+      "stockDiff": -3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 4
+      }
+    },
+    {
+      "sku": "EPLRMFC0851",
+      "name": "EMTOP ALICATE UNIVERSAL COMBINADO MULTIFUNCIONAL 8 EN 1  8\" 200MM (G)",
+      "excelStock": 2,
+      "excelPiso": 2,
+      "excelAlmacen": 0,
+      "dbStock": 1,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 1
+      }
+    },
+    {
+      "sku": "EPNT1104",
+      "name": "EMTOP CINTA AISLANTE PVC 18MM 0.13MM (G)",
+      "excelStock": 9,
+      "excelPiso": 9,
+      "excelAlmacen": 0,
+      "dbStock": 1,
+      "stockDiff": -8,
+      "soldSinceOct5": 4,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 10,
+        "OUT": -9
+      }
+    },
+    {
+      "sku": "EPSR252804",
+      "name": "EMTOP SIERRA DE PERTIGA Y PODADORA EXTENSIBLE 280CM 25MM (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 4,
+      "stockDiff": 3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 4,
+      "movements": {
+        "IN": 4
+      }
+    },
+    {
+      "sku": "EPTL10001",
+      "name": "EMTOP ESPATULA ACERO INOXIDABLE 4\" 100MM (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 0,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {}
+    },
+    {
+      "sku": "ERWH0121",
+      "name": "EMTOP LLAVE DE RATCHET 1/2\" 72T 260MM (G)",
+      "excelStock": 2,
+      "excelPiso": 2,
+      "excelAlmacen": 0,
+      "dbStock": 1,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 1
+      }
+    },
+    {
+      "sku": "ERWH0381",
+      "name": "EMTOP LLAVE DE RATCHET 3/8\" 72T 205MM (G)",
+      "excelStock": 7,
+      "excelPiso": 7,
+      "excelAlmacen": 0,
+      "dbStock": 6,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 6
+      }
+    },
+    {
+      "sku": "ESCT12301",
+      "name": "EMTOP DADO HEXAGONAL 1/2\" 30MM (G)",
+      "excelStock": 10,
+      "excelPiso": 4,
+      "excelAlmacen": 6,
+      "dbStock": 7,
+      "stockDiff": -3,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -2,
+        "IN": 9
+      }
+    },
+    {
+      "sku": "ESDRH1502",
+      "name": "EMTOP SET DESTORNILLADORES DE RATCHET 15 POSICIONES 14PCSX6.35X25MM (G)",
+      "excelStock": 4,
+      "excelPiso": 4,
+      "excelAlmacen": 0,
+      "dbStock": 3,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "ESGU1001",
+      "name": "EMTOP PISTOLA GRAPADORA 3 EN 1 FUERZA DE ACCIONAMIENTO AJUSTABLE  4-14MM (G)",
+      "excelStock": 7,
+      "excelPiso": 4,
+      "excelAlmacen": 3,
+      "dbStock": 6,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 6
+      }
+    },
+    {
+      "sku": "ESKT12131",
+      "name": "EMTOP SET RATCHET 1/2\" 13 PCS (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 11,
+      "stockDiff": 10,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 12,
+      "movements": {
+        "IN": 12,
+        "OUT": -1
+      }
+    },
+    {
+      "sku": "ESKT14141",
+      "name": "EMTOP SET RATCHET 1/4\" 14 PCS (G)",
+      "excelStock": 2,
+      "excelPiso": 2,
+      "excelAlmacen": 0,
+      "dbStock": 0,
+      "stockDiff": -2,
+      "soldSinceOct5": 1,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 1,
+        "OUT": -1
+      }
+    },
+    {
+      "sku": "ESLE53001",
+      "name": "EMTOP LASER DE LINEA AUTONIVELANTE ROJO USO INTERIOR 5 LINEAS 0-30MTS (G)",
+      "excelStock": 2,
+      "excelPiso": 2,
+      "excelAlmacen": 0,
+      "dbStock": 1,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 1
+      }
+    },
+    {
+      "sku": "ESNE10301",
+      "name": "EMTOP PISTOLA DE RIEGO BOQUILLA DE 3 VIAS (G)",
+      "excelStock": 3,
+      "excelPiso": 3,
+      "excelAlmacen": 0,
+      "dbStock": 1,
+      "stockDiff": -2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 1
+      }
+    },
+    {
+      "sku": "ESNK09001",
+      "name": "EMTOP CUCHILLA DE HOJA DESPRENDIBLE SENCILLA CUERPO METAL 9X80MM 150MM (G)",
+      "excelStock": 77,
+      "excelPiso": 77,
+      "excelAlmacen": 0,
+      "dbStock": 75,
+      "stockDiff": -2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 75
+      }
+    },
+    {
+      "sku": "ESNK18302",
+      "name": "EMTOP CUCHILLA DE DE HOJA DESPRENDIBLE 3 CUCHILLAS 169MM 18MM X 100MM (G)",
+      "excelStock": 18,
+      "excelPiso": 2,
+      "excelAlmacen": 16,
+      "dbStock": 17,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 17
+      }
+    },
+    {
+      "sku": "ESST0402",
+      "name": "EMTOP SET DESTONILLADORES MAGNETICOS 2*150MM 2*100MM 4PCS (G)",
+      "excelStock": 9,
+      "excelPiso": 1,
+      "excelAlmacen": 8,
+      "dbStock": 17,
+      "stockDiff": 8,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 12,
+      "movements": {
+        "OUT": -2,
+        "IN": 19
+      }
+    },
+    {
+      "sku": "ESST1802",
+      "name": "EMTOP SET DESTORNILLADORES Y DESTORNILLADORES DE PRECISION 18PCS (G)",
+      "excelStock": 3,
+      "excelPiso": 1,
+      "excelAlmacen": 2,
+      "dbStock": 2,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 2
+      }
+    },
+    {
+      "sku": "ESSTP0702",
+      "name": "EMTOP SET DESTORNILLADORES DE PRECISION MAGNETICOS 7PCS (G)",
+      "excelStock": 6,
+      "excelPiso": 6,
+      "excelAlmacen": 0,
+      "dbStock": 5,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 5
+      }
+    },
+    {
+      "sku": "ETBG18131",
+      "name": "EMTOP BOLSO HERRAMIENTAS 13\" CARGA MAX. 12KG (G)",
+      "excelStock": 16,
+      "excelPiso": 1,
+      "excelAlmacen": 15,
+      "dbStock": 11,
+      "stockDiff": -5,
+      "soldSinceOct5": 4,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -4,
+        "IN": 15
+      }
+    },
+    {
+      "sku": "ETBG18161",
+      "name": "EMTOP BOLSO HERRAMIENTAS 16\" CARGA MAX. 15KG (G)",
+      "excelStock": 7,
+      "excelPiso": 1,
+      "excelAlmacen": 6,
+      "dbStock": 2,
+      "stockDiff": -5,
+      "soldSinceOct5": 3,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "OUT": -3,
+        "IN": 5
+      }
+    },
+    {
+      "sku": "ETBG48164",
+      "name": "EMTOP BOLSO DE HERRAMIENTAS BASE PLASTICA 16\" 25 BOLSILLOS MAX.20KG (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 0,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {}
+    },
+    {
+      "sku": "ETPD12001",
+      "name": "EMTOP TRIPOIDE ALUMINIO PARA NIVELES LASER 1,2MTS ROSCA 5/8\" Y 1/4\" (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 8,
+      "stockDiff": 7,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 8,
+      "movements": {
+        "IN": 8
+      }
+    },
+    {
+      "sku": "EWHT0102",
+      "name": "EMTOP MASCARA SOLDADURA CON OSCURECIMIENTO AUTOMATICO 90*35MM (G)",
+      "excelStock": 3,
+      "excelPiso": 1,
+      "excelAlmacen": 2,
+      "dbStock": 2,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 2
+      }
+    },
+    {
+      "sku": "ULACPS15153",
+      "name": "EMTOP COMPRESOR DE AIRE 1.1KW 1.5HP 15L 67DB 8BAR (G)",
+      "excelStock": 4,
+      "excelPiso": 1,
+      "excelAlmacen": 3,
+      "dbStock": 3,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "ULAGR22093",
+      "name": "EMTOP ESMERIL ANGULAR  2200W 230MM 9\" 6400RPM (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 0,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {}
+    },
+    {
+      "sku": "ULAHE0501",
+      "name": "EMTOP MANGUERA DE AIRE 5MTS (G)",
+      "excelStock": 7,
+      "excelPiso": 1,
+      "excelAlmacen": 6,
+      "dbStock": 5,
+      "stockDiff": -2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 5
+      }
+    },
+    {
+      "sku": "ULAHE2E07",
+      "name": "EMTOP MANGUERA DE AIRE 7.5MTS 1/4\" 12MM (G)",
+      "excelStock": 5,
+      "excelPiso": 2,
+      "excelAlmacen": 3,
+      "dbStock": 8,
+      "stockDiff": 3,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 6,
+      "movements": {
+        "IN": 10,
+        "OUT": -2
+      }
+    },
+    {
+      "sku": "ULBCPK2212",
+      "name": "EMTOP KIT DE BATERIA Y CARGADOR DE IONES DE LITIO 2.0AHX2 (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 24,
+      "stockDiff": 23,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 24,
+      "movements": {
+        "IN": 24
+      }
+    },
+    {
+      "sku": "ULCIDL20968",
+      "name": "EMTOP TALADRO DE IMPACTO INALAMBRICO 96N.M 30000RPM 13MM 20V (G)",
+      "excelStock": 3,
+      "excelPiso": 1,
+      "excelAlmacen": 2,
+      "dbStock": 7,
+      "stockDiff": 4,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 7
+      }
+    },
+    {
+      "sku": "ULEDL501",
+      "name": "EMTOP TALADRO ELECTRICO 500W 3/8\" 3300RPM (G)",
+      "excelStock": 19,
+      "excelPiso": 1,
+      "excelAlmacen": 18,
+      "dbStock": 18,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 18
+      }
+    },
+    {
+      "sku": "ULFCR20200",
+      "name": "EMTOP CARGADOR DE BATERIA P20 2.A.H 20V (G)",
+      "excelStock": 8,
+      "excelPiso": 8,
+      "excelAlmacen": 0,
+      "dbStock": 7,
+      "stockDiff": -1,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 7
+      }
+    },
+    {
+      "sku": "ULHGN16056",
+      "name": "EMTOP PISTOLA DE CALOR DIGITAL 1600W CON TEMPERATURA AJUSTABLE (G)",
+      "excelStock": 2,
+      "excelPiso": 1,
+      "excelAlmacen": 1,
+      "dbStock": 0,
+      "stockDiff": -2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {}
+    },
+    {
+      "sku": "ULHGN16078",
+      "name": "EMTOP PISTOLA DE CALOR 1600W 50°C/450°C/550°C (G)",
+      "excelStock": 0,
+      "excelPiso": 0,
+      "excelAlmacen": 0,
+      "dbStock": 4,
+      "stockDiff": 4,
+      "soldSinceOct5": 5,
+      "purchasedSinceOct5": 12,
+      "movements": {
+        "ADJUSTMENT": -3,
+        "IN": 13,
+        "OUT": -6
+      }
+    },
+    {
+      "sku": "ULHGN200315",
+      "name": "EMTOP PISTOLA DE CALOR INALAMBRICA AJUSTABLE LCD 30-550°C 20V (G)",
+      "excelStock": 1,
+      "excelPiso": 1,
+      "excelAlmacen": 0,
+      "dbStock": 3,
+      "stockDiff": 2,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 3
+      }
+    },
+    {
+      "sku": "ULSGN50001",
+      "name": "EMTOP PISTOLA ELECTRICA ROCIADORA 550W (G)",
+      "excelStock": 4,
+      "excelPiso": 1,
+      "excelAlmacen": 3,
+      "dbStock": 0,
+      "stockDiff": -4,
+      "soldSinceOct5": 2,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 2,
+        "OUT": -2
+      }
+    },
+    {
+      "sku": "ULWPPV03701",
+      "name": "EMTOP BOMBA DE AGUA PERIFERICA 370W 0.5HP 1\" X 1\" 3.5L/MIN (G)",
+      "excelStock": 10,
+      "excelPiso": 0,
+      "excelAlmacen": 10,
+      "dbStock": 7,
+      "stockDiff": -3,
+      "soldSinceOct5": 0,
+      "purchasedSinceOct5": 0,
+      "movements": {
+        "IN": 7
+      }
+    }
+  ],
+  "costDiscrepancies": [
+    {
+      "sku": "ECIDL209681",
+      "name": "EMTOP TALADRO DE IMPACTO INALAMBRICO 96N.M 30000RPM 13MM 20V (G)",
+      "excelCost": 51.1891,
+      "dbCost": 116.87,
+      "costDiff": 65.68090000000001
+    },
+    {
+      "sku": "EDDC021151",
+      "name": "EMTOP DISCO DIAMANTE HUMEDO CORTE PRECISO 4-1/2\" 115MM*22.2MM (G)",
+      "excelCost": 2.536,
+      "dbCost": 1.4993,
+      "costDiff": -1.0367
+    },
+    {
+      "sku": "EDDC021251",
+      "name": "EMTOP DISCO DIAMANTE HUMEDO CORTE PRECISO 5\" 125MM*22.2MM (G)",
+      "excelCost": 2.887,
+      "dbCost": 1.8821,
+      "costDiff": -1.0049
+    },
+    {
+      "sku": "EHGN20031",
+      "name": "EMTOP PISTOLA DE CALOR INALAMBRICA AJUSTABLE LCD 30-550°C 20V (G)",
+      "excelCost": 35.061,
+      "dbCost": 79.3637,
+      "costDiff": 44.302699999999994
+    },
+    {
+      "sku": "EHJK20301",
+      "name": "EMTOP GATO HIDRAULICO DE GARAJE 3TON (G)",
+      "excelCost": 155.389,
+      "dbCost": 156.3796,
+      "costDiff": 0.9906000000000006
+    },
+    {
+      "sku": "EHKY2091",
+      "name": "EMTOP LLAVES HEXAGONALES LARGAS PUNTA DE ESFERA 9 PCS 1.5MM-10MM (G)",
+      "excelCost": 3.2373,
+      "dbCost": 3.8034,
+      "costDiff": 0.5661
+    },
+    {
+      "sku": "EHRR101",
+      "name": "EMTOP REMACHADORA MANUAL 10.5\" (G)",
+      "excelCost": 2.9719,
+      "dbCost": 4.3871,
+      "costDiff": 1.4152
+    },
+    {
+      "sku": "EMTP25101",
+      "name": "EMTOP CINTA METRICA TIPO PREMIUM 5MTSX25MM (G)",
+      "excelCost": 2.0343,
+      "dbCost": 2.4058,
+      "costDiff": 0.37150000000000016
+    },
+    {
+      "sku": "EPHE955001",
+      "name": "EMTOP MANGUERA PVC REFORZADA DE MALLA INTERNA 5/8\" 15MTS 300PSI (G)",
+      "excelCost": 19.1226,
+      "dbCost": 16.92,
+      "costDiff": -2.202599999999997
+    },
+    {
+      "sku": "ULAGR17181",
+      "name": "EMTOP ESMERIL ANGULAR 710W 115MM 4-1/2\" 12000RPM (G)",
+      "excelCost": 28.4803,
+      "dbCost": 24.78,
+      "costDiff": -3.7002999999999986
+    },
+    {
+      "sku": "ULMDL1101",
+      "name": "EMTOP TALADRO DE IMPACTO 1100W 1/2\" 2800RPM (G)",
+      "excelCost": 45.1118,
+      "dbCost": 44.7702,
+      "costDiff": -0.3415999999999997
+    }
+  ]
+}

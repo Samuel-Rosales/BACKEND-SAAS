@@ -1,0 +1,3 @@
+mutation ApproveDeployment($id: String!) {
+  deploymentApprove(id: $id)
+}
