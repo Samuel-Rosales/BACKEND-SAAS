@@ -14,7 +14,8 @@ export class PaymentMethodController {
     };
 
     findAll = async (req: Request, res: Response) => {
-        const { status, data, message } = await this.service.findAll();
+        const businessId = req.user?.businessId;
+        const { status, data, message } = await this.service.findAll(businessId);
 
         res.status(status).json({
             message,
@@ -23,7 +24,8 @@ export class PaymentMethodController {
     };
 
     findActive = async (req: Request, res: Response) => {
-        const { status, data, message } = await this.service.findActive();
+        const businessId = req.user?.businessId;
+        const { status, data, message } = await this.service.findActive(businessId);
 
         res.status(status).json({
             message,

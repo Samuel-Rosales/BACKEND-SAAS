@@ -56,11 +56,81 @@ export class PaymentMethodService {
         }
     }
 
-    // 2. LISTAR TODOS
-    async findAll() {
+    // Asegurar que exista el método CASHEA de fábrica
+    private async ensureCasheaMethod() {
         try {
+            const casheaExists = await prisma.paymentMethod.findFirst({
+                where: {
+                    name: {
+                        contains: 'CASHEA',
+                        mode: 'insensitive'
+                    }
+                }
+            });
+
+            if (!casheaExists) {
+                await prisma.paymentMethod.create({
+                    data: {
+                        name: 'CASHEA',
+                        type: 'OTHER',
+                        currency: 'USD',
+                        isActive: true
+                    }
+                });
+            }
+        } catch (e) {
+            // Silenciar si se creó concurrentemente
+        }
+    }
+
+    // Asegurar que exista el método Efectivo Pesos (COP) de fábrica
+    private async ensureCopMethod() {
+        try {
+            const copExists = await prisma.paymentMethod.findFirst({
+                where: {
+                    OR: [
+                        { currency: 'COP' },
+                        { name: { contains: 'Pesos', mode: 'insensitive' } }
+                    ]
+                }
+            });
+
+            if (!copExists) {
+                await prisma.paymentMethod.create({
+                    data: {
+                        name: 'Efectivo Pesos (COP)',
+                        type: 'CASH',
+                        currency: 'COP',
+                        isActive: true
+                    }
+                });
+            } else if (!copExists.isActive) {
+                await prisma.paymentMethod.update({
+                    where: { id: copExists.id },
+                    data: { isActive: true }
+                });
+            }
+        } catch (e) {
+            // Silenciar si se creó concurrentemente
+        }
+    }
+
+    // 2. LISTAR TODOS
+    async findAll(businessId?: number) {
+        try {
+            await this.ensureCopMethod();
+
+            let enableCopCurrency = true;
+            if (businessId) {
+                const business = await prisma.business.findUnique({
+                    where: { id: businessId },
+                    select: { enableCopCurrency: true }
+                });
+                enableCopCurrency = Boolean(business?.enableCopCurrency);
+            }
 
             const paymentMethods = await prisma.paymentMethod.findMany({
+                where: !enableCopCurrency ? { currency: { not: 'COP' } } : undefined,
                 orderBy: {
                     name: 'asc'
                 }
@@ -93,36 +163,24 @@ export class PaymentMethodService {
     }
 
     // 3. LISTAR SOLO ACTIVOS
-    async findActive() {
+    async findActive(businessId?: number) {
         try {
-            // Asegurar que exista el método CASHEA de fábrica
-            const casheaExists = await prisma.paymentMethod.findFirst({
-                where: {
-                    name: {
-                        contains: 'CASHEA',
-                        mode: 'insensitive'
-                    }
-                }
-            });
+            await this.ensureCasheaMethod();
+            await this.ensureCopMethod();
 
-            if (!casheaExists) {
-                try {
-                    await prisma.paymentMethod.create({
-                        data: {
-                            name: 'CASHEA',
-                            type: 'OTHER',
-                            currency: 'USD',
-                            isActive: true
-                        }
-                    });
-                } catch (e) {
-                    // Silenciar si se creó concurrentemente
-                }
+            let enableCopCurrency = false;
+            if (businessId) {
+                const business = await prisma.business.findUnique({
+                    where: { id: businessId },
+                    select: { enableCopCurrency: true }
+                });
+                enableCopCurrency = Boolean(business?.enableCopCurrency);
             }
 
             const paymentMethods = await prisma.paymentMethod.findMany({
                 where: {
-                    isActive: true
+                    isActive: true,
+                    ...(!enableCopCurrency ? { currency: { not: 'COP' } } : {})
                 },
                 orderBy: {
                     name: 'asc'

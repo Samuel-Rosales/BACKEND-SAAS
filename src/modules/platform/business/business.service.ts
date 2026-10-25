@@ -550,6 +550,37 @@ export class BusinessService {
         };
         if (typeof data.enableCopCurrency === 'boolean') {
           businessUpdateData.enableCopCurrency = data.enableCopCurrency;
+
+          if (data.enableCopCurrency === true) {
+            // Asegurar que el método Efectivo Pesos (COP) esté activo en la plataforma
+            try {
+              const copPm = await tx.paymentMethod.findFirst({
+                where: {
+                  OR: [
+                    { currency: 'COP' },
+                    { name: { contains: 'Pesos', mode: 'insensitive' } }
+                  ]
+                }
+              });
+              if (!copPm) {
+                await tx.paymentMethod.create({
+                  data: {
+                    name: 'Efectivo Pesos (COP)',
+                    type: 'CASH',
+                    currency: 'COP',
+                    isActive: true
+                  }
+                });
+              } else if (!copPm.isActive) {
+                await tx.paymentMethod.update({
+                  where: { id: copPm.id },
+                  data: { isActive: true }
+                });
+              }
+            } catch (e) {
+              console.error('Error al auto-activar método de pago COP:', e);
+            }
+          }
         }
         if (data.copExchangeRate !== undefined && data.copExchangeRate !== null) {
           businessUpdateData.copExchangeRate = Number(data.copExchangeRate);
