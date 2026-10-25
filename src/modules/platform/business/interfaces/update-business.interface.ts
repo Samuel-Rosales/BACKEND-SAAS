@@ -6,4 +6,6 @@ export interface UpdateBusinessInterface extends Partial<CreateBusinessInterface
 export interface UpdateExchangeConfigInterface {
   strategy: ExchangeRateStrategy;
   manualRate?: number; // Solo requerido si strategy === MANUAL
+  enableCopCurrency?: boolean;
+  copExchangeRate?: number;
 }

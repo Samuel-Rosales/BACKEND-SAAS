@@ -295,6 +295,10 @@ export class CreditNoteService {
                     // Conversión
                     if (method.currency === 'USD') {
                         valueInUsd = paymentAmount;
+                    } else if (method.currency === 'COP') {
+                        const biz = await tx.business.findUnique({ where: { id: businessId }, select: { copExchangeRate: true } });
+                        const copRate = (biz as any)?.copExchangeRate ? new Decimal((biz as any).copExchangeRate) : new Decimal(4000);
+                        valueInUsd = paymentAmount.div(copRate);
                     } else {
                         valueInUsd = paymentAmount.div(activeExchangeRate.rate);
                     }

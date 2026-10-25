@@ -289,6 +289,8 @@ export class BusinessService {
                   ? await getRolePermissions(memberRoleCode)
                   : [],
               isRestaurant: business.businessCategory.isRestaurant,
+              enableCopCurrency: (business as any).enableCopCurrency ?? false,
+              copExchangeRate: (business as any).copExchangeRate ? Number((business as any).copExchangeRate) : 4000.0,
               
               // Inyectamos la tasa correcta calculada
               // Lo enviamos como un objeto único o array según lo espere tu frontend
@@ -541,13 +543,20 @@ export class BusinessService {
         }
 
         // --- ACTUALIZACIÓN DEL NEGOCIO (CACHE) ---
+        const businessUpdateData: any = {
+          rateStrategy: data.strategy,
+          manualRate: data.strategy === ExchangeRateStrategy.MANUAL ? data.manualRate : null,
+          currentExchangeRate: newCurrentRate
+        };
+        if (typeof data.enableCopCurrency === 'boolean') {
+          businessUpdateData.enableCopCurrency = data.enableCopCurrency;
+        }
+        if (data.copExchangeRate !== undefined && data.copExchangeRate !== null) {
+          businessUpdateData.copExchangeRate = Number(data.copExchangeRate);
+        }
         const updatedBusiness = await tx.business.update({
           where: { id: businessId },
-          data: {
-            rateStrategy: data.strategy,
-            manualRate: data.strategy === ExchangeRateStrategy.MANUAL ? data.manualRate : null, // Limpiamos si no es manual (opcional)
-            currentExchangeRate: newCurrentRate // Actualizamos la caché para el Frontend
-          }
+          data: businessUpdateData
         });
 
         return {
@@ -555,7 +564,9 @@ export class BusinessService {
           status: 200,
           data: {
             strategy: updatedBusiness.rateStrategy,
-            currentRate: updatedBusiness.currentExchangeRate.toString()
+            currentRate: updatedBusiness.currentExchangeRate.toString(),
+            enableCopCurrency: updatedBusiness.enableCopCurrency,
+            copExchangeRate: updatedBusiness.copExchangeRate ? Number(updatedBusiness.copExchangeRate) : 4000.0
           }
         };
       });
@@ -608,7 +619,9 @@ export class BusinessService {
           rates: {
               strategy: business.rateStrategy,
               manualRate: business.manualRate?.toNumber() || 0,
-              currentRate: business.currentExchangeRate.toNumber()
+              currentRate: business.currentExchangeRate.toNumber(),
+              enableCopCurrency: (business as any).enableCopCurrency ?? false,
+              copExchangeRate: (business as any).copExchangeRate ? Number((business as any).copExchangeRate) : 4000.0
           },
           policies: {
               enableGlobalCredit: business.enableGlobalCredit,

@@ -156,6 +156,9 @@ model Business {
   // conceptualmente será el "Valor Actual Calculado" (cache) para no
   // tener que consultar la estrategia en cada lectura de producto.
   currentExchangeRate Decimal @default(1.0) @db.Decimal(10, 4) 
+  // MULTIMONEDA - PESOS COLOMBIANOS (COP)
+  enableCopCurrency   Boolean  @default(false)
+  copExchangeRate     Decimal  @default(4000.0) @db.Decimal(12, 4)
 
   // POLÍTICA GLOBAL
   defaultCreditLimit Decimal @default(100) @db.Decimal(15, 2) // Ej: Todos nacen con $100
@@ -1094,6 +1097,7 @@ enum Currency {
   USD
   VES
   EUR
+  COP
 }
 
 enum OrderStatus {

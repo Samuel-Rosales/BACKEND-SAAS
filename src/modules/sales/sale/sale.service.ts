@@ -269,6 +269,12 @@ export class SaleService {
                 if (method.currency === 'USD') {
                     // Suma directa: variable = variable.add(valor)
                     totalPaidBase = totalPaidBase.add(paymentAmount);
+                } else if (method.currency === 'COP') {
+                    // Conversión COP -> USD
+                    const copRate = (business as any).copExchangeRate ? new Decimal((business as any).copExchangeRate) : new Decimal(4000);
+                    if (copRate.lte(0)) throw new BusinessError('La tasa de cambio para COP no puede ser 0 o menor', 400);
+                    const convertedAmount = paymentAmount.div(copRate);
+                    totalPaidBase = totalPaidBase.add(convertedAmount);
                 } else {
                     // Conversión VES -> USD
                     // Fórmula: MontoVES / Tasa
@@ -1273,7 +1279,12 @@ export class SaleService {
                 const rate = new Decimal(exchangeRate.rate);
 
                 // USO CORRECTO DEL ENUM (Currency)
-                if (paymentMethod.currency !== Currency.USD) {
+                if (paymentMethod.currency === Currency.COP) {
+                    const biz = await tx.business.findUnique({ where: { id: businessId } });
+                    const copRate = (biz as any)?.copExchangeRate ? new Decimal((biz as any).copExchangeRate) : new Decimal(4000);
+                    if (copRate.lte(0)) throw new BusinessError("Tasa de cambio COP inválida para conversión", 400);
+                    paymentInBaseCurrency = paymentInBaseCurrency.div(copRate);
+                } else if (paymentMethod.currency !== Currency.USD) {
 
                     if (!rate || rate.lte(0)) throw new BusinessError("Tasa de cambio inválida para conversión", 400);
 
@@ -1638,7 +1649,7 @@ export class SaleService {
                         orderBy: { number: 'asc' }
                     },
                     client: { select: { name: true } },
-                    business: { select: { enableLateFee: true, lateFeePercentage: true } }
+                    business: { select: { enableLateFee: true, lateFeePercentage: true, copExchangeRate: true } }
                 }
             });
 
@@ -1660,8 +1671,11 @@ export class SaleService {
             const formattedPayments = payments.map(p => {
                 const rate = Number(p.exchangeRate.rate);
                 const originalAmount = Number(p.amount);
+                const copRate = Number((sale.business as any)?.copExchangeRate || 4000);
                 const usdEquivalent = p.paymentMethod.currency === 'VES'
                     ? originalAmount / rate
+                    : p.paymentMethod.currency === 'COP'
+                    ? originalAmount / copRate
                     : originalAmount;
 
                                 return {
@@ -2282,20 +2296,36 @@ export class SaleService {
             const rate = rawRate ? new Decimal(rawRate) : new Decimal(1);
 
             if (oldMethod.currency !== newMethod.currency) {
-                if (rate.lte(0)) {
-                    return {
-                        status: 400,
-                        message: 'Tasa de cambio inválida para la conversión multidivisa.',
-                        data: null
-                    };
+                const biz = await prisma.business.findUnique({ where: { id: businessId }, select: { copExchangeRate: true } });
+                const copRate = (biz as any)?.copExchangeRate ? new Decimal((biz as any).copExchangeRate) : new Decimal(4000);
+
+                // Paso 1: Convertir monto anterior a base USD
+                let baseUsd = new Decimal(targetPayment.amount);
+                if (oldMethod.currency === 'VES') {
+                    if (rate.lte(0)) {
+                        return { status: 400, message: 'Tasa de cambio VES inválida.', data: null };
+                    }
+                    baseUsd = baseUsd.div(rate);
+                } else if (oldMethod.currency === 'COP') {
+                    if (copRate.lte(0)) {
+                        return { status: 400, message: 'Tasa de cambio COP inválida.', data: null };
+                    }
+                    baseUsd = baseUsd.div(copRate);
                 }
 
-                if (oldMethod.currency === 'VES' && newMethod.currency === 'USD') {
-                    // De Bolívares a Dólares
-                    newAmount = newAmount.div(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-                } else if (oldMethod.currency === 'USD' && newMethod.currency === 'VES') {
-                    // De Dólares a Bolívares
-                    newAmount = newAmount.mul(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                // Paso 2: Convertir base USD a nueva moneda
+                if (newMethod.currency === 'USD') {
+                    newAmount = baseUsd.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                } else if (newMethod.currency === 'VES') {
+                    if (rate.lte(0)) {
+                        return { status: 400, message: 'Tasa de cambio VES inválida.', data: null };
+                    }
+                    newAmount = baseUsd.mul(rate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                } else if (newMethod.currency === 'COP') {
+                    if (copRate.lte(0)) {
+                        return { status: 400, message: 'Tasa de cambio COP inválida.', data: null };
+                    }
+                    newAmount = baseUsd.mul(copRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
                 }
             }
 

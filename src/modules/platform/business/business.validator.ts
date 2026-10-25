@@ -108,6 +108,15 @@ export class BusinessValidator {
       .isFloat({ min: 0.0001 }).withMessage('La tasa debe ser mayor a 0')
       .toFloat(),
 
+    body('enableCopCurrency')
+      .optional()
+      .isBoolean().withMessage('El campo enableCopCurrency debe ser booleano'),
+
+    body('copExchangeRate')
+      .optional()
+      .isFloat({ min: 0.0001 }).withMessage('La tasa de COP debe ser mayor a 0')
+      .toFloat(),
+
     // Validación cruzada: Si estrategia es MANUAL, manualRate es obligatorio
     body().custom((body) => {
       if (body.strategy === ExchangeRateStrategy.MANUAL) {
