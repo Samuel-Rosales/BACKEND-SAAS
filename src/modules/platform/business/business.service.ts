@@ -165,7 +165,7 @@ export class BusinessService {
       // Desactivación automática al vuelo: si alguna suscripción activa ya expiró, marcarla PAST_DUE
       const now = new Date();
       const expiredBizIds = businesses
-        .filter(b => b.subscription && b.subscription.status === 'ACTIVE' && new Date(b.subscription.endDate) < now)
+        .filter(b => !b.billingExempt && !b.isWarehouseHub && b.subscription && b.subscription.status === 'ACTIVE' && new Date(b.subscription.endDate) < now)
         .map(b => b.id);
 
       if (expiredBizIds.length > 0) {
@@ -185,8 +185,16 @@ export class BusinessService {
         const hashId = new HashId();
         const hashedId = hashId.encode(business.id);
         // console.log(`Negocio ID: ${business.id} => Hashed ID: ${hashedId}`);
+        const isExempt = Boolean(business.billingExempt || business.isWarehouseHub);
+        const subscription = isExempt
+          ? (business.subscription && business.subscription.status === 'ACTIVE'
+              ? business.subscription
+              : { status: 'ACTIVE', planType: 'ENTERPRISE', endDate: new Date('2099-12-31T23:59:59.000Z') })
+          : business.subscription;
+
         return {
           ...business,
+          subscription,
           memberRole: memberRole,
           id: hashedId
         };
@@ -243,13 +251,21 @@ export class BusinessService {
               };
           }
 
-          // Desactivación al vuelo si la fecha ya expiró
-          if (business.subscription && business.subscription.status === 'ACTIVE' && new Date(business.subscription.endDate) < new Date()) {
+          // Desactivación al vuelo si la fecha ya expiró (salvo si es exento o warehouse hub)
+          const isBillingExempt = Boolean(business.billingExempt || business.isWarehouseHub);
+          if (!isBillingExempt && business.subscription && business.subscription.status === 'ACTIVE' && new Date(business.subscription.endDate) < new Date()) {
               await prisma.subscription.update({
                   where: { businessId: business.id },
                   data: { status: 'PAST_DUE' }
               });
               business.subscription.status = 'PAST_DUE';
+          }
+          if (isBillingExempt && (!business.subscription || business.subscription.status !== 'ACTIVE')) {
+              (business as any).subscription = {
+                  status: 'ACTIVE',
+                  planType: 'ENTERPRISE',
+                  endDate: new Date('2099-12-31T23:59:59.000Z')
+              };
           }
 
           // 2. Resolvemos la tasa REAL usando tu función inteligente
