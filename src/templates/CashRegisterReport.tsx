@@ -37,6 +37,7 @@ type SellerReport = {
     id: string;
     name: string;
     ci: string;
+    enableCopCurrency?: boolean;
     totalSales: number;
     totalUSD: number;
     totalVES: number;
@@ -54,9 +55,11 @@ type SellerReport = {
 export interface CashRegisterReportProps {
     businessName: string;
     logoUrl?: string | null;
+    enableCopCurrency?: boolean;
     dateRange: { from: string; to: string };
     sellerFilter?: string | null;
     overview: {
+        enableCopCurrency?: boolean;
         openRegisters: number;
         closedRegisters: number;
         totalUSD: number;
@@ -491,17 +494,19 @@ const statusLabel = (s: string) => s === 'OPEN' ? 'Abierta' : 'Cerrada';
 const CashRegisterReport = ({
     businessName,
     logoUrl,
+    enableCopCurrency,
     dateRange,
     sellerFilter,
     overview,
     sellers,
 }: CashRegisterReportProps) => {
+    const showCOP = Boolean(enableCopCurrency ?? overview.enableCopCurrency);
     const methodsUSD = overview.methodsUSD ?? overview.methods.filter(m => !m.isCashea && (m.currency === 'USD' || (m.amountUSD > 0 && !(m.amountVES && m.amountVES > 0) && !(m.amountCOP && m.amountCOP > 0))));
     const methodsVES = overview.methodsVES ?? overview.methods.filter(m => !m.isCashea && (m.currency === 'VES' || (m.amountVES && m.amountVES > 0)));
-    const methodsCOP = overview.methodsCOP ?? overview.methods.filter(m => !m.isCashea && (m.currency === 'COP' || (m.amountCOP && m.amountCOP > 0)));
+    const methodsCOP = showCOP ? (overview.methodsCOP ?? overview.methods.filter(m => !m.isCashea && (m.currency === 'COP' || (m.amountCOP && m.amountCOP > 0)))) : [];
     const methodsCashea = overview.methodsCashea ?? overview.methods.filter(m => m.isCashea);
     const totalCasheaUSD = overview.totalCasheaUSD ?? methodsCashea.reduce((acc, m) => acc + (m.amountUSD || 0), 0);
-    const totalCOP = overview.totalCOP ?? methodsCOP.reduce((acc, m) => acc + (m.amountCOP || 0), 0);
+    const totalCOP = showCOP ? (overview.totalCOP ?? methodsCOP.reduce((acc, m) => acc + (m.amountCOP || 0), 0)) : 0;
 
     return (
         <Document>
@@ -573,10 +578,12 @@ const CashRegisterReport = ({
                             <Text style={styles.summaryLabel}>Total recaudado en Bolívares (Bs.)</Text>
                             <Text style={styles.summaryValue}>{ves(overview.totalVES)}</Text>
                         </View>
-                        <View style={styles.summaryRow}>
-                            <Text style={styles.summaryLabel}>Total recaudado en Pesos (COP)</Text>
-                            <Text style={styles.summaryValue}>{cop(totalCOP)}</Text>
-                        </View>
+                        {showCOP && (
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryLabel}>Total recaudado en Pesos (COP)</Text>
+                                <Text style={styles.summaryValue}>{cop(totalCOP)}</Text>
+                            </View>
+                        )}
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Efectivo inicial (USD)</Text>
                             <Text style={styles.summaryValue}>{usd(overview.initialCashUSD)}</Text>
@@ -663,41 +670,48 @@ const CashRegisterReport = ({
                     </View>
                 </View>
 
-                {/* II.C: Desglose en Pesos Colombianos (COP) */}
-                <Text style={styles.subSectionTitle}>3. Desglose de Ingresos en Pesos Colombianos (COP — Efectivo / Transferencias)</Text>
-                <View style={styles.table}>
-                    <View style={styles.tableHead}>
-                        <Text style={[styles.tableHeadCell, styles.colPayMethod]}>Método de Pago en Pesos</Text>
-                        <Text style={[styles.tableHeadCell, styles.colPayTx]}>Transacciones</Text>
-                        <Text style={[styles.tableHeadCell, styles.colPayAmt]}>Monto Recibido (COP)</Text>
-                        <Text style={[styles.tableHeadCell, styles.colPayPct]}>% del Total COP</Text>
-                    </View>
-                    {methodsCOP.length === 0 ? (
-                        <View style={styles.tableRow}>
-                            <Text style={[styles.tableCellLast, { flex: 1, color: C.muted }]}>Sin cobros registrados en métodos en Pesos Colombianos (COP) en este período.</Text>
-                        </View>
-                    ) : (
-                        methodsCOP.map((m, i) => (
-                            <View style={i % 2 === 0 ? styles.tableRow : styles.tableRowAlt} key={i}>
-                                <Text style={[styles.tableCell, styles.colPayMethod]}>{m.method}</Text>
-                                <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
-                                <Text style={[styles.tableCell, styles.colPayAmt, { fontFamily: 'Helvetica-Bold', color: '#2563eb' }]}>{cop(m.amountCOP ?? 0)}</Text>
-                                <Text style={[styles.tableCellLast, styles.colPayPct]}>{(m.percentage ?? 0).toFixed(2)}%</Text>
+                {showCOP ? (
+                    <>
+                        {/* II.C: Desglose en Pesos Colombianos (COP) */}
+                        <Text style={styles.subSectionTitle}>3. Desglose de Ingresos en Pesos Colombianos (COP — Efectivo / Transferencias)</Text>
+                        <View style={styles.table}>
+                            <View style={styles.tableHead}>
+                                <Text style={[styles.tableHeadCell, styles.colPayMethod]}>Método de Pago en Pesos</Text>
+                                <Text style={[styles.tableHeadCell, styles.colPayTx]}>Transacciones</Text>
+                                <Text style={[styles.tableHeadCell, styles.colPayAmt]}>Monto Recibido (COP)</Text>
+                                <Text style={[styles.tableHeadCell, styles.colPayPct]}>% del Total COP</Text>
                             </View>
-                        ))
-                    )}
-                    <View style={styles.tableTotalRow}>
-                        <Text style={[styles.tableTotalCell, styles.colPayMethod]}>TOTAL RECAUDADO EN PESOS (COP)</Text>
-                        <Text style={[styles.tableTotalCell, styles.colPayTx]}>
-                            {methodsCOP.reduce((a, m) => a + m.transactions, 0)}
-                        </Text>
-                        <Text style={[styles.tableTotalCell, styles.colPayAmt, { color: '#2563eb' }]}>{cop(totalCOP)}</Text>
-                        <Text style={[styles.tableTotalCellLast, styles.colPayPct]}>100.00%</Text>
-                    </View>
-                </View>
+                            {methodsCOP.length === 0 ? (
+                                <View style={styles.tableRow}>
+                                    <Text style={[styles.tableCellLast, { flex: 1, color: C.muted }]}>Sin cobros registrados en métodos en Pesos Colombianos (COP) en este período.</Text>
+                                </View>
+                            ) : (
+                                methodsCOP.map((m, i) => (
+                                    <View style={i % 2 === 0 ? styles.tableRow : styles.tableRowAlt} key={i}>
+                                        <Text style={[styles.tableCell, styles.colPayMethod]}>{m.method}</Text>
+                                        <Text style={[styles.tableCell, styles.colPayTx]}>{m.transactions}</Text>
+                                        <Text style={[styles.tableCell, styles.colPayAmt, { fontFamily: 'Helvetica-Bold', color: '#2563eb' }]}>{cop(m.amountCOP ?? 0)}</Text>
+                                        <Text style={[styles.tableCellLast, styles.colPayPct]}>{(m.percentage ?? 0).toFixed(2)}%</Text>
+                                    </View>
+                                ))
+                            )}
+                            <View style={styles.tableTotalRow}>
+                                <Text style={[styles.tableTotalCell, styles.colPayMethod]}>TOTAL RECAUDADO EN PESOS (COP)</Text>
+                                <Text style={[styles.tableTotalCell, styles.colPayTx]}>
+                                    {methodsCOP.reduce((a, m) => a + m.transactions, 0)}
+                                </Text>
+                                <Text style={[styles.tableTotalCell, styles.colPayAmt, { color: '#2563eb' }]}>{cop(totalCOP)}</Text>
+                                <Text style={[styles.tableTotalCellLast, styles.colPayPct]}>100.00%</Text>
+                            </View>
+                        </View>
 
-                {/* II.D: Sección Aparte — Financiamiento de Cashea */}
-                <Text style={[styles.subSectionTitle, { color: C.indigo }]}>4. Sección Aparte: Financiamiento de Cashea (No entra en Efectivo USD, Bolívares ni Pesos)</Text>
+                        {/* II.D: Sección Aparte — Financiamiento de Cashea */}
+                        <Text style={[styles.subSectionTitle, { color: C.indigo }]}>4. Sección Aparte: Financiamiento de Cashea (No entra en Efectivo USD, Bolívares ni Pesos)</Text>
+                    </>
+                ) : (
+                    /* II.C Clásico: Sección Aparte — Financiamiento de Cashea */
+                    <Text style={[styles.subSectionTitle, { color: C.indigo }]}>3. Sección Aparte: Financiamiento de Cashea (No entra en Efectivo USD ni en Bolívares)</Text>
+                )}
                 <View style={[styles.table, { borderColor: C.indigoBorder }]}>
                     <View style={styles.tableHeadIndigo}>
                         <Text style={[styles.tableHeadCell, styles.colPayMethod]}>Concepto de Financiamiento</Text>
@@ -737,8 +751,8 @@ const CashRegisterReport = ({
                 {sellers.map((seller) => {
                     const sUSD = seller.methodsUSD ?? [];
                     const sVES = seller.methodsVES ?? [];
-                    const sCOP = seller.methodsCOP ?? [];
-                    const sTotalCOP = seller.totalCOP ?? sCOP.reduce((a, m) => a + (m.amountCOP || 0), 0);
+                    const sCOP = showCOP ? (seller.methodsCOP ?? []) : [];
+                    const sTotalCOP = showCOP ? (seller.totalCOP ?? sCOP.reduce((a, m) => a + (m.amountCOP || 0), 0)) : 0;
                     const sCashea = seller.methodsCashea ?? [];
                     const sTotalCashea = seller.totalCasheaUSD ?? sCashea.reduce((a, m) => a + (m.amountUSD || 0), 0);
 
@@ -752,8 +766,11 @@ const CashRegisterReport = ({
                                 </View>
                                 <View style={{ alignItems: 'flex-end' }}>
                                     <Text style={styles.sellerTotalText}>
-                                        USD: {usd(seller.totalUSD)} | Bs: {ves(seller.totalVES)} | COP: {cop(sTotalCOP)}
-                                        {sTotalCashea > 0 ? ` | Cashea: ${usd(sTotalCashea)}` : ''}
+                                        {showCOP ? (
+                                            `USD: ${usd(seller.totalUSD)} | Bs: ${ves(seller.totalVES)} | COP: ${cop(sTotalCOP)}${sTotalCashea > 0 ? ` | Cashea: ${usd(sTotalCashea)}` : ''}`
+                                        ) : (
+                                            `Dólares: ${usd(seller.totalUSD)}  |  Bolívares: ${ves(seller.totalVES)}${sTotalCashea > 0 ? `  |  Cashea: ${usd(sTotalCashea)}` : ''}`
+                                        )}
                                     </Text>
                                     <Text style={styles.sellerSalesText}>
                                         {seller.totalSales} ventas · {seller.articlesCount} artículos vendidos
@@ -761,7 +778,7 @@ const CashRegisterReport = ({
                                 </View>
                             </View>
 
-                            {/* 3-Column Breakdown: 1) Cómo llegamos a los USD, 2) Cómo llegamos a los Bs., 3) Financiamiento de Cashea */}
+                            {/* Column Breakdown */}
                             <View style={styles.sellerBreakdownGrid}>
                                 {/* Col 1: Dólares (USD) */}
                                 <View style={styles.sellerBreakdownCol}>
@@ -801,26 +818,28 @@ const CashRegisterReport = ({
                                     </View>
                                 </View>
 
-                                {/* Col 3: Pesos Colombianos (COP) */}
-                                <View style={styles.sellerBreakdownCol}>
-                                    <Text style={styles.sellerBreakdownTitleCOP}>¿Cómo llegamos a los Pesos (COP)?</Text>
-                                    {sCOP.length === 0 ? (
-                                        <Text style={styles.sellerMethodName}>Sin pagos en COP</Text>
-                                    ) : (
-                                        sCOP.map((m, idx) => (
-                                            <View style={styles.sellerMethodLine} key={idx}>
-                                                <Text style={styles.sellerMethodName}>• {m.method} ({m.transactions})</Text>
-                                                <Text style={styles.sellerMethodVal}>{cop(m.amountCOP ?? 0)}</Text>
-                                            </View>
-                                        ))
-                                    )}
-                                    <View style={styles.sellerSubtotalLine}>
-                                        <Text style={styles.sellerSubtotalLabel}>Total en COP:</Text>
-                                        <Text style={styles.sellerSubtotalValueCOP}>{cop(sTotalCOP)}</Text>
+                                {showCOP && (
+                                    /* Col 3: Pesos Colombianos (COP) */
+                                    <View style={styles.sellerBreakdownCol}>
+                                        <Text style={styles.sellerBreakdownTitleCOP}>¿Cómo llegamos a los Pesos (COP)?</Text>
+                                        {sCOP.length === 0 ? (
+                                            <Text style={styles.sellerMethodName}>Sin pagos en COP</Text>
+                                        ) : (
+                                            sCOP.map((m, idx) => (
+                                                <View style={styles.sellerMethodLine} key={idx}>
+                                                    <Text style={styles.sellerMethodName}>• {m.method} ({m.transactions})</Text>
+                                                    <Text style={styles.sellerMethodVal}>{cop(m.amountCOP ?? 0)}</Text>
+                                                </View>
+                                            ))
+                                        )}
+                                        <View style={styles.sellerSubtotalLine}>
+                                            <Text style={styles.sellerSubtotalLabel}>Total en COP:</Text>
+                                            <Text style={styles.sellerSubtotalValueCOP}>{cop(sTotalCOP)}</Text>
+                                        </View>
                                     </View>
-                                </View>
+                                )}
 
-                                {/* Col 4: Financiamiento de Cashea (Aparte) */}
+                                {/* Cashea (Aparte) */}
                                 <View style={styles.sellerBreakdownColLast}>
                                     <Text style={styles.sellerBreakdownTitleCashea}>Sección Aparte: Cashea</Text>
                                     {sCashea.length === 0 ? (
@@ -840,7 +859,7 @@ const CashRegisterReport = ({
                                 </View>
                             </View>
 
-                            {/* Cash registers (turnos) */}
+                            {/* Cash registers table for this seller */}
                             {seller.registers.length > 0 && (
                                 <View style={[styles.table, { borderTopWidth: 0, marginBottom: 0 }]}>
                                     <View style={styles.tableHead}>
@@ -851,8 +870,14 @@ const CashRegisterReport = ({
                                         <Text style={[styles.tableHeadCell, styles.colRegSales, { textAlign: 'right' }]}>Ventas</Text>
                                         <Text style={[styles.tableHeadCell, styles.colRegInit, { textAlign: 'right' }]}>Inicial</Text>
                                         <Text style={[styles.tableHeadCell, styles.colRegUSD, { textAlign: 'right' }]}>Cobrado (USD)</Text>
-                                        <Text style={[styles.tableHeadCell, styles.colRegVES, { textAlign: 'right' }]}>Cobrado (Bs.)</Text>
-                                        <Text style={[styles.tableHeadCell, styles.colRegCOP, { textAlign: 'right' }]}>Cobrado (COP)</Text>
+                                        {showCOP ? (
+                                            <>
+                                                <Text style={[styles.tableHeadCell, styles.colRegVES, { textAlign: 'right' }]}>Cobrado (Bs.)</Text>
+                                                <Text style={[styles.tableHeadCell, styles.colRegCOP, { textAlign: 'right' }]}>Cobrado (COP)</Text>
+                                            </>
+                                        ) : (
+                                            <Text style={[styles.tableHeadCell, styles.colRegVES, { textAlign: 'right' }]}>Cobrado (Bs.)</Text>
+                                        )}
                                     </View>
 
                                     {seller.registers.map((reg, ri) => (
@@ -869,12 +894,20 @@ const CashRegisterReport = ({
                                             <Text style={[styles.tableCell, styles.colRegUSD, { color: C.green, fontFamily: 'Helvetica-Bold' }]}>
                                                 {usd(reg.collectedUSD ?? 0)}
                                             </Text>
-                                            <Text style={[styles.tableCell, styles.colRegVES, { color: C.amber, fontFamily: 'Helvetica-Bold' }]}>
-                                                {ves(reg.collectedVES ?? 0)}
-                                            </Text>
-                                            <Text style={[styles.tableCellLast, styles.colRegCOP, { color: '#2563eb', fontFamily: 'Helvetica-Bold' }]}>
-                                                {cop(reg.collectedCOP ?? 0)}
-                                            </Text>
+                                            {showCOP ? (
+                                                <>
+                                                    <Text style={[styles.tableCell, styles.colRegVES, { color: C.amber, fontFamily: 'Helvetica-Bold' }]}>
+                                                        {ves(reg.collectedVES ?? 0)}
+                                                    </Text>
+                                                    <Text style={[styles.tableCellLast, styles.colRegCOP, { color: '#2563eb', fontFamily: 'Helvetica-Bold' }]}>
+                                                        {cop(reg.collectedCOP ?? 0)}
+                                                    </Text>
+                                                </>
+                                            ) : (
+                                                <Text style={[styles.tableCellLast, styles.colRegVES, { color: C.amber, fontFamily: 'Helvetica-Bold' }]}>
+                                                    {ves(reg.collectedVES ?? 0)}
+                                                </Text>
+                                            )}
                                         </View>
                                     ))}
                                 </View>

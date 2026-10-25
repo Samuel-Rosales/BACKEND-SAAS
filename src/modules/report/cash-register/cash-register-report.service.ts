@@ -96,6 +96,12 @@ export class CashRegisterReportService {
         const sellerId = query.sellerId ? Number(query.sellerId) : undefined;
 
         try {
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { enableCopCurrency: true }
+            });
+            const enableCopCurrency = Boolean(business?.enableCopCurrency);
+
             // Find all cash registers active or with sales in the date range
             const registers = await prisma.cashRegister.findMany({
                 where: {
@@ -166,6 +172,7 @@ export class CashRegisterReportService {
                     status: 200,
                     message: 'Métricas de caja calculadas exitosamente (sin datos)',
                     data: {
+                        enableCopCurrency,
                         openRegisters: 0,
                         closedRegisters: 0,
                         totalUSD: 0,
@@ -374,25 +381,27 @@ export class CashRegisterReportService {
                 })
                 .sort((a, b) => b.amountVES - a.amountVES);
 
-            const methodsCOP = allStats
-                .filter(m => !m.isCashea && m.currency === 'COP')
-                .map(m => {
-                    const val = (m.amountCOP || new Decimal(0)).toNumber();
-                    const pct = totalCOPNum > 0 ? (val / totalCOPNum) * 100 : 0;
-                    return {
-                        method: m.method,
-                        type: m.type,
-                        currency: 'COP',
-                        isCashea: false,
-                        transactions: m.transactions,
-                        amountUSD: 0,
-                        amountVES: 0,
-                        amountCOP: Number(val.toFixed(2)),
-                        percentage: Number(pct.toFixed(2)),
-                        color: 'bg-teal-500'
-                    };
-                })
-                .sort((a, b) => (b.amountCOP || 0) - (a.amountCOP || 0));
+            const methodsCOP = enableCopCurrency
+                ? allStats
+                    .filter(m => !m.isCashea && m.currency === 'COP')
+                    .map(m => {
+                        const val = (m.amountCOP || new Decimal(0)).toNumber();
+                        const pct = totalCOPNum > 0 ? (val / totalCOPNum) * 100 : 0;
+                        return {
+                            method: m.method,
+                            type: m.type,
+                            currency: 'COP',
+                            isCashea: false,
+                            transactions: m.transactions,
+                            amountUSD: 0,
+                            amountVES: 0,
+                            amountCOP: Number(val.toFixed(2)),
+                            percentage: Number(pct.toFixed(2)),
+                            color: 'bg-teal-500'
+                        };
+                    })
+                    .sort((a, b) => (b.amountCOP || 0) - (a.amountCOP || 0))
+                : [];
 
             const methodsCashea = allStats
                 .filter(m => m.isCashea)
@@ -413,7 +422,9 @@ export class CashRegisterReportService {
                     };
                 });
 
-            const methodsArray = [...methodsUSD, ...methodsVES, ...methodsCOP, ...methodsCashea];
+            const methodsArray = enableCopCurrency
+                ? [...methodsUSD, ...methodsVES, ...methodsCOP, ...methodsCashea]
+                : [...methodsUSD, ...methodsVES, ...methodsCashea];
 
             // Final Cash Estimado = Apertura + Ventas en Efectivo - Egresos en Efectivo
             const payoutsUSD = cashRefundsUSD;
@@ -423,11 +434,12 @@ export class CashRegisterReportService {
                 status: 200,
                 message: 'Métricas de caja calculadas exitosamente',
                 data: {
+                    enableCopCurrency,
                     openRegisters,
                     closedRegisters,
                     totalUSD: Number(totalUSD.toFixed(2)),
                     totalVES: Number(totalVES.toFixed(2)),
-                    totalCOP: Number(totalCOP.toFixed(2)),
+                    totalCOP: enableCopCurrency ? Number(totalCOP.toFixed(2)) : 0,
                     totalCasheaUSD: Number(totalCasheaUSD.toFixed(2)),
                     casheaTransactions,
                     salesCount,
@@ -484,6 +496,12 @@ export class CashRegisterReportService {
         const sellerId = query.sellerId ? Number(query.sellerId) : undefined;
 
         try {
+            const business = await prisma.business.findUnique({
+                where: { id: businessId },
+                select: { enableCopCurrency: true }
+            });
+            const enableCopCurrency = Boolean(business?.enableCopCurrency);
+
             // 1. Get all members for this business
             const members = await prisma.businessMember.findMany({
                 where: {
@@ -499,6 +517,7 @@ export class CashRegisterReportService {
                 return {
                     status: 200,
                     message: 'Reporte de vendedores calculado exitosamente (sin miembros)',
+                    enableCopCurrency,
                     data: []
                 };
             }
@@ -800,15 +819,16 @@ export class CashRegisterReportService {
                     id: String(member.id),
                     name: member.user.name,
                     ci: member.user.ci,
+                    enableCopCurrency,
                     totalSales: memberSales.length,
                     totalUSD: Number(memberTotalUSD.toFixed(2)),
                     totalVES: Number(memberTotalVES.toFixed(2)),
-                    totalCOP: Number(memberTotalCOP.toFixed(2)),
+                    totalCOP: enableCopCurrency ? Number(memberTotalCOP.toFixed(2)) : 0,
                     totalCasheaUSD: Number(memberTotalCasheaUSD.toFixed(2)),
                     casheaTransactions: memberCasheaTransactions,
                     methodsUSD: sellerMethodsUSD,
                     methodsVES: sellerMethodsVES,
-                    methodsCOP: sellerMethodsCOP,
+                    methodsCOP: enableCopCurrency ? sellerMethodsCOP : [],
                     methodsCashea: sellerMethodsCashea,
                     articlesCount,
                     cashRegistersCount: {
@@ -828,6 +848,7 @@ export class CashRegisterReportService {
             return {
                 status: 200,
                 message: 'Reporte de vendedores obtenido exitosamente',
+                enableCopCurrency,
                 data: activeSellersReport
             };
 
@@ -846,7 +867,7 @@ export class CashRegisterReportService {
             // Fetch business info for the PDF header
             const business = await prisma.business.findUnique({
                 where: { id: businessId },
-                select: { name: true, logoUrl: true }
+                select: { name: true, logoUrl: true, enableCopCurrency: true }
             });
 
             if (!business) {
@@ -901,6 +922,7 @@ export class CashRegisterReportService {
                 data: {
                     businessName: business.name,
                     logoUrl: business.logoUrl ?? null,
+                    enableCopCurrency: Boolean(business.enableCopCurrency),
                     dateRange: { from: fromLabel, to: toLabel },
                     sellerFilter: sellerFilterName,
                     overview: overviewResult.data,
