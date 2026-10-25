@@ -1,6 +1,6 @@
 export const users = [
-  { ci: "31350493", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Samuel Rosales" },
-  { ci: "31366298", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Edgar Briceño" },
+  { ci: "31350493", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Soporte Técnico" },
+  { ci: "31366298", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Operador Principal" },
   { ci: "11223344", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Fabricio" },
   { ci: "22334455", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Ana Fernández" },
   { ci: "33445566", password: "$2b$10$C23i/W3MOZHHicsoeBgWAOxU2qYJO8O8mMVd3vB.210/r1S00C.xu", name: "Carlos Mendoza" },
