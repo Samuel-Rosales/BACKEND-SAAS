@@ -365,7 +365,19 @@ export class InterBranchTransferService {
             const saleIds = transfers.map(t => t.saleId).filter(Boolean) as number[];
             const sales = saleIds.length > 0 ? await prisma.sale.findMany({
                 where: { id: { in: saleIds } },
-                select: { id: true, conditions: true, paymentStatus: true, paymentDueDate: true, totalAmount: true }
+                select: {
+                    id: true,
+                    receiptNumber: true,
+                    conditions: true,
+                    paymentStatus: true,
+                    paymentDueDate: true,
+                    totalAmount: true,
+                    subTotal: true,
+                    remainingBalance: true,
+                    creditNotes: {
+                        include: { items: { include: { product: true } } }
+                    }
+                }
             }) : [];
             const saleMap = new Map(sales.map(s => [s.id, s]));
 
@@ -662,21 +674,6 @@ export class InterBranchTransferService {
                                 status: InstallmentStatus.PENDING
                             }
                         });
-
-                        // Si hubo discrepancia en la recepción y era a crédito, ajustar el saldo de la venta en el Depósito Central
-                        if (hasDiscrepancy && originSale) {
-                            await tx.sale.update({
-                                where: { id: originSale.id },
-                                data: {
-                                    remainingBalance: totalPurchaseCost,
-                                    totalAmount: totalPurchaseCost
-                                }
-                            });
-                            await tx.saleInstallment.updateMany({
-                                where: { saleId: originSale.id, number: 1 },
-                                data: { amount: totalPurchaseCost }
-                            });
-                        }
                     } else {
                         // Si es de Contado: Registrar pago de la compra
                         const destPaymentMethod = await tx.paymentMethod.findFirst({ where: { isActive: true } });
@@ -691,6 +688,117 @@ export class InterBranchTransferService {
                                     paymentDate: new Date()
                                 }
                             });
+                        }
+                    }
+
+                    // -------------------------------------------------------------
+                    // ACTUALIZACIÓN DE FACTURA Y GENERACIÓN DE NOTA DE CRÉDITO SI HUBO DISCREPANCIA
+                    // -------------------------------------------------------------
+                    if (hasDiscrepancy && originSale) {
+                        // 1. Actualizar los renglones de la Venta (SaleItem) para que reflejen la cantidad aceptada
+                        for (const itemInput of data.items) {
+                            const origItem = transfer.items.find((i) => i.id === itemInput.itemId);
+                            if (!origItem) continue;
+                            const qtyRec = new Decimal(itemInput.quantityReceived || 0).abs();
+                            const saleItem = await tx.saleItem.findFirst({
+                                where: { saleId: originSale.id, productId: origItem.productId }
+                            });
+                            if (saleItem) {
+                                const unitPrice = new Decimal(saleItem.unitPrice);
+                                await tx.saleItem.update({
+                                    where: { id: saleItem.id },
+                                    data: {
+                                        quantity: qtyRec,
+                                        subTotal: unitPrice.mul(qtyRec)
+                                    }
+                                });
+                            }
+                        }
+
+                        // 2. Actualizar cabecera de la Venta en el Depósito Central
+                        await tx.sale.update({
+                            where: { id: originSale.id },
+                            data: {
+                                subTotal: totalPurchaseCost,
+                                totalAmount: totalPurchaseCost,
+                                remainingBalance: isCredit ? totalPurchaseCost : new Decimal(0)
+                            }
+                        });
+
+                        if (isCredit) {
+                            // Actualizar cuota de Cuentas por Cobrar
+                            await tx.saleInstallment.updateMany({
+                                where: { saleId: originSale.id, number: 1 },
+                                data: { amount: totalPurchaseCost }
+                            });
+
+                            // Ajustar deuda acumulada del cliente (sucursal)
+                            const debtAdjustment = new Decimal(originSale.totalAmount).sub(totalPurchaseCost);
+                            if (debtAdjustment.gt(0)) {
+                                await tx.client.update({
+                                    where: { id: originSale.clientId },
+                                    data: { currentDebt: { decrement: debtAdjustment } }
+                                });
+                            }
+                        } else {
+                            // Si fue Contado: Ajustar monto del pago registrado
+                            await tx.salePayment.updateMany({
+                                where: { saleId: originSale.id },
+                                data: { amount: totalPurchaseCost }
+                            });
+                        }
+
+                        // 3. Generar Nota de Crédito Oficial por los artículos dañados/faltantes
+                        const discrepancyItems = data.items.filter((i) =>
+                            new Decimal(i.quantityDamaged || 0).gt(0) || new Decimal(i.quantityMissing || 0).gt(0)
+                        );
+                        if (discrepancyItems.length > 0) {
+                            const nextCnNumber = (await tx.creditNote.count({ where: { businessId: originSale.businessId } })) + 1;
+                            const cnItemsData = [];
+                            let totalCnAmount = new Decimal(0);
+
+                            for (const dItem of discrepancyItems) {
+                                const orig = transfer.items.find((i) => i.id === dItem.itemId);
+                                if (!orig) continue;
+                                const damQty = new Decimal(dItem.quantityDamaged || 0).abs();
+                                const misQty = new Decimal(dItem.quantityMissing || 0).abs();
+                                const retQty = damQty.add(misQty);
+                                const uCost = new Decimal(orig.unitCost);
+                                const lineSubTot = uCost.mul(retQty);
+                                totalCnAmount = totalCnAmount.add(lineSubTot);
+
+                                cnItemsData.push({
+                                    productId: orig.productId,
+                                    quantity: retQty,
+                                    unitPrice: uCost,
+                                    subTotal: lineSubTot,
+                                    returnToStock: false // Averiado o extraviado: no entra a inventario activo
+                                });
+                            }
+
+                            if (totalCnAmount.gt(0)) {
+                                const reasonParts = discrepancyItems.map((d) => {
+                                    const orig = transfer.items.find((i) => i.id === d.itemId);
+                                    const pName = orig?.productName || 'Producto';
+                                    const dQty = Number(d.quantityDamaged || 0);
+                                    const mQty = Number(d.quantityMissing || 0);
+                                    const rText = d.damagedReason ? ` (Motivo: "${d.damagedReason}")` : '';
+                                    return `${pName}: ${dQty > 0 ? `${dQty} averiado(s)` : ''}${dQty > 0 && mQty > 0 ? ', ' : ''}${mQty > 0 ? `${mQty} faltante(s)` : ''}${rText}`;
+                                }).join(' | ');
+
+                                await tx.creditNote.create({
+                                    data: {
+                                        businessId: originSale.businessId,
+                                        saleId: originSale.id,
+                                        number: nextCnNumber,
+                                        reason: `Devolución por avería/discrepancia en recepción de despacho ${transfer.transferNumber}: ${reasonParts}`,
+                                        totalAmount: totalCnAmount,
+                                        items: {
+                                            create: cnItemsData
+                                        }
+                                    }
+                                });
+                            }
                         }
                     }
                 }
