@@ -192,6 +192,7 @@ export class CashRegisterService {
             // Calcular totales por moneda
             let totalUSD = 0;
             let totalVES = 0;
+            let totalCOP = 0;
             let totalPayments = 0;
 
             dayRegisters.forEach(register => {
@@ -202,10 +203,13 @@ export class CashRegisterService {
 
                 // Sumar por moneda
                 register.systemSummary?.forEach(item => {
-                    if (item.currency === 'USD') {
+                    const c = (item.currency || '').toUpperCase();
+                    if (c === 'USD') {
                         totalUSD += Number(item.total || 0);
-                    } else if (item.currency === 'VES') {
+                    } else if (c === 'VES') {
                         totalVES += Number(item.total || 0);
+                    } else if (c === 'COP') {
+                        totalCOP += Number(item.total || 0);
                     }
                 });
             });
@@ -218,6 +222,7 @@ export class CashRegisterService {
                     dailyTotals: {
                         totalUSD,
                         totalVES,
+                        totalCOP,
                         totalPayments,
                         registersCount: dayRegisters.length
                     }
@@ -299,18 +304,22 @@ export class CashRegisterService {
             // === CALCULO DE CONCILIACIÓN DUAL (FISCAL SENIAT vs NOTA DE ENTREGA) ===
             let fiscalTotalUSD = 0;
             let fiscalTotalVES = 0;
+            let fiscalTotalCOP = 0;
             let nonFiscalTotalUSD = 0;
             let nonFiscalTotalVES = 0;
+            let nonFiscalTotalCOP = 0;
 
             transactions.forEach(t => {
                 const isFiscal = (t.sale as any)?.fiscalStatus === 'PRINTED';
                 const amt = Number(t.amount || 0);
-                const curr = t.paymentMethod?.currency || 'USD';
+                const curr = (t.paymentMethod?.currency || 'USD').toUpperCase();
                 if (isFiscal) {
                     if (curr === 'USD') fiscalTotalUSD += amt;
+                    else if (curr === 'COP') fiscalTotalCOP += amt;
                     else fiscalTotalVES += amt;
                 } else {
                     if (curr === 'USD') nonFiscalTotalUSD += amt;
+                    else if (curr === 'COP') nonFiscalTotalCOP += amt;
                     else nonFiscalTotalVES += amt;
                 }
             });
@@ -319,12 +328,14 @@ export class CashRegisterService {
                 fiscal: {
                     totalUSD: fiscalTotalUSD,
                     totalVES: fiscalTotalVES,
+                    totalCOP: fiscalTotalCOP,
                     count: transactions.filter(t => (t.sale as any)?.fiscalStatus === 'PRINTED').length,
                     description: 'Ventas con Factura Fiscal SENIAT (Devtech DTP-80i / Cuadra con Reporte Z)'
                 },
                 nonFiscal: {
                     totalUSD: nonFiscalTotalUSD,
                     totalVES: nonFiscalTotalVES,
+                    totalCOP: nonFiscalTotalCOP,
                     count: transactions.filter(t => (t.sale as any)?.fiscalStatus !== 'PRINTED').length,
                     description: 'Ventas por Nota de Entrega (POS-80C / No entra en Reporte Z)'
                 }

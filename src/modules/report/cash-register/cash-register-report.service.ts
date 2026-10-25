@@ -170,6 +170,7 @@ export class CashRegisterReportService {
                         closedRegisters: 0,
                         totalUSD: 0,
                         totalVES: 0,
+                        totalCOP: 0,
                         totalCasheaUSD: 0,
                         casheaTransactions: 0,
                         salesCount: 0,
@@ -180,6 +181,7 @@ export class CashRegisterReportService {
                         methods: [],
                         methodsUSD: [],
                         methodsVES: [],
+                        methodsCOP: [],
                         methodsCashea: []
                     }
                 };
@@ -199,6 +201,7 @@ export class CashRegisterReportService {
 
             let totalUSD = new Decimal(0);
             let totalVES = new Decimal(0);
+            let totalCOP = new Decimal(0);
             let totalCasheaUSD = new Decimal(0);
             let casheaTransactions = 0;
 
@@ -214,17 +217,21 @@ export class CashRegisterReportService {
                 transactions: number;
                 amountUSD: Decimal;
                 amountVES: Decimal;
+                amountCOP: Decimal;
             }>();
 
-            // Process payments: strict separation between 1) USD (non-Cashea), 2) VES, and 3) Financiamiento de Cashea
+            // Process payments: strict separation between 1) USD (non-Cashea), 2) VES, 3) COP (Pesos), and 4) Financiamiento de Cashea
             for (const pay of payments) {
                 const rate = new Decimal(pay.exchangeRate.rate);
                 const amt = new Decimal(pay.amount);
                 const isCashea = isCasheaPaymentMethod(pay.paymentMethod.name);
-                const isUSD = pay.paymentMethod.currency === 'USD';
+                const currency = (pay.paymentMethod.currency || 'USD').toUpperCase();
+                const isUSD = currency === 'USD';
+                const isCOP = currency === 'COP';
 
                 let nativeUSD = new Decimal(0);
                 let nativeVES = new Decimal(0);
+                let nativeCOP = new Decimal(0);
 
                 if (isCashea) {
                     // Cashea financing is always tracked in its own separate bucket (in USD)
@@ -234,13 +241,16 @@ export class CashRegisterReportService {
                 } else if (isUSD) {
                     nativeUSD = amt;
                     totalUSD = totalUSD.add(nativeUSD);
+                } else if (isCOP) {
+                    nativeCOP = amt;
+                    totalCOP = totalCOP.add(nativeCOP);
                 } else {
                     nativeVES = amt;
                     totalVES = totalVES.add(nativeVES);
                 }
 
                 if (!isCashea && pay.paymentMethod.type === 'CASH') {
-                    const equivCashUSD = isUSD ? amt : amt.div(rate);
+                    const equivCashUSD = isUSD ? amt : rate.gt(0) ? amt.div(rate) : new Decimal(0);
                     cashPaymentsUSD = cashPaymentsUSD.add(equivCashUSD);
                 }
 
@@ -250,15 +260,17 @@ export class CashRegisterReportService {
                     existing.transactions += 1;
                     existing.amountUSD = existing.amountUSD.add(nativeUSD);
                     existing.amountVES = existing.amountVES.add(nativeVES);
+                    existing.amountCOP = (existing.amountCOP || new Decimal(0)).add(nativeCOP);
                 } else {
                     methodStats.set(pay.paymentMethodId, {
                         method: displayMethodName,
                         type: pay.paymentMethod.type,
-                        currency: isCashea ? 'USD' : pay.paymentMethod.currency,
+                        currency: isCashea ? 'USD' : (isCOP ? 'COP' : (isUSD ? 'USD' : 'VES')),
                         isCashea,
                         transactions: 1,
                         amountUSD: nativeUSD,
-                        amountVES: nativeVES
+                        amountVES: nativeVES,
+                        amountCOP: nativeCOP
                     });
                 }
             }
@@ -268,10 +280,13 @@ export class CashRegisterReportService {
                 const rate = new Decimal(ref.exchangeRate.rate);
                 const amt = new Decimal(ref.amount);
                 const isCashea = isCasheaPaymentMethod(ref.paymentMethod.name);
-                const isUSD = ref.paymentMethod.currency === 'USD';
+                const currency = (ref.paymentMethod.currency || 'USD').toUpperCase();
+                const isUSD = currency === 'USD';
+                const isCOP = currency === 'COP';
 
                 let nativeUSD = new Decimal(0);
                 let nativeVES = new Decimal(0);
+                let nativeCOP = new Decimal(0);
 
                 if (isCashea) {
                     nativeUSD = isUSD ? amt : amt.div(rate);
@@ -279,13 +294,16 @@ export class CashRegisterReportService {
                 } else if (isUSD) {
                     nativeUSD = amt;
                     totalUSD = totalUSD.sub(nativeUSD);
+                } else if (isCOP) {
+                    nativeCOP = amt;
+                    totalCOP = totalCOP.sub(nativeCOP);
                 } else {
                     nativeVES = amt;
                     totalVES = totalVES.sub(nativeVES);
                 }
 
                 if (!isCashea && ref.paymentMethod.type === 'CASH') {
-                    const equivCashUSD = isUSD ? amt : amt.div(rate);
+                    const equivCashUSD = isUSD ? amt : rate.gt(0) ? amt.div(rate) : new Decimal(0);
                     cashRefundsUSD = cashRefundsUSD.add(equivCashUSD);
                 }
 
@@ -294,21 +312,24 @@ export class CashRegisterReportService {
                 if (existing) {
                     existing.amountUSD = existing.amountUSD.sub(nativeUSD);
                     existing.amountVES = existing.amountVES.sub(nativeVES);
+                    existing.amountCOP = (existing.amountCOP || new Decimal(0)).sub(nativeCOP);
                 } else {
                     methodStats.set(ref.paymentMethodId, {
                         method: displayMethodName,
                         type: ref.paymentMethod.type,
-                        currency: isCashea ? 'USD' : ref.paymentMethod.currency,
+                        currency: isCashea ? 'USD' : (isCOP ? 'COP' : (isUSD ? 'USD' : 'VES')),
                         isCashea,
                         transactions: 1,
                         amountUSD: nativeUSD.negated(),
-                        amountVES: nativeVES.negated()
+                        amountVES: nativeVES.negated(),
+                        amountCOP: nativeCOP.negated()
                     });
                 }
             }
 
             const totalUSDNum = totalUSD.toNumber();
             const totalVESNum = totalVES.toNumber();
+            const totalCOPNum = totalCOP.toNumber();
             const totalCasheaUSDNum = totalCasheaUSD.toNumber();
 
             const allStats = Array.from(methodStats.values());
@@ -326,6 +347,7 @@ export class CashRegisterReportService {
                         transactions: m.transactions,
                         amountUSD: Number(val.toFixed(2)),
                         amountVES: 0,
+                        amountCOP: 0,
                         percentage: Number(pct.toFixed(2)),
                         color: getColorForPaymentType(m.type, false)
                     };
@@ -333,7 +355,7 @@ export class CashRegisterReportService {
                 .sort((a, b) => b.amountUSD - a.amountUSD);
 
             const methodsVES = allStats
-                .filter(m => !m.isCashea && m.currency !== 'USD')
+                .filter(m => !m.isCashea && m.currency === 'VES')
                 .map(m => {
                     const val = m.amountVES.toNumber();
                     const pct = totalVESNum > 0 ? (val / totalVESNum) * 100 : 0;
@@ -345,11 +367,32 @@ export class CashRegisterReportService {
                         transactions: m.transactions,
                         amountUSD: 0,
                         amountVES: Number(val.toFixed(2)),
+                        amountCOP: 0,
                         percentage: Number(pct.toFixed(2)),
                         color: getColorForPaymentType(m.type, false)
                     };
                 })
                 .sort((a, b) => b.amountVES - a.amountVES);
+
+            const methodsCOP = allStats
+                .filter(m => !m.isCashea && m.currency === 'COP')
+                .map(m => {
+                    const val = (m.amountCOP || new Decimal(0)).toNumber();
+                    const pct = totalCOPNum > 0 ? (val / totalCOPNum) * 100 : 0;
+                    return {
+                        method: m.method,
+                        type: m.type,
+                        currency: 'COP',
+                        isCashea: false,
+                        transactions: m.transactions,
+                        amountUSD: 0,
+                        amountVES: 0,
+                        amountCOP: Number(val.toFixed(2)),
+                        percentage: Number(pct.toFixed(2)),
+                        color: 'bg-teal-500'
+                    };
+                })
+                .sort((a, b) => (b.amountCOP || 0) - (a.amountCOP || 0));
 
             const methodsCashea = allStats
                 .filter(m => m.isCashea)
@@ -364,12 +407,13 @@ export class CashRegisterReportService {
                         transactions: m.transactions,
                         amountUSD: Number(val.toFixed(2)),
                         amountVES: 0,
+                        amountCOP: 0,
                         percentage: Number(pct.toFixed(2)),
                         color: getColorForPaymentType(m.type, true)
                     };
                 });
 
-            const methodsArray = [...methodsUSD, ...methodsVES, ...methodsCashea];
+            const methodsArray = [...methodsUSD, ...methodsVES, ...methodsCOP, ...methodsCashea];
 
             // Final Cash Estimado = Apertura + Ventas en Efectivo - Egresos en Efectivo
             const payoutsUSD = cashRefundsUSD;
@@ -383,6 +427,7 @@ export class CashRegisterReportService {
                     closedRegisters,
                     totalUSD: Number(totalUSD.toFixed(2)),
                     totalVES: Number(totalVES.toFixed(2)),
+                    totalCOP: Number(totalCOP.toFixed(2)),
                     totalCasheaUSD: Number(totalCasheaUSD.toFixed(2)),
                     casheaTransactions,
                     salesCount,
@@ -393,6 +438,7 @@ export class CashRegisterReportService {
                     methods: methodsArray,
                     methodsUSD,
                     methodsVES,
+                    methodsCOP,
                     methodsCashea
                 }
             };
@@ -528,9 +574,10 @@ export class CashRegisterReportService {
                 const memberSales = sales.filter(s => s.memberId === member.id);
                 const memberRegisters = registers.filter(r => r.memberId === member.id);
 
-                // Calculate totals collected from payments separated into USD (non-Cashea), VES, and Financiamiento de Cashea
+                // Calculate totals collected from payments separated into USD (non-Cashea), VES, COP (Pesos), and Financiamiento de Cashea
                 let memberTotalUSD = new Decimal(0);
                 let memberTotalVES = new Decimal(0);
+                let memberTotalCOP = new Decimal(0);
                 let memberTotalCasheaUSD = new Decimal(0);
                 let memberCasheaTransactions = 0;
                 let articlesCount = 0;
@@ -543,6 +590,7 @@ export class CashRegisterReportService {
                     transactions: number;
                     amountUSD: Decimal;
                     amountVES: Decimal;
+                    amountCOP: Decimal;
                 }>();
 
                 for (const sale of memberSales) {
@@ -550,10 +598,13 @@ export class CashRegisterReportService {
                         const rate = new Decimal(pay.exchangeRate.rate);
                         const amt = new Decimal(pay.amount);
                         const isCashea = isCasheaPaymentMethod(pay.paymentMethod.name);
-                        const isUSD = pay.paymentMethod.currency === 'USD';
+                        const currency = (pay.paymentMethod.currency || 'USD').toUpperCase();
+                        const isUSD = currency === 'USD';
+                        const isCOP = currency === 'COP';
 
                         let nativeUSD = new Decimal(0);
                         let nativeVES = new Decimal(0);
+                        let nativeCOP = new Decimal(0);
 
                         if (isCashea) {
                             nativeUSD = isUSD ? amt : amt.div(rate);
@@ -562,6 +613,9 @@ export class CashRegisterReportService {
                         } else if (isUSD) {
                             nativeUSD = amt;
                             memberTotalUSD = memberTotalUSD.add(nativeUSD);
+                        } else if (isCOP) {
+                            nativeCOP = amt;
+                            memberTotalCOP = memberTotalCOP.add(nativeCOP);
                         } else {
                             nativeVES = amt;
                             memberTotalVES = memberTotalVES.add(nativeVES);
@@ -573,15 +627,17 @@ export class CashRegisterReportService {
                             existing.transactions += 1;
                             existing.amountUSD = existing.amountUSD.add(nativeUSD);
                             existing.amountVES = existing.amountVES.add(nativeVES);
+                            existing.amountCOP = (existing.amountCOP || new Decimal(0)).add(nativeCOP);
                         } else {
                             sellerMethodStats.set(pay.paymentMethodId, {
                                 method: displayMethodName,
                                 type: pay.paymentMethod.type,
-                                currency: isCashea ? 'USD' : pay.paymentMethod.currency,
+                                currency: isCashea ? 'USD' : (isCOP ? 'COP' : (isUSD ? 'USD' : 'VES')),
                                 isCashea,
                                 transactions: 1,
                                 amountUSD: nativeUSD,
-                                amountVES: nativeVES
+                                amountVES: nativeVES,
+                                amountCOP: nativeCOP
                             });
                         }
                     }
@@ -600,21 +656,36 @@ export class CashRegisterReportService {
                         currency: 'USD',
                         transactions: m.transactions,
                         amountUSD: Number(m.amountUSD.toFixed(2)),
-                        amountVES: 0
+                        amountVES: 0,
+                        amountCOP: 0
                     }))
                     .sort((a, b) => b.amountUSD - a.amountUSD);
 
                 const sellerMethodsVES = sellerStatsList
-                    .filter(m => !m.isCashea && m.currency !== 'USD')
+                    .filter(m => !m.isCashea && m.currency === 'VES')
                     .map(m => ({
                         method: m.method,
                         type: m.type,
                         currency: 'VES',
                         transactions: m.transactions,
                         amountUSD: 0,
-                        amountVES: Number(m.amountVES.toFixed(2))
+                        amountVES: Number(m.amountVES.toFixed(2)),
+                        amountCOP: 0
                     }))
                     .sort((a, b) => b.amountVES - a.amountVES);
+
+                const sellerMethodsCOP = sellerStatsList
+                    .filter(m => !m.isCashea && m.currency === 'COP')
+                    .map(m => ({
+                        method: m.method,
+                        type: m.type,
+                        currency: 'COP',
+                        transactions: m.transactions,
+                        amountUSD: 0,
+                        amountVES: 0,
+                        amountCOP: Number((m.amountCOP || new Decimal(0)).toFixed(2))
+                    }))
+                    .sort((a, b) => (b.amountCOP || 0) - (a.amountCOP || 0));
 
                 const sellerMethodsCashea = sellerStatsList
                     .filter(m => m.isCashea)
@@ -624,7 +695,8 @@ export class CashRegisterReportService {
                         currency: 'USD',
                         transactions: m.transactions,
                         amountUSD: Number(m.amountUSD.toFixed(2)),
-                        amountVES: 0
+                        amountVES: 0,
+                        amountCOP: 0
                     }));
 
                 // Registers count
@@ -638,18 +710,23 @@ export class CashRegisterReportService {
 
                     let regCollectedUSD = new Decimal(0);
                     let regCollectedVES = new Decimal(0);
+                    let regCollectedCOP = new Decimal(0);
                     let regCollectedCasheaUSD = new Decimal(0);
 
                     for (const p of regPayments) {
                         const amt = new Decimal(p.amount);
                         const rate = new Decimal(p.exchangeRate.rate);
                         const isCashea = isCasheaPaymentMethod(p.paymentMethod.name);
-                        const isUSD = p.paymentMethod.currency === 'USD';
+                        const currency = (p.paymentMethod.currency || 'USD').toUpperCase();
+                        const isUSD = currency === 'USD';
+                        const isCOP = currency === 'COP';
 
                         if (isCashea) {
                             regCollectedCasheaUSD = regCollectedCasheaUSD.add(isUSD ? amt : amt.div(rate));
                         } else if (isUSD) {
                             regCollectedUSD = regCollectedUSD.add(amt);
+                        } else if (isCOP) {
+                            regCollectedCOP = regCollectedCOP.add(amt);
                         } else {
                             regCollectedVES = regCollectedVES.add(amt);
                         }
@@ -664,6 +741,7 @@ export class CashRegisterReportService {
                         finalAmount: Number(new Decimal(reg.initialAmount).add(regCollectedUSD).toFixed(2)),
                         collectedUSD: Number(regCollectedUSD.toFixed(2)),
                         collectedVES: Number(regCollectedVES.toFixed(2)),
+                        collectedCOP: Number(regCollectedCOP.toFixed(2)),
                         collectedCasheaUSD: Number(regCollectedCasheaUSD.toFixed(2)),
                         salesCount: regSalesCount,
                         difference: 0
@@ -725,10 +803,12 @@ export class CashRegisterReportService {
                     totalSales: memberSales.length,
                     totalUSD: Number(memberTotalUSD.toFixed(2)),
                     totalVES: Number(memberTotalVES.toFixed(2)),
+                    totalCOP: Number(memberTotalCOP.toFixed(2)),
                     totalCasheaUSD: Number(memberTotalCasheaUSD.toFixed(2)),
                     casheaTransactions: memberCasheaTransactions,
                     methodsUSD: sellerMethodsUSD,
                     methodsVES: sellerMethodsVES,
+                    methodsCOP: sellerMethodsCOP,
                     methodsCashea: sellerMethodsCashea,
                     articlesCount,
                     cashRegistersCount: {

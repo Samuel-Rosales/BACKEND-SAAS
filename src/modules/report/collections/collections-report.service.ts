@@ -557,6 +557,9 @@ export class CollectionsReportService {
                 if (curr === 'USD') {
                     usdEquivalent = amt;
                     vesEquivalent = rate.gt(0) ? amt.mul(rate) : new Decimal(0);
+                } else if (curr === 'COP') {
+                    usdEquivalent = rate.gt(0) ? amt.div(rate) : new Decimal(0);
+                    vesEquivalent = new Decimal(0);
                 } else {
                     vesEquivalent = amt;
                     usdEquivalent = rate.gt(0) ? amt.div(rate) : new Decimal(0);
@@ -768,6 +771,9 @@ export class CollectionsReportService {
                 if (curr === 'USD') {
                     usdEquivalent = amt;
                     vesEquivalent = rate.gt(0) ? amt.mul(rate) : new Decimal(0);
+                } else if (curr === 'COP') {
+                    usdEquivalent = rate.gt(0) ? amt.div(rate) : new Decimal(0);
+                    vesEquivalent = new Decimal(0);
                 } else {
                     vesEquivalent = amt;
                     usdEquivalent = rate.gt(0) ? amt.div(rate) : new Decimal(0);
