@@ -183,6 +183,14 @@ export class SaleService {
             let finalSubTotal = new Decimal(0);
             let finalTaxAmount = new Decimal(0);
 
+            // Determinar si el negocio tiene desactivado el desglose de IVA (modo sin IVA / exento)
+            const ticketConfig = (business as any)?.ticketConfig;
+            const isTaxDisabledInBusiness = ticketConfig?.showTaxDetails === false 
+                || ticketConfig?.ticketDesign?.showTaxDetails === false;
+            const isTaxDisabledInSale = (data as any).showTaxDetails === false 
+                || (data.taxAmount !== undefined && new Decimal(data.taxAmount).equals(0) && isTaxDisabledInBusiness);
+            const applyTaxes = !(isTaxDisabledInSale || isTaxDisabledInBusiness);
+
             // Asumimos que rawSubTotal ya es un Decimal calculado previamente
             const processedItems = preProcessedItems.map(item => {
 
@@ -211,16 +219,18 @@ export class SaleService {
                 // ---------------------------------------------------------
                 let lineTax = new Decimal(0);
 
-                // Validamos si existe tax y si el rate es válido. 
-                // Convertimos tax.rate a Decimal por seguridad.
-                let taxRate = item.product.tax.rate ? new Decimal(item.product.tax.rate) : new Decimal(0);
-                if (taxRate.gte(1)) taxRate = taxRate.div(100);
+                if (applyTaxes) {
+                    // Validamos si existe tax y si el rate es válido. 
+                    // Convertimos tax.rate a Decimal por seguridad.
+                    let taxRate = item.product.tax?.rate ? new Decimal(item.product.tax.rate) : new Decimal(0);
+                    if (taxRate.gte(1)) taxRate = taxRate.div(100);
 
-                // rate > 0 ---> .gt(0)
-                if (taxRate.gt(0)) {
-                    // Fórmula: Base * (Tasa / 100)
-                    // Ejemplo: 100 * 0.16 = 16
-                    lineTax = lineNetAmount.mul(taxRate);
+                    // rate > 0 ---> .gt(0)
+                    if (taxRate.gt(0)) {
+                        // Fórmula: Base * (Tasa / 100)
+                        // Ejemplo: 100 * 0.16 = 16
+                        lineTax = lineNetAmount.mul(taxRate);
+                    }
                 }
 
                 // ---------------------------------------------------------
