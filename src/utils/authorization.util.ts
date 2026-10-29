@@ -9,7 +9,7 @@ export const getRolePermissions = async (
 
 export const canAccessBusinessPermission = async (
   roleCode: string,
-  permission: BusinessPermissionCode,
+  permission: BusinessPermissionCode | BusinessPermissionCode[],
   isSuperAdmin = false
 ): Promise<boolean> => {
   return permissionService.canAccess(roleCode, permission, isSuperAdmin);

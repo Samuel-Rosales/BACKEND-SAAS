@@ -19,7 +19,9 @@ const resolveBusinessId = (req: Request): number | null => {
   return Number.isNaN(businessId) ? null : businessId;
 };
 
-export const requireBusinessPermission = (permission: BusinessPermissionCode) => {
+export const requireBusinessPermission = (
+  permission: BusinessPermissionCode | BusinessPermissionCode[]
+) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {

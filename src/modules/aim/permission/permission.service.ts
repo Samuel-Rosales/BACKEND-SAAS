@@ -31,12 +31,15 @@ export class PermissionService {
 
   async canAccess(
     roleCode: string,
-    permission: BusinessPermissionCode,
+    permission: BusinessPermissionCode | BusinessPermissionCode[],
     isSuperAdmin = false,
   ): Promise<boolean> {
     if (isSuperAdmin) return true;
 
     const permissions = await this.getRolePermissions(roleCode);
+    if (Array.isArray(permission)) {
+      return permission.some((p) => permissions.includes(p));
+    }
     return permissions.includes(permission);
   }
 
