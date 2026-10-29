@@ -79,6 +79,7 @@ export interface CashRegisterReportProps {
         methodsCashea?: PaymentMethodSummary[];
     };
     sellers: SellerReport[];
+    includeEmployeesBreakdown?: boolean;
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────
@@ -499,6 +500,7 @@ const CashRegisterReport = ({
     sellerFilter,
     overview,
     sellers,
+    includeEmployeesBreakdown = true,
 }: CashRegisterReportProps) => {
     const showCOP = Boolean(enableCopCurrency ?? overview.enableCopCurrency);
     const methodsUSD = overview.methodsUSD ?? overview.methods.filter(m => !m.isCashea && (m.currency === 'USD' || (m.amountUSD > 0 && !(m.amountVES && m.amountVES > 0) && !(m.amountCOP && m.amountCOP > 0))));
@@ -743,7 +745,9 @@ const CashRegisterReport = ({
                     </View>
                 </View>
 
-                {/* ══ III. DESGLOSE POR VENDEDOR ═══════════════════════════════ */}
+                {includeEmployeesBreakdown !== false && sellers.length > 0 && (
+                <>
+{/* ══ III. DESGLOSE POR VENDEDOR ═══════════════════════════════ */}
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>III. Desglose por Empleado</Text>
                 </View>
@@ -916,7 +920,10 @@ const CashRegisterReport = ({
                     );
                 })}
 
-                {/* ══ FOOTER ══════════════════════════════════════════════════ */}
+                                </>
+            )}
+
+            {/* ══ FOOTER ══════════════════════════════════════════════════ */}
                 <View style={styles.footer} fixed>
                     <Text style={styles.footerText}>
                         {businessName} · Reporte de Caja · {dateRange.from} — {dateRange.to}

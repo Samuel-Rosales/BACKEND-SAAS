@@ -83,6 +83,7 @@ export class CashRegisterReportController {
         const toDate = req.query.toDate as string | undefined;
         const sellerId = req.query.sellerId as string | undefined;
         const tzOffset = req.query.tzOffset === undefined ? undefined : Number(req.query.tzOffset);
+        const includeEmployeesBreakdown = req.query.includeEmployeesBreakdown !== 'false' && req.query.format !== 'summary';
 
         if (!businessId) {
             return res.status(400).json({ message: 'Falta el header x-business-id' });
@@ -108,6 +109,7 @@ export class CashRegisterReportController {
                     sellerFilter: report.data.sellerFilter,
                     overview: report.data.overview,
                     sellers: report.data.sellers,
+                    includeEmployeesBreakdown,
                 }) as any
             );
 
