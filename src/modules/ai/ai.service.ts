@@ -47,8 +47,8 @@ export class AiService {
     constructor() {
         this.apiKey = process.env.GEMINI_API_KEY || '';
         // Por defecto usar Gemini 3.8 Flash con latencia ultra baja (Thinking Budget 0)
-        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-        this.fallbackModels = ['gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite'];
+        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+        this.fallbackModels = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite-preview', 'gemini-flash-latest'];
         this.usageService = new AiUsageService();
     }
 
@@ -171,7 +171,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
         return axios.post(url, payload, {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 15000
+            timeout: 10000
         });
     }
 
@@ -210,6 +210,158 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
                     '💳 Cuentas por cobrar y deudores',
                     '📦 Stock bajo / agotado',
                     '💵 Consultar Tasa Oficial BCV'
+                ]
+            };
+        }
+
+        // 3. Tutor Operativo Ultrarrápido (< 5 ms): ¿Cómo hacer una venta / cómo vender?
+        if (/(?:c[oó]mo\s+(?:hacer|realizar|procesar|efectuar|registrar)?\s*una?\s*venta|c[oó]mo\s+vender|pasos\s+para\s+vender|tutorial\s+de\s+venta|c[oó]mo\s+facturar|c[oó]mo\s+cobrar)/i.test(cleanCmd)) {
+            return {
+                text: `🛒 **Guía Paso a Paso: ¿Cómo realizar una venta en Guardián?**\n\n` +
+                    `1. **Apertura de Caja**: Dirígete a **Cajas Registradoras** en el menú y asegúrate de tener una sesión de caja abierta para el turno.\n` +
+                    `2. **Ingresar al Punto de Venta**: Haz clic en **Punto de Venta (POS)** en el menú lateral izquierdo.\n` +
+                    `3. **Seleccionar Productos**: Haz clic sobre los productos del catálogo, escribe su nombre o código en la barra de búsqueda o usa el lector de código de barras.\n` +
+                    `4. **Modalidad de Venta**: Por defecto se cargan a **Contado**. Si tu empresa tiene habilitado recargo a crédito (+10% o +20%), selecciona la opción correspondiente.\n` +
+                    `5. **Cobrar**: Presiona el botón azul **"Cobrar"** en la parte inferior del ticket.\n` +
+                    `6. **Método de Pago**: Selecciona la forma de pago (Efectivo en $ USD o Bs., Punto de Venta, Pago Móvil o Transferencia). El sistema calculará el cambio o vuelto automáticamente a la tasa oficial BCV.\n` +
+                    `7. **Finalizar e Imprimir**: Presiona **"Confirmar Cobro"**. El sistema generará al instante el comprobante (Factura o Nota de Entrega) y descontará los artículos del inventario en tiempo real.`,
+                actions: [
+                    {
+                        type: 'NAVIGATE',
+                        label: '🛒 Ir al Punto de Venta (POS)',
+                        url: '/sales/pos'
+                    }
+                ],
+                subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
+                suggestedOptions: [
+                    '⏸️ ¿Cómo pausar y retomar una venta?',
+                    '❌ ¿Cómo anular una venta?',
+                    '💳 ¿Cómo vender a crédito?',
+                    '📦 ¿Cómo agregar un producto?'
+                ]
+            };
+        }
+
+        // 4. Tutor Operativo: ¿Cómo registrar un gasto?
+        if (/(?:c[oó]mo\s+(?:hacer|registrar|anotar|crear|meter)?\s*un?\s*gasto|c[oó]mo\s+egresar|registrar\s+egreso)/i.test(cleanCmd)) {
+            return {
+                text: `💸 **Guía Paso a Paso: ¿Cómo registrar un gasto en Guardián?**\n\n` +
+                    `1. **Ruta**: Menú lateral izquierdo -> **Gastos** -> Botón superior **"+ Registrar Gasto"**.\n` +
+                    `2. **Concepto**: Escribe el título o motivo del egreso (ej: *"Pago de flete"*, *"Compra de suministros"*).\n` +
+                    `3. **Categoría**: Selecciona la categoría adecuada (Servicios, Nómina, Suministros, etc.).\n` +
+                    `4. **Monto y Moneda**: Ingresa la cantidad en **$ USD** o **Bs.** y selecciona la caja de donde sale el dinero.\n` +
+                    `5. **Guardar**: Presiona **"Guardar Gasto"**. El dinero se deducirá automáticamente de tu caja y se reflejará en el reporte de balance.`,
+                actions: [
+                    {
+                        type: 'NAVIGATE',
+                        label: '💸 Ir a Gastos',
+                        url: '/finance/expenses'
+                    }
+                ],
+                subagent: AI_SUBAGENTS.FINANCIAL_AUDITOR,
+                suggestedOptions: [
+                    '📊 ¿Cuánto se ha gastado este mes?',
+                    '💵 Registrar gasto por comando',
+                    '🔒 Cierre de caja'
+                ]
+            };
+        }
+
+        // 5. Tutor Operativo: ¿Cómo anular una venta?
+        if (/(?:c[oó]mo\s+(?:anular|cancelar|eliminar)?\s*(?:una?\s*venta|factura)|anular\s+venta|cancelar\s+venta)/i.test(cleanCmd)) {
+            return {
+                text: `❌ **Guía Paso a Paso: ¿Cómo anular una venta o recibo?**\n\n` +
+                    `1. **Ruta**: Menú lateral izquierdo -> **Ventas / Facturas**.\n` +
+                    `2. **Localizar**: Ubica la venta en el listado por el número de comprobante, cliente o fecha.\n` +
+                    `3. **Ver Detalles**: Haz clic en el botón **"Ver Detalles"** (icono de ojo 👁️).\n` +
+                    `4. **Anular**: En la parte inferior derecha, haz clic en el botón rojo **"Anular Venta"**.\n` +
+                    `5. **Motivo**: Escribe el motivo de la anulación y confirma.\n\n` +
+                    `*Nota de seguridad*: Se requiere rol de Administrador. Los productos regresan automáticamente al stock y el monto cobrado se descuenta de la caja.`,
+                actions: [
+                    {
+                        type: 'NAVIGATE',
+                        label: '📄 Ir a Listado de Ventas',
+                        url: '/sales/list'
+                    }
+                ],
+                subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
+                suggestedOptions: [
+                    '🛒 ¿Cómo hacer una venta?',
+                    '⏸️ ¿Cómo pausar una venta?',
+                    '📊 Ventas de hoy'
+                ]
+            };
+        }
+
+        // 6. Tutor Operativo: ¿Cómo pausar y retomar una venta?
+        if (/(?:c[oó]mo\s+(?:pausar|dejar\s+en\s+espera|retomar)?\s*(?:una?\s*venta|ticket)|pausar\s+venta|ventas\s+en\s+espera)/i.test(cleanCmd)) {
+            return {
+                text: `⏸️ **Guía: Pausar y Retomar Ventas en el POS**\n\n` +
+                    `• **Para pausar una venta en curso**: En el Punto de Venta, con productos cargados en el ticket, haz clic en el botón **"[⏸️ Pausar]"** en la barra superior. Escribe un nombre o nota de referencia del cliente y confirma. Tu ticket quedará limpio para atender al cliente siguiente.\n\n` +
+                    `• **Para retomar la venta**: Haz clic en el botón **"[⏳ En Espera (X)]"** en la barra superior. Selecciona la venta pausada y pulsa **"Retomar Venta"**. Todo su carrito se restablecerá intacto al instante para cobrar.`,
+                actions: [
+                    {
+                        type: 'NAVIGATE',
+                        label: '🛒 Ir al POS',
+                        url: '/sales/pos'
+                    }
+                ],
+                subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
+                suggestedOptions: [
+                    '🛒 ¿Cómo hacer una venta?',
+                    '❌ ¿Cómo anular una venta?'
+                ]
+            };
+        }
+
+        // 7. Tutor Operativo: Cierre de caja
+        if (/(?:c[oó]mo\s+(?:hacer|realizar|ejecutar)?\s*(?:el\s*)?cierre\s+de\s+caja|cierre\s+x|cierre\s+z|cerrar\s+caja)/i.test(cleanCmd)) {
+            return {
+                text: `🔒 **Guía Paso a Paso: ¿Cómo hacer el Cierre de Caja?**\n\n` +
+                    `1. **Ruta**: Menú lateral izquierdo -> **Cajas Registradoras** -> **Cierre de Caja**.\n` +
+                    `2. **Cierre X (Parcial)**: Muestra el saldo preliminar del turno sin cerrar la sesión de caja.\n` +
+                    `3. **Cierre Z (Definitivo)**:\n` +
+                    `   - Cuenta el efectivo físico en gaveta (en USD y Bs) e ingrésalo en los campos de arqueo.\n` +
+                    `   - Verifica las sumas de transferencias, puntos de venta y pagos móviles.\n` +
+                    `   - Presiona **"Confirmar Cierre Z"** para imprimir el comprobante fiscal/térmico de cuadre y sellar la sesión del turno.`,
+                actions: [
+                    {
+                        type: 'NAVIGATE',
+                        label: '🔒 Ir a Cajas Registradoras',
+                        url: '/finance/cash-register'
+                    }
+                ],
+                subagent: AI_SUBAGENTS.FINANCIAL_AUDITOR,
+                suggestedOptions: [
+                    '📊 Consultar estado de cajas',
+                    '💸 ¿Cómo registrar un gasto?'
+                ]
+            };
+        }
+
+        // 8. Tutor Operativo: Crear producto
+        if (/(?:c[oó]mo\s+(?:crear|registrar|agregar|a[ñn]adir)?\s*un?\s*producto|nuevo\s+producto|cargar\s+inventario)/i.test(cleanCmd)) {
+            return {
+                text: `📦 **Guía Paso a Paso: ¿Cómo crear o registrar un producto?**\n\n` +
+                    `1. **Ruta**: Menú lateral izquierdo -> **Inventario** -> **Catálogo de Productos**.\n` +
+                    `2. **Nuevo Producto**: Haz clic en el botón superior derecho **"+ Nuevo Producto"**.\n` +
+                    `3. **Datos Básicos**: Ingresa el nombre del artículo, categoría y unidad de medida (Kilos, Unidades, Litros, etc.).\n` +
+                    `4. **Precios**: Asigna el costo de compra y el precio de venta en **$ USD**. El sistema calculará el precio en Bolívares automáticamente con la tasa oficial BCV.\n` +
+                    `5. **Código**: Escribe o escanea el código de barras / SKU.\n` +
+                    `6. **Stock**: Establece el stock inicial por depósito o almacén y el umbral de alerta de stock mínimo.\n` +
+                    `7. **Guardar**: Pulsa **"Guardar Producto"**. Estará disponible de inmediato para vender en el POS.`,
+                actions: [
+                    {
+                        type: 'NAVIGATE',
+                        label: '📦 Ir a Catálogo de Productos',
+                        url: '/inventory/products'
+                    }
+                ],
+                subagent: AI_SUBAGENTS.INVENTORY_SPECIALIST,
+                suggestedOptions: [
+                    '📦 Consultar existencias de un producto',
+                    '🏷️ Inversión y valor de inventario',
+                    '🛒 ¿Cómo hacer una venta?'
                 ]
             };
         }
@@ -282,10 +434,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
             contents,
             tools: toolsConfig,
             generationConfig: {
-                temperature: 0.1,
-                thinkingConfig: {
-                    thinkingBudget: 0
-                }
+                temperature: 0.1
             }
         };
 
@@ -370,11 +519,8 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
                 system_instruction: systemInstruction,
                 contents: followUpContents,
                 generationConfig: {
-                    temperature: 0.1,
-                    thinkingConfig: {
-                        thinkingBudget: 0
-                    }
-                }
+                temperature: 0.1
+            }
             };
 
             let secondResponse: any = null;
