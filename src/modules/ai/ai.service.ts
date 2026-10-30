@@ -129,6 +129,20 @@ RUTAS Y PROCEDIMIENTOS CLAVE DEL SISTEMA:
    - Ruta del Reporte: Menú lateral -> Reportes -> Comisiones.
    - Requisito e Impacto: Exclusivo del Plan Premium. El sistema calcula en vivo el total de ventas brutas realizadas por cada vendedor, descuenta automáticamente devoluciones si hubo notas de crédito, y calcula la comisión neta ganada en USD. También soporta comisión gerencial para supervisores de tienda.
 
+9. ¿CÓMO AJUSTAR O ACTUALIZAR EL STOCK DE UN PRODUCTO? (AJUSTES DE INVENTARIO)
+   - REGLA DE ORO DE GUARDIÁN: El stock de un artículo NUNCA se edita directamente en el Catálogo de Productos. En Guardián, toda alteración de existencias requiere un comprobante de auditoría de Kardex para proteger el dinero del negocio.
+   - Ruta exacta: Menú lateral izquierdo -> Movimientos (icono de carretilla / dolly).
+   - Pasos obligatorios:
+     1. Haz clic en el botón superior "+ Nuevo Movimiento".
+     2. En "Tipo de Movimiento", selecciona obligatoriamente: "Ajuste de Inventario" (ADJUSTMENT).
+     3. Selecciona el Almacén / Depósito físico donde se encuentra la mercancía.
+     4. Selecciona el Producto que deseas corregir.
+     5. Cantidad a ajustar:
+        - Para RESTAR stock (roturas, mermas, pérdidas, productos dañados o faltante en conteo físico): Ingresa la cantidad con signo negativo (ej: -5) y selecciona el lote de origen.
+        - Para SUMAR stock (sobrante físico o mercancía no registrada): Ingresa la cantidad en positivo (ej: 10), indica el costo unitario y fecha de vencimiento si aplica.
+     6. Motivo (Obligatorio): Escribe la justificación del ajuste (ej: "Conteo físico", "Merma por rotura").
+     7. Presiona "Registrar Movimiento". El sistema actualizará de inmediato el saldo en el Kardex y en el inventario disponible.
+
 ============================================================
 GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 ============================================================
@@ -335,6 +349,37 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
                 suggestedOptions: [
                     '📊 Consultar estado de cajas',
                     '💸 ¿Cómo registrar un gasto?'
+                ]
+            };
+        }
+
+        // Tutor Operativo: ¿Cómo actualizar o ajustar stock de un producto?
+        if (/(?:c[oó]mo\s+(?:actualizar|ajustar|cambiar|modificar|corregir|restar|sumar|descontar)?\s*(?:el\s*)?stock|ajuste\s+de\s+(?:stock|inventario)|c[oó]mo\s+(?:hago\s+un\s+)?ajuste\s+de\s+inventario|actualizar\s+existencias?|corregir\s+stock)/i.test(cleanCmd)) {
+            return {
+                text: `📦 **Guía Oficial: ¿Cómo ajustar o actualizar el stock de un producto en Guardián?**\n\n` +
+                    `⚠️ **Regla Fundamental**: En Guardián el stock **NUNCA se modifica directamente en el Catálogo de Productos**. Toda corrección de existencias debe quedar registrada formalmente en el módulo de **Movimientos** mediante un **Ajuste de Inventario** para garantizar la auditoría contable y el Kardex.\n\n` +
+                    `**Pasos para realizar el ajuste:**\n` +
+                    `1. **Ruta**: Menú lateral izquierdo -> **Movimientos** (icono de carretilla / dolly).\n` +
+                    `2. **Nuevo Movimiento**: Haz clic en el botón superior **"+ Nuevo Movimiento"**.\n` +
+                    `3. **Tipo de Movimiento**: En el selector de tipo, elige **"Ajuste de Inventario"** (ADJUSTMENT).\n` +
+                    `4. **Almacén y Producto**: Selecciona el almacén físico de destino y busca el producto a corregir.\n` +
+                    `5. **Cantidad a Ajustar**:\n` +
+                    `   • **Para RESTAR stock** (por merma, rotura, merma de peso, vencimiento o faltante en conteo físico): Ingresa la cantidad con **signo negativo** (ejemplo: **-5**) y selecciona el lote de origen.\n` +
+                    `   • **Para SUMAR stock** (por sobrante físico o hallazgo de mercancía): Ingresa la cantidad en **positivo** (ejemplo: **10**), indicando el costo unitario real y fecha de vencimiento si aplica.\n` +
+                    `6. **Motivo del Ajuste (Obligatorio)**: Escribe la justificación (ej: *"Ajuste por conteo físico"*, *"Merma por rotura en anaquel"*).\n` +
+                    `7. **Registrar**: Presiona **"Registrar Movimiento"**. El inventario se actualizará de inmediato en tiempo real en todos tus reportes.`,
+                actions: [
+                    {
+                        type: 'NAVIGATE',
+                        label: '📦 Ir a Movimientos de Inventario',
+                        url: '/inventory/movements'
+                    }
+                ],
+                subagent: AI_SUBAGENTS.INVENTORY_SPECIALIST,
+                suggestedOptions: [
+                    '📦 Consultar existencias de un producto',
+                    '⚠️ Consultar productos con stock bajo',
+                    '💰 ¿Cuál es el valor total de mi inventario?'
                 ]
             };
         }
