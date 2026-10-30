@@ -1776,13 +1776,18 @@ export async function executeAiTool(
                 },
                 select: {
                     productId: true,
-                    quantity: true
+                    quantity: true,
+                    productPresentation: {
+                        select: { factor: true }
+                    }
                 }
             });
 
             const salesByProduct = new Map<number, number>();
             for (const item of recentSaleItems) {
-                salesByProduct.set(item.productId, (salesByProduct.get(item.productId) || 0) + Number(item.quantity));
+                const factor = item.productPresentation ? Number(item.productPresentation.factor) : 1;
+                const effectiveQty = Number(item.quantity) * factor;
+                salesByProduct.set(item.productId, (salesByProduct.get(item.productId) || 0) + effectiveQty);
             }
 
             const suggestions: any[] = [];

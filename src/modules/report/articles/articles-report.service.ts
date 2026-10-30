@@ -85,12 +85,13 @@ export class ArticlesReportService {
                 prisma.$queryRaw<[{ totalRevenue: number; totalCost: number; totalUnits: number; orderCount: number }]>`
                     SELECT
                         COALESCE(SUM(si."subTotal"), 0)::numeric as "totalRevenue",
-                        COALESCE(SUM(si.quantity * p."costPrice"), 0)::numeric as "totalCost",
-                        COALESCE(SUM(si.quantity), 0)::numeric as "totalUnits",
+                        COALESCE(SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice"), 0)::numeric as "totalCost",
+                        COALESCE(SUM(si.quantity * COALESCE(pp.factor, 1)), 0)::numeric as "totalUnits",
                         COUNT(DISTINCT s.id)::int as "orderCount"
                     FROM "SaleItem" si
                     INNER JOIN "Sale" s ON si."saleId" = s.id
                     INNER JOIN "Product" p ON si."productId" = p.id
+                    LEFT JOIN "ProductPresentation" pp ON si."productPresentationId" = pp.id
                     WHERE s."businessId" = ${businessId}
                       AND s.status = 'COMPLETED'
                       AND s."deletedAt" IS NULL
@@ -186,12 +187,12 @@ export class ArticlesReportService {
                         u.symbol as "unitSymbol",
                         p."costPrice",
                         p."salePrice",
-                        SUM(si.quantity)::numeric as "totalUnitsSold",
+                        SUM(si.quantity * COALESCE(pp.factor, 1))::numeric as "totalUnitsSold",
                         SUM(si."subTotal")::numeric as "totalRevenue",
-                        (SUM(si.quantity) * p."costPrice")::numeric as "totalCost",
-                        (SUM(si."subTotal") - (SUM(si.quantity) * p."costPrice"))::numeric as "netProfit",
-                        CASE WHEN (SUM(si.quantity) * p."costPrice") > 0
-                            THEN ROUND(((SUM(si."subTotal") - (SUM(si.quantity) * p."costPrice")) / (SUM(si.quantity) * p."costPrice") * 100)::numeric, 2)
+                        SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice")::numeric as "totalCost",
+                        (SUM(si."subTotal") - SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice"))::numeric as "netProfit",
+                        CASE WHEN SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice") > 0
+                            THEN ROUND(((SUM(si."subTotal") - SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice")) / SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice") * 100)::numeric, 2)
                             ELSE 0
                         END as "profitMargin",
                         COALESCE((
@@ -212,7 +213,7 @@ export class ArticlesReportService {
                                 COALESCE((SELECT SUM(sl."quantity") FROM "StockLot" sl WHERE sl."productId" = p.id AND sl."quantity" > 0), 0)
                             ) / 2 > 0
                             THEN ROUND(
-                                (SUM(si.quantity) / (
+                                (SUM(si.quantity * COALESCE(pp.factor, 1)) / (
                                     (COALESCE((SELECT SUM(sm."quantity") FROM "StockMovement" sm WHERE sm."productId" = p.id AND sm."date" < ${start}), 0) +
                                      COALESCE((SELECT SUM(sl."quantity") FROM "StockLot" sl WHERE sl."productId" = p.id AND sl."quantity" > 0), 0)
                                     ) / 2
@@ -225,6 +226,7 @@ export class ArticlesReportService {
                     INNER JOIN "Product" p ON si."productId" = p.id
                     INNER JOIN "Category" c ON p."categoryId" = c.id
                     INNER JOIN "MeasurementUnit" u ON p."unitId" = u.id
+                    LEFT JOIN "ProductPresentation" pp ON si."productPresentationId" = pp.id
                     WHERE s."businessId" = ${businessId}
                       AND s.status = 'COMPLETED'
                       AND s."deletedAt" IS NULL
@@ -257,11 +259,12 @@ export class ArticlesReportService {
                 prisma.$queryRaw<[{ totalRevenue: number; totalCost: number; totalUnits: number }]>`
                     SELECT
                         COALESCE(SUM(si."subTotal"), 0)::numeric as "totalRevenue",
-                        COALESCE(SUM(si.quantity * p."costPrice"), 0)::numeric as "totalCost",
-                        COALESCE(SUM(si.quantity), 0)::numeric as "totalUnits"
+                        COALESCE(SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice"), 0)::numeric as "totalCost",
+                        COALESCE(SUM(si.quantity * COALESCE(pp.factor, 1)), 0)::numeric as "totalUnits"
                     FROM "SaleItem" si
                     INNER JOIN "Sale" s ON si."saleId" = s.id
                     INNER JOIN "Product" p ON si."productId" = p.id
+                    LEFT JOIN "ProductPresentation" pp ON si."productPresentationId" = pp.id
                     WHERE s."businessId" = ${businessId}
                       AND s.status = 'COMPLETED'
                       AND s."deletedAt" IS NULL
@@ -362,12 +365,12 @@ export class ArticlesReportService {
                     u.symbol as "unitSymbol",
                     p."costPrice",
                     p."salePrice",
-                    SUM(si.quantity)::numeric as "totalUnitsSold",
+                    SUM(si.quantity * COALESCE(pp.factor, 1))::numeric as "totalUnitsSold",
                     SUM(si."subTotal")::numeric as "totalRevenue",
-                    (SUM(si.quantity) * p."costPrice")::numeric as "totalCost",
-                    (SUM(si."subTotal") - (SUM(si.quantity) * p."costPrice"))::numeric as "netProfit",
-                    CASE WHEN (SUM(si.quantity) * p."costPrice") > 0
-                        THEN ROUND(((SUM(si."subTotal") - (SUM(si.quantity) * p."costPrice")) / (SUM(si.quantity) * p."costPrice") * 100)::numeric, 2)
+                    SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice")::numeric as "totalCost",
+                    (SUM(si."subTotal") - SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice"))::numeric as "netProfit",
+                    CASE WHEN SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice") > 0
+                        THEN ROUND(((SUM(si."subTotal") - SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice")) / SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice") * 100)::numeric, 2)
                         ELSE 0
                     END as "profitMargin",
                     COALESCE((
@@ -388,7 +391,7 @@ export class ArticlesReportService {
                             COALESCE((SELECT SUM(sl."quantity") FROM "StockLot" sl WHERE sl."productId" = p.id AND sl."quantity" > 0), 0)
                         ) / 2 > 0
                         THEN ROUND(
-                            (SUM(si.quantity) / (
+                            (SUM(si.quantity * COALESCE(pp.factor, 1)) / (
                                 (COALESCE((SELECT SUM(sm."quantity") FROM "StockMovement" sm WHERE sm."productId" = p.id AND sm."date" < ${start}), 0) +
                                  COALESCE((SELECT SUM(sl."quantity") FROM "StockLot" sl WHERE sl."productId" = p.id AND sl."quantity" > 0), 0)
                                 ) / 2
@@ -401,6 +404,7 @@ export class ArticlesReportService {
                 INNER JOIN "Product" p ON si."productId" = p.id
                 INNER JOIN "Category" c ON p."categoryId" = c.id
                 INNER JOIN "MeasurementUnit" u ON p."unitId" = u.id
+                LEFT JOIN "ProductPresentation" pp ON si."productPresentationId" = pp.id
                 WHERE s."businessId" = ${businessId}
                   AND s.status = 'COMPLETED'
                   AND s."deletedAt" IS NULL

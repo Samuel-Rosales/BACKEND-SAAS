@@ -143,12 +143,13 @@ export class FinancialReportService {
                     _sum: { totalCost: true, subTotal: true, taxAmount: true },
                     _count: { id: true }
                 }),
-                // Cost of Goods Sold (Current)
+                // Cost of Goods Sold (Current, ponderado por factor de presentación/bulto)
                 prisma.$queryRaw<[{ totalCost: number }]>`
-                    SELECT COALESCE(SUM(si.quantity * p."costPrice"), 0)::numeric as "totalCost"
+                    SELECT COALESCE(SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice"), 0)::numeric as "totalCost"
                     FROM "SaleItem" si
                     INNER JOIN "Sale" s ON si."saleId" = s.id
                     INNER JOIN "Product" p ON si."productId" = p.id
+                    LEFT JOIN "ProductPresentation" pp ON si."productPresentationId" = pp.id
                     WHERE s."businessId" = ${businessId}
                       AND s.status = 'COMPLETED'
                       AND s."deletedAt" IS NULL
@@ -259,12 +260,13 @@ export class FinancialReportService {
                     _sum: { totalCost: true, subTotal: true, taxAmount: true },
                     _count: { id: true }
                 }),
-                // Previous Cost of Goods Sold
+                // Previous Cost of Goods Sold (ponderado por factor de presentación/bulto)
                 prisma.$queryRaw<[{ totalCost: number }]>`
-                    SELECT COALESCE(SUM(si.quantity * p."costPrice"), 0)::numeric as "totalCost"
+                    SELECT COALESCE(SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice"), 0)::numeric as "totalCost"
                     FROM "SaleItem" si
                     INNER JOIN "Sale" s ON si."saleId" = s.id
                     INNER JOIN "Product" p ON si."productId" = p.id
+                    LEFT JOIN "ProductPresentation" pp ON si."productPresentationId" = pp.id
                     WHERE s."businessId" = ${businessId}
                       AND s.status = 'COMPLETED'
                       AND s."deletedAt" IS NULL
@@ -464,21 +466,22 @@ export class FinancialReportService {
             const { start, end } = resolveDateRange(range);
             const { page, limit, skip } = this.getPagination(pagination?.page, pagination?.limit);
 
-            // Query items sold in period grouped by product
+            // Query items sold in period grouped by product (con conversión exacta de presentaciones/bultos a unidades base)
             const [productsRaw, totalCountResult, summaryResult] = await Promise.all([
                 prisma.$queryRaw<any[]>`
                     SELECT
                         p.id as "productId",
                         p.name as "productName",
                         c.name as "categoryName",
-                        SUM(si.quantity)::numeric as "unitsSold",
+                        SUM(si.quantity * COALESCE(pp.factor, 1))::numeric as "unitsSold",
                         SUM(si."subTotal")::numeric as "totalRevenue",
-                        (SUM(si.quantity) * p."costPrice")::numeric as "totalCost",
+                        SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice")::numeric as "totalCost",
                         p."profitMargin"::numeric as "configuredMargin"
                     FROM "SaleItem" si
                     INNER JOIN "Sale" s ON si."saleId" = s.id
                     INNER JOIN "Product" p ON si."productId" = p.id
                     INNER JOIN "Category" c ON p."categoryId" = c.id
+                    LEFT JOIN "ProductPresentation" pp ON si."productPresentationId" = pp.id
                     WHERE s."businessId" = ${businessId}
                       AND s.status = 'COMPLETED'
                       AND s."deletedAt" IS NULL
@@ -502,11 +505,12 @@ export class FinancialReportService {
                 prisma.$queryRaw<[{ totalRevenue: number; totalCost: number; weightedConfiguredMargin: number }]>`
                     SELECT
                         COALESCE(SUM(si."subTotal"), 0)::numeric as "totalRevenue",
-                        COALESCE(SUM(si.quantity * p."costPrice"), 0)::numeric as "totalCost",
+                        COALESCE(SUM(si.quantity * COALESCE(pp.factor, 1) * p."costPrice"), 0)::numeric as "totalCost",
                         COALESCE(SUM(si."subTotal" * p."profitMargin"), 0)::numeric as "weightedConfiguredMargin"
                     FROM "SaleItem" si
                     INNER JOIN "Sale" s ON si."saleId" = s.id
                     INNER JOIN "Product" p ON si."productId" = p.id
+                    LEFT JOIN "ProductPresentation" pp ON si."productPresentationId" = pp.id
                     WHERE s."businessId" = ${businessId}
                       AND s.status = 'COMPLETED'
                       AND s."deletedAt" IS NULL
