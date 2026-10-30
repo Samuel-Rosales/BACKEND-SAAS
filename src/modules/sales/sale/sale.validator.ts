@@ -76,8 +76,21 @@ body('installments')
       .isArray({ min: 1 }).withMessage('El carrito no puede estar vacío'),
 
     body('items.*.productId')
-      .isInt({ min: 1 }).withMessage('Producto inválido')
+      .isInt({ min: 0 }).withMessage('Producto inválido')
       .toInt(),
+
+    body('items.*.price')
+      .optional()
+      .isFloat({ min: 0 }).withMessage('Precio inválido')
+      .toFloat(),
+
+    body('items.*.customName')
+      .optional()
+      .isString(),
+
+    body('items.*.isVarios')
+      .optional()
+      .isBoolean(),
 
     body('items.*.quantity')
       // Permitimos decimales si vendes por Kilo, o int si es unitario. 

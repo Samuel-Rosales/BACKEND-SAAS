@@ -92,6 +92,54 @@ export class SaleService {
             if (!cashierMember) throw new BusinessError('Cajero no autorizado', 403);
             if (!sellerMember) throw new BusinessError('Vendedor seleccionado no encontrado o no pertenece al negocio', 404);
 
+            // 1.1 Resolver producto comodín para ítems libres / Varios si existen en la venta
+            const hasVariosItem = data.items.some(i => !i.productId || i.productId <= 0 || (i as any).isVarios);
+            if (hasVariosItem) {
+                let variosProduct = await prisma.product.findFirst({
+                    where: { businessId, sku: 'SYS-VARIOS' }
+                });
+
+                if (!variosProduct) {
+                    const [firstCategory, firstUnit, firstTax] = await Promise.all([
+                        prisma.category.findFirst({ where: { businessId } }),
+                        prisma.measurementUnit.findFirst({ where: { isActive: true } }),
+                        prisma.tax.findFirst()
+                    ]);
+
+                    if (firstCategory && firstUnit && firstTax) {
+                        variosProduct = await prisma.product.create({
+                            data: {
+                                businessId,
+                                name: 'Varios',
+                                sku: 'SYS-VARIOS',
+                                type: ProductType.SERVICE,
+                                salePrice: new Decimal(0),
+                                costPrice: new Decimal(0),
+                                profitMargin: new Decimal(0),
+                                minStock: 0,
+                                categoryId: firstCategory.id,
+                                unitId: firstUnit.id,
+                                taxId: firstTax.id,
+                                description: 'Ítem Libre / Varios',
+                                isActive: true
+                            }
+                        });
+                    }
+                }
+
+                if (variosProduct) {
+                    data.items = data.items.map(item => {
+                        if (!item.productId || item.productId <= 0 || (item as any).isVarios) {
+                            return {
+                                ...item,
+                                productId: variosProduct.id
+                            };
+                        }
+                        return item;
+                    });
+                }
+            }
+
             // 2. Cargar Productos (Con Impuestos, Recetas y Presentaciones)
             const productIds = [...new Set(data.items.map(i => i.productId))];
 
@@ -122,6 +170,12 @@ export class SaleService {
                 // A. Manejo de Presentaciones (Cajas/Packs) y Precio Base
                 let factor = new Decimal(1);
                 let unitPrice = new Decimal(product.salePrice);
+
+                // Si viene un precio explícito (ej: en ítems libres/varios o sobreescritura autorizada)
+                if (item.price !== undefined && item.price !== null && new Decimal(item.price).gte(0)) {
+                    unitPrice = new Decimal(item.price);
+                }
+
                 let presentationUsed = null;
 
                 if (item.productPresentationId) {

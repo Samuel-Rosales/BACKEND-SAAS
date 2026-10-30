@@ -12,8 +12,10 @@ export interface CreateSaleItemDto {
     productId: number;
     productPresentationId?: number; // Opcional (Si es null, es la unidad base)
     quantity: number; // Cantidad visual (ej: 2 Cajas)
-    price?: Decimal;   // Opcional: Sobreescribir precio del sistema
+    price?: Decimal | number; // Opcional: Sobreescribir precio del sistema (ej: Varios / Concepto Libre)
     depotId?: number;
+    customName?: string; // Opcional: Nombre personalizado para ítems libres
+    isVarios?: boolean; // Opcional: Flag de ítem comodín de servicio
     // discount?: number; // Opcional: Descuento por línea (Lo dejaremos para v3 si quieres simplificar ahora)
 }
 
