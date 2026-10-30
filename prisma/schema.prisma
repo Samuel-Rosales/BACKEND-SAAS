@@ -117,6 +117,7 @@ model BusinessMember {
   cashRegisters  CashRegister[]
   quotations     Quotation[]
   expenses       Expense[]
+  purchaseOrders PurchaseOrder[]
   managerBusinesses Business[] @relation("BusinessManagerCommission")
   managerSales      Sale[]     @relation("SaleManagerCommission")
 
@@ -203,6 +204,7 @@ model Business {
   expenseCategories ExpenseCategory[]
   expenses         Expense[]
   aiUsageRecords   BusinessAiUsage[]
+  purchaseOrders   PurchaseOrder[]
 }
 
 model BusinessCategory {
@@ -351,6 +353,7 @@ model ExchangeRate {
   salePayments     SalePayment[]
   purchases        Purchase[]
   purchasePayments PurchasePayment[]
+  purchaseOrders   PurchaseOrder[]
   cashCounts       CashCount[]
   creditNotePayments CreditNotePayment[]
   quotations       Quotation[]
@@ -388,6 +391,7 @@ model Depot {
   purchaseItems  PurchaseItem[]
   stockLots      StockLot[]
   stockMovements StockMovement[]
+  purchaseOrders PurchaseOrder[]
 }
 
 model MeasurementUnit {
@@ -471,6 +475,7 @@ model Product {
 
   // 2. Si este producto es un INGREDIENTE (Simple), aquí dice en qué platos se usa:
   componentOf     ProductComponent[] @relation("ChildProduct")
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@index([businessId, sku])
   @@index([businessId, secondaryCode])
@@ -502,6 +507,7 @@ model ProductPresentation {
   price     Decimal @db.Decimal(15, 2)
 
   isActive Boolean @default(true) // <--- NUEVO: Para Soft Delete
+  purchaseOrderItems PurchaseOrderItem[]
 
   product Product @relation(fields: [productId], references: [id])
 
@@ -785,6 +791,7 @@ model Supplier {
 
   business  Business   @relation(fields: [businessId], references: [id])
   purchases Purchase[]
+  purchaseOrders PurchaseOrder[]
 }
 
 model Purchase {
@@ -826,6 +833,7 @@ model Purchase {
 
   items    PurchaseItem[]
   payments PurchasePayment[]
+  purchaseOrder PurchaseOrder? @relation("PurchaseOrderToPurchase")
 }
 
 // --- PLAN DE PAGOS DE COMPRAS (Cuentas por Pagar) ---
@@ -1294,4 +1302,69 @@ model InterBranchTransferItem {
   transfer           InterBranchTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
 
   @@index([transferId])
+}
+
+
+// ==========================================
+// ÓRDENES DE COMPRA (PURCHASE ORDERS)
+// ==========================================
+
+enum PurchaseOrderStatus {
+  PENDING
+  APPROVED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id                   Int                 @id @default(autoincrement())
+  businessId           Int
+  orderNumber          Int
+  memberId             Int
+  supplierId           Int
+  depotId              Int
+  exchangeRateId       Int
+
+  status               PurchaseOrderStatus @default(PENDING)
+
+  subTotal             Decimal             @db.Decimal(15, 2)
+  taxAmount            Decimal             @default(0) @db.Decimal(15, 2)
+  totalCost            Decimal             @db.Decimal(15, 2)
+
+  expectedDeliveryDate DateTime?           @db.Date
+  notes                String?
+
+  purchaseId           Int?                @unique
+  purchase             Purchase?           @relation("PurchaseOrderToPurchase", fields: [purchaseId], references: [id])
+
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  business             Business            @relation(fields: [businessId], references: [id])
+  supplier             Supplier            @relation(fields: [supplierId], references: [id])
+  member               BusinessMember      @relation(fields: [memberId], references: [id])
+  depot                Depot               @relation(fields: [depotId], references: [id])
+  exchangeRate         ExchangeRate        @relation(fields: [exchangeRateId], references: [id])
+
+  items                PurchaseOrderItem[]
+
+  @@index([businessId, status])
+  @@index([supplierId])
+}
+
+model PurchaseOrderItem {
+  id                    Int                  @id @default(autoincrement())
+  purchaseOrderId       Int
+  productId             Int
+  productPresentationId Int?
+  quantity              Decimal              @db.Decimal(18, 6)
+  unitCost              Decimal              @db.Decimal(15, 2)
+  subTotal              Decimal              @db.Decimal(15, 2)
+
+  purchaseOrder         PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product               Product              @relation(fields: [productId], references: [id])
+  productPresentation   ProductPresentation? @relation(fields: [productPresentationId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([productId])
 }

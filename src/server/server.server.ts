@@ -11,7 +11,7 @@ import { CategoryRoute, DepotRoute, ProductRoute, StockLotRoute, StockMovementRo
 
 import { ExchangeRateRoute, PaymentMethodRoute, CashRegisterRoute, CashCountRoute, TaxRoute, ExpenseRoute, ExpenseCategoryRoute } from '../modules/finance';
 
-import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute } from '@/modules/procurement';
+import { SupplierRoute, PurchaseRoute, PurchasePaymentRoute, PurchaseItemRoute, PurchaseOrderRoute } from '@/modules/procurement';
 
 import { ClientRoute, SaleRoute, CreditNoteRoute, QuotationRoute } from '@/modules/sales';
 
@@ -88,6 +88,7 @@ export class Server {
             purchases: `${this.prefix}/procurement/purchase`,
             purchasePayments: `${this.prefix}/procurement/purchase-payment`,
             purchaseItems: `${this.prefix}/procurement/purchase-item`,
+            purchaseOrders: `${this.prefix}/procurement/purchase-order`,
 
             // MÓDULO SALES
             clients: `${this.prefix}/sales/client`,
@@ -183,6 +184,7 @@ export class Server {
         this.app.use(this.paths.purchases, PurchaseRoute);
         this.app.use(this.paths.purchasePayments, PurchasePaymentRoute);
         this.app.use(this.paths.purchaseItems, PurchaseItemRoute);
+        this.app.use(this.paths.purchaseOrders, PurchaseOrderRoute);
         this.app.use(this.paths.clients, ClientRoute);
         this.app.use(this.paths.sales, SaleRoute);
         this.app.use(this.paths.creditNotes, CreditNoteRoute);
