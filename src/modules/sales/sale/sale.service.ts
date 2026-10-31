@@ -1133,7 +1133,7 @@ export class SaleService {
                     items: {
                         include: {
                             product: {
-                                select: { name: true, sku: true, imageUrl: true, category: true }
+                                select: { name: true, sku: true, imageUrl: true, category: true, tax: true }
                             },
                             productPresentation: {
                                 select: { name: true, factor: true }
@@ -1178,7 +1178,9 @@ export class SaleService {
                 id: sale.id,
                 receiptNumber: sale.receiptNumber, // Ojo: Asegura que sea string o number según tu UI
                 createdAt: sale.createdAt,
-                status: sale.status, // PAID, PENDING, CANCELLED
+                status: sale.status,
+                paymentStatus: sale.paymentStatus,
+                conditions: sale.conditions,
 
                 // --- Facturación Fiscal SENIAT ---
                 fiscalInvoiceNumber: sale.fiscalInvoiceNumber,
@@ -1214,6 +1216,8 @@ export class SaleService {
                 items: sale.items.map(item => {
                     // Lógica de Snapshot: ¿Tenemos nombre guardado en el item? Si no, usa el del producto actual.
                     const displayName = item.product.name || 'Producto Desconocido';
+                    const rawTaxRate = (item.product as any)?.tax ? Number((item.product as any).tax.rate) : 0;
+                    const taxPercentage = rawTaxRate >= 1 ? rawTaxRate : rawTaxRate * 100;
 
                     return {
                         id: item.id,
@@ -1223,6 +1227,9 @@ export class SaleService {
                         imageUrl: item.product?.imageUrl || null,
                         quantity: Number(item.quantity),
                         price: Number(item.unitPrice), // Precio unitario al momento de la venta
+                        salePrice: Number(item.unitPrice),
+                        taxPercentage: taxPercentage,
+                        tax: (item.product as any)?.tax || null,
                         total: Number(item.subTotal), // Total línea (qty * price)
 
                         // Info de Presentación (ej. "Caja x 12")
