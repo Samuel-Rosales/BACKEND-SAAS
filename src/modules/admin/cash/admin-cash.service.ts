@@ -13,12 +13,22 @@ export interface CreateAdminExpenseDto {
   notes?: string;
 }
 
+export interface GetCashFilterDto {
+  startDate?: string;
+  endDate?: string;
+  month?: string;
+}
+
+// Fecha oficial de inicio de caja del SaaS (arranque limpio desde hoy 2026-10-31 ordenado por el usuario)
+export const SAAS_CASH_INCEPTION_DATE = new Date('2026-10-31T00:00:00.000Z');
+
 export class AdminCashService {
   /**
    * Obtiene el balance en vivo de la caja del SaaS:
    * Ingresos por suscripciones aprobadas - Gastos + Compras de USDT
+   * Con soporte de rango de fechas personalizado y resumen general a partir de hoy.
    */
-  async getBalance(monthStr?: string) {
+  async getBalance(filters: GetCashFilterDto = {}) {
     try {
       // 1. Obtener última tasa de cambio activa
       const latestRateRecord = await prisma.exchangeRate.findFirst({
@@ -27,13 +37,46 @@ export class AdminCashService {
       });
       const activeExchangeRate = latestRateRecord ? Number(latestRateRecord.rate) : 55.0;
 
-      // 2. Ingresos de suscripciones aprobadas (Globales)
-      const approvedPayments = await prisma.subscriptionPayment.findMany({
-        where: {
-          status: 'APPROVED',
-          businessId: { notIn: [6, 11] }, // Excluir negocios de prueba / dueño
+      // 2. Determinar rango de fechas
+      let dateFrom = SAAS_CASH_INCEPTION_DATE;
+      let dateTo: Date | null = null;
+
+      if (filters.startDate) {
+        const parsedStart = new Date(`${filters.startDate}T00:00:00.000Z`);
+        if (!isNaN(parsedStart.getTime())) {
+          dateFrom = parsedStart > SAAS_CASH_INCEPTION_DATE ? parsedStart : SAAS_CASH_INCEPTION_DATE;
+        }
+      } else if (filters.month && /^\d{4}-\d{2}$/.test(filters.month)) {
+        const [y, m] = filters.month.split('-').map(Number);
+        const startOfMonth = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+        dateFrom = startOfMonth > SAAS_CASH_INCEPTION_DATE ? startOfMonth : SAAS_CASH_INCEPTION_DATE;
+        dateTo = new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1, 0, 0, 0, 0) - 1);
+      }
+
+      if (filters.endDate) {
+        const parsedEnd = new Date(`${filters.endDate}T23:59:59.999Z`);
+        if (!isNaN(parsedEnd.getTime())) {
+          dateTo = parsedEnd;
+        }
+      }
+
+      // 3. Consultar Ingresos de suscripciones aprobadas en el rango
+      const paymentWhere: any = {
+        status: 'APPROVED',
+        businessId: { notIn: [6, 11] }, // Excluir negocios de prueba / dueño
+        createdAt: {
+          gte: dateFrom,
         },
+      };
+
+      if (dateTo) {
+        paymentWhere.createdAt.lte = dateTo;
+      }
+
+      const approvedPayments = await prisma.subscriptionPayment.findMany({
+        where: paymentWhere,
         select: {
+          id: true,
           amount: true,
           currency: true,
           createdAt: true,
@@ -53,11 +96,20 @@ export class AdminCashService {
         }
       }
 
-      // 3. Gastos del Administrador
-      const allExpenses = await prisma.adminExpense.findMany({
-        where: {
-          deletedAt: null,
+      // 4. Consultar Gastos del Administrador en el rango
+      const expenseWhere: any = {
+        deletedAt: null,
+        date: {
+          gte: dateFrom,
         },
+      };
+
+      if (dateTo) {
+        expenseWhere.date.lte = dateTo;
+      }
+
+      const allExpenses = await prisma.adminExpense.findMany({
+        where: expenseWhere,
         orderBy: { date: 'desc' },
       });
 
@@ -90,7 +142,7 @@ export class AdminCashService {
         }
       }
 
-      // 4. Balances Disponibles en Cuenta
+      // 5. Balances Disponibles en Cuenta para el período seleccionado
       // Cuenta USDT = Ingresos USD/USDT - Gastos USD/USDT + USDT comprados
       const balanceUsdt = Number((totalIncomeUsd - totalExpensesUsd + totalUsdtPurchased).toFixed(2));
       // Cuenta Bolívares = Ingresos VES - Gastos VES - Bolívares gastados en comprar USDT
@@ -100,65 +152,32 @@ export class AdminCashService {
       const vesInUsd = activeExchangeRate > 0 ? balanceVes / activeExchangeRate : 0;
       const totalEquivalentUsd = Number((balanceUsdt + vesInUsd).toFixed(2));
 
-      // 5. Métricas del Mes Seleccionado (si se solicitó)
-      let monthlyIncomeUsd = 0;
-      let monthlyIncomeVes = 0;
-      let monthlyExpensesUsd = 0;
-      let monthlyExpensesVes = 0;
-
-      if (monthStr && /^\d{4}-\d{2}$/.test(monthStr)) {
-        const [y, m] = monthStr.split('-').map(Number);
-        const startOfMonth = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
-        const endOfMonth = new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1, 0, 0, 0, 0));
-
-        // Pagos del mes
-        const monthPayments = approvedPayments.filter((p) => {
-          const d = new Date(p.createdAt);
-          return d >= startOfMonth && d < endOfMonth;
-        });
-
-        for (const p of monthPayments) {
-          const amt = Number(p.amount) || 0;
-          if (p.currency === 'VES') monthlyIncomeVes += amt;
-          else monthlyIncomeUsd += amt;
-        }
-
-        // Gastos del mes
-        const monthExpenses = allExpenses.filter((e) => {
-          const d = new Date(e.date);
-          return d >= startOfMonth && d < endOfMonth;
-        });
-
-        for (const e of monthExpenses) {
-          const amt = Number(e.amount) || 0;
-          const cur = (e.currency || 'USDT').toUpperCase();
-          if (cur === 'VES') monthlyExpensesVes += amt;
-          else monthlyExpensesUsd += amt;
-        }
-      }
-
       return {
         status: 200,
         message: 'Balance de caja del SaaS obtenido exitosamente',
         data: {
+          period: {
+            startDate: dateFrom.toISOString().split('T')[0],
+            endDate: dateTo ? dateTo.toISOString().split('T')[0] : null,
+            isAllTime: !filters.startDate && !filters.endDate && !filters.month,
+            inceptionDate: SAAS_CASH_INCEPTION_DATE.toISOString().split('T')[0],
+          },
           balance: {
             usdt: balanceUsdt,
             ves: balanceVes,
             totalEquivalentUsd,
           },
           income: {
-            totalUsd: totalIncomeUsd,
-            totalVes: totalIncomeVes,
-            monthlyUsd: monthlyIncomeUsd,
-            monthlyVes: monthlyIncomeVes,
+            totalUsd: Number(totalIncomeUsd.toFixed(2)),
+            totalVes: Number(totalIncomeVes.toFixed(2)),
+            count: approvedPayments.length,
           },
           expenses: {
-            totalUsd: totalExpensesUsd,
-            totalVes: totalExpensesVes,
-            totalUsdtPurchased,
-            totalVesSpentOnUsdt,
-            monthlyUsd: monthlyExpensesUsd,
-            monthlyVes: monthlyExpensesVes,
+            totalUsd: Number(totalExpensesUsd.toFixed(2)),
+            totalVes: Number(totalExpensesVes.toFixed(2)),
+            totalUsdtPurchased: Number(totalUsdtPurchased.toFixed(2)),
+            totalVesSpentOnUsdt: Number(totalVesSpentOnUsdt.toFixed(2)),
+            count: allExpenses.length,
           },
           exchangeRate: activeExchangeRate,
         },
@@ -174,16 +193,46 @@ export class AdminCashService {
   }
 
   /**
-   * Listar todos los gastos con filtrado opcional
+   * Listar todos los gastos con filtrado opcional por moneda, categoría, fechas y búsqueda
    */
   async getExpenses(query: {
     currency?: string;
     category?: string;
+    startDate?: string;
+    endDate?: string;
     month?: string;
     search?: string;
   }) {
     try {
       const where: any = { deletedAt: null };
+
+      // Rango de fechas (a partir de la fecha de inicio oficial)
+      let dateFrom = SAAS_CASH_INCEPTION_DATE;
+      let dateTo: Date | null = null;
+
+      if (query.startDate) {
+        const parsedStart = new Date(`${query.startDate}T00:00:00.000Z`);
+        if (!isNaN(parsedStart.getTime())) {
+          dateFrom = parsedStart > SAAS_CASH_INCEPTION_DATE ? parsedStart : SAAS_CASH_INCEPTION_DATE;
+        }
+      } else if (query.month && /^\d{4}-\d{2}$/.test(query.month)) {
+        const [y, m] = query.month.split('-').map(Number);
+        const startOfMonth = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+        dateFrom = startOfMonth > SAAS_CASH_INCEPTION_DATE ? startOfMonth : SAAS_CASH_INCEPTION_DATE;
+        dateTo = new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1, 0, 0, 0, 0) - 1);
+      }
+
+      if (query.endDate) {
+        const parsedEnd = new Date(`${query.endDate}T23:59:59.999Z`);
+        if (!isNaN(parsedEnd.getTime())) {
+          dateTo = parsedEnd;
+        }
+      }
+
+      where.date = { gte: dateFrom };
+      if (dateTo) {
+        where.date.lte = dateTo;
+      }
 
       if (query.currency && query.currency !== 'ALL') {
         where.currency = query.currency.toUpperCase();
@@ -191,14 +240,6 @@ export class AdminCashService {
 
       if (query.category && query.category !== 'ALL') {
         where.category = query.category.toUpperCase();
-      }
-
-      if (query.month && /^\d{4}-\d{2}$/.test(query.month)) {
-        const [y, m] = query.month.split('-').map(Number);
-        where.date = {
-          gte: new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)),
-          lt: new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1, 0, 0, 0, 0)),
-        };
       }
 
       if (query.search && query.search.trim()) {

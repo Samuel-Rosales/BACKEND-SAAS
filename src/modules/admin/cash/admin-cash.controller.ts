@@ -10,8 +10,12 @@ export class AdminCashController {
 
   async getBalance(req: Request, res: Response) {
     try {
-      const month = req.query.month as string | undefined;
-      const result = await this.service.getBalance(month);
+      const { startDate, endDate, month } = req.query as {
+        startDate?: string;
+        endDate?: string;
+        month?: string;
+      };
+      const result = await this.service.getBalance({ startDate, endDate, month });
       return res.status(result.status).json(result);
     } catch (error: any) {
       return res.status(500).json({
@@ -24,14 +28,16 @@ export class AdminCashController {
 
   async getExpenses(req: Request, res: Response) {
     try {
-      const { currency, category, month, search } = req.query as {
+      const { currency, category, startDate, endDate, month, search } = req.query as {
         currency?: string;
         category?: string;
+        startDate?: string;
+        endDate?: string;
         month?: string;
         search?: string;
       };
 
-      const result = await this.service.getExpenses({ currency, category, month, search });
+      const result = await this.service.getExpenses({ currency, category, startDate, endDate, month, search });
       return res.status(result.status).json(result);
     } catch (error: any) {
       return res.status(500).json({
