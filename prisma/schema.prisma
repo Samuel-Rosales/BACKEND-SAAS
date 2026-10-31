@@ -1368,3 +1368,26 @@ model PurchaseOrderItem {
   @@index([purchaseOrderId])
   @@index([productId])
 }
+
+
+model AdminExpense {
+  id           Int       @id @default(autoincrement())
+  title        String
+  category     String    @default("OPERATIONAL")
+  amount       Decimal   @db.Decimal(15, 2)
+  currency     String    @default("USDT")
+  exchangeRate Decimal?  @db.Decimal(12, 4)
+  amountInUSD  Decimal?  @db.Decimal(15, 2)
+  usdtReceived Decimal?  @db.Decimal(15, 2)
+  date         DateTime  @default(now())
+  reference    String?
+  notes        String?
+  createdById  Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+  deletedAt    DateTime?
+
+  @@index([date])
+  @@index([currency])
+  @@index([category])
+}
