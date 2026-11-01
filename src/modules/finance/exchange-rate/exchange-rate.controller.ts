@@ -43,7 +43,9 @@ export class ExchangeRateController {
         const businessId = this.getBusinessIdOrThrow(req, res);
         if (!businessId) return;
 
-        const {status, data, message} = await this.service.findLatest(businessId);
+        const date = req.query.date as string | undefined;
+
+        const {status, data, message} = await this.service.findLatest(businessId, date);
 
         res.status(status).json({ 
             message, 

@@ -20,24 +20,41 @@ export class ExpenseService {
         };
       }
 
+      const expenseDate = data.expenseDate ? new Date(data.expenseDate) : new Date();
+
       let activeExchangeRate = null;
       try {
-        activeExchangeRate = await resolveBusinessExchangeRate(businessId, prisma);
+        activeExchangeRate = await resolveBusinessExchangeRate(businessId, prisma, expenseDate);
       } catch (e: any) {
-        console.warn(`[ExpenseService] Negocio ${businessId} sin tasa de cambio activa configurada.`);
+        console.warn(`[ExpenseService] Negocio ${businessId} sin tasa de cambio para fecha ${expenseDate.toISOString()}.`);
       }
 
-      // Si no hay tasa activa para la estrategia configurada, buscar la tasa más reciente registrada como respaldo
+      // Si no hay tasa histórica para la estrategia configurada, buscar la tasa registrada en o antes de expenseDate como respaldo
       if (!activeExchangeRate) {
+        const endOfDay = new Date(expenseDate);
+        endOfDay.setHours(23, 59, 59, 999);
         activeExchangeRate = await prisma.exchangeRate.findFirst({
           where: {
             OR: [
               { businessId },
               { businessId: null },
             ],
+            createdAt: { lte: endOfDay },
           },
           orderBy: { createdAt: 'desc' },
         });
+
+        if (!activeExchangeRate) {
+          activeExchangeRate = await prisma.exchangeRate.findFirst({
+            where: {
+              OR: [
+                { businessId },
+                { businessId: null },
+              ],
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+        }
       }
 
       const currency: Currency = data.currency || Currency.USD;
@@ -57,8 +74,6 @@ export class ExpenseService {
       } else {
         amountInUSD = amountDecimal;
       }
-
-      const expenseDate = data.expenseDate ? new Date(data.expenseDate) : new Date();
 
       const expense = await prisma.expense.create({
         data: {
@@ -245,27 +260,49 @@ export class ExpenseService {
 
       const newCurrency = data.currency || existing.currency;
       const newAmount = data.amount !== undefined ? new Decimal(data.amount) : existing.amount;
+      const newExpenseDate = data.expenseDate ? new Date(data.expenseDate) : existing.expenseDate;
+
+      let newExchangeRateId = existing.exchangeRateId;
       let newAmountInUSD = existing.amountInUSD;
-      if (data.amount !== undefined || data.currency !== undefined) {
-        if (newCurrency === Currency.VES) {
-          let rateValue: Decimal | null | undefined = existing.exchangeRate?.rate;
-          if (!rateValue) {
-            let activeRate = null;
-            try {
-              activeRate = await resolveBusinessExchangeRate(businessId, prisma);
-            } catch (e) {}
-            if (!activeRate) {
-              activeRate = await prisma.exchangeRate.findFirst({
-                where: { OR: [{ businessId }, { businessId: null }] },
-                orderBy: { createdAt: 'desc' },
-              });
-            }
-            rateValue = activeRate?.rate;
+
+      const dateChanged = data.expenseDate !== undefined && new Date(data.expenseDate).getTime() !== existing.expenseDate.getTime();
+      const amountChanged = data.amount !== undefined && !newAmount.equals(existing.amount);
+      const currencyChanged = data.currency !== undefined && newCurrency !== existing.currency;
+
+      if (dateChanged || amountChanged || currencyChanged) {
+        let historicalRate = null;
+        try {
+          historicalRate = await resolveBusinessExchangeRate(businessId, prisma, newExpenseDate);
+        } catch (e) {}
+
+        if (!historicalRate) {
+          const endOfDay = new Date(newExpenseDate);
+          endOfDay.setHours(23, 59, 59, 999);
+          historicalRate = await prisma.exchangeRate.findFirst({
+            where: {
+              OR: [{ businessId }, { businessId: null }],
+              createdAt: { lte: endOfDay },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (!historicalRate) {
+            historicalRate = await prisma.exchangeRate.findFirst({
+              where: { OR: [{ businessId }, { businessId: null }] },
+              orderBy: { createdAt: 'desc' },
+            });
           }
+        }
+
+        if (historicalRate) {
+          newExchangeRateId = historicalRate.id;
+        }
+
+        if (newCurrency === Currency.VES) {
+          const rateValue = historicalRate?.rate || existing.exchangeRate?.rate;
           if (!rateValue) {
             return {
               status: 400,
-              message: 'No se encontró una tasa de cambio activa para convertir el gasto en VES',
+              message: 'No se encontró una tasa de cambio para convertir el gasto en VES',
               data: null,
             };
           }
@@ -284,6 +321,7 @@ export class ExpenseService {
           amount: newAmount,
           currency: newCurrency,
           amountInUSD: newAmountInUSD,
+          exchangeRateId: newExchangeRateId,
           expenseDate: data.expenseDate ? new Date(data.expenseDate) : undefined,
           beneficiary: data.beneficiary !== undefined ? data.beneficiary.trim() || null : undefined,
           reference: data.reference !== undefined ? data.reference.trim() || null : undefined,

@@ -111,15 +111,15 @@ export class ExchangeRateService {
     }
 
     // 3. OBTENER LA ÚLTIMA TASA POR MONEDA
-    async findLatest(businessId: number) {
+    async findLatest(businessId: number, targetDate?: string) {
         try {
 
             let activeRate = null;
             
             try {
-                activeRate = await resolveBusinessExchangeRate(businessId);
+                activeRate = await resolveBusinessExchangeRate(businessId, prisma, targetDate);
             } catch (e) {
-                console.warn(`Advertencia: Negocio ${businessId} sin tasa activa.`);
+                console.warn(`Advertencia: Negocio ${businessId} sin tasa para fecha ${targetDate || 'activa'}.`);
                 // No lanzamos error 500 para no bloquear el acceso al dashboard,
                 // pero enviamos null o una tasa por defecto.
             }
