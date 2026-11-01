@@ -282,8 +282,8 @@ export class SaleService {
                     // rate > 0 ---> .gt(0)
                     if (taxRate.gt(0)) {
                         // Fórmula: Base * (Tasa / 100)
-                        // Ejemplo: 100 * 0.16 = 16
-                        lineTax = lineNetAmount.mul(taxRate);
+                        // Redondeamos el IVA de la línea a 2 decimales para coincidir exactamente con el POS
+                        lineTax = lineNetAmount.mul(taxRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
                     }
                 }
 
