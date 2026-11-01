@@ -205,6 +205,7 @@ model Business {
   expenses         Expense[]
   aiUsageRecords   BusinessAiUsage[]
   purchaseOrders   PurchaseOrder[]
+  paymentMethods   PaymentMethod[]
 }
 
 model BusinessCategory {
@@ -975,18 +976,22 @@ model OrderItem {
 }
 
 model PaymentMethod {
-  id       Int         @id @default(autoincrement())
-  name     String // Ej: "Zelle Banesco", "Caja Chica", "Punto de Venta"
-  type     PaymentType // El tipo "interno" para que el sistema sepa cómo comportarse
-  isActive Boolean     @default(true) // Para ocultar cuentas viejas sin borrar historial
-  currency String    // Moneda predeterminada (USD, VES)
+  id         Int         @id @default(autoincrement())
+  businessId Int?
+  name       String // Ej: "Zelle Banesco", "Caja Chica", "Punto de Venta"
+  type       PaymentType // El tipo "interno" para que el sistema sepa cómo comportarse
+  isActive   Boolean     @default(true) // Para ocultar cuentas viejas sin borrar historial
+  currency   String // Moneda predeterminada (USD, VES)
+
+  business Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   // Relaciones con los pagos realizados
-  salePayments     SalePayment[]
-  purchasePayments PurchasePayment[]
+  salePayments       SalePayment[]
+  purchasePayments   PurchasePayment[]
   creditNotePayments CreditNotePayment[]
 
-  @@unique([name]) // Evita que creen dos veces "Zelle Banesco"
+  @@unique([businessId, name])
+  @@index([businessId, isActive])
 }
 
 // ==========================================

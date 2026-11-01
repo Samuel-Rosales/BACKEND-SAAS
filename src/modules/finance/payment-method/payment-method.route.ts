@@ -3,7 +3,7 @@ import { PaymentMethodController } from './payment-method.controller';
 import { PaymentMethodValidator } from './payment-method.validator';
 import { handleValidationErrors } from '@/middlewares/validation.middleware';
 import { authMiddleware } from '@/middlewares/auth.middleware';
-import { requireBusinessPermission, requireSuperAdmin } from '@/middlewares';
+import { requireBusinessPermission } from '@/middlewares';
 import type { BusinessPermissionCode } from '@/data/aim/role-permissions.data';
 
 const router = Router();
@@ -21,6 +21,12 @@ const PAYMENT_METHOD_READ_PERMISSIONS: BusinessPermissionCode[] = [
   'ORDERS_WRITE',
   'PROCUREMENT_READ',
   'PROCUREMENT_WRITE',
+  'BUSINESS_SETTINGS_VIEW',
+];
+
+const PAYMENT_METHOD_WRITE_PERMISSIONS: BusinessPermissionCode[] = [
+  'BUSINESS_SETTINGS_EDIT',
+  'FINANCE_READ',
 ];
 
 // Todas las rutas requieren autenticación
@@ -28,7 +34,7 @@ router.use(authMiddleware);
 
 router.post(
   '/', 
-  requireSuperAdmin,
+  requireBusinessPermission(PAYMENT_METHOD_WRITE_PERMISSIONS),
   validator.validateCreate, 
   handleValidationErrors, 
   controller.create
@@ -39,16 +45,16 @@ router.get('/', requireBusinessPermission(PAYMENT_METHOD_READ_PERMISSIONS), cont
 router.get('/active', requireBusinessPermission(PAYMENT_METHOD_READ_PERMISSIONS), controller.findActive);
 
 router.get(
-    '/:id', 
+  '/:id', 
   requireBusinessPermission(PAYMENT_METHOD_READ_PERMISSIONS),
-    validator.validateId,
-    handleValidationErrors,
-    controller.findOne
+  validator.validateId,
+  handleValidationErrors,
+  controller.findOne
 );
 
 router.patch(
   '/:id', 
-  requireSuperAdmin,
+  requireBusinessPermission(PAYMENT_METHOD_WRITE_PERMISSIONS),
   validator.validateUpdate, 
   handleValidationErrors, 
   controller.update
@@ -56,7 +62,7 @@ router.patch(
 
 router.delete(
   '/:id', 
-  requireSuperAdmin,
+  requireBusinessPermission(PAYMENT_METHOD_WRITE_PERMISSIONS),
   validator.validateId, 
   handleValidationErrors,
   controller.remove

@@ -5,4 +5,5 @@ export interface CreatePaymentMethodInterface {
   type: PaymentType;
   currency: string;
   isActive?: boolean;
+  businessId?: number | null;
 }

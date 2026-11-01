@@ -11,8 +11,8 @@ export class PaymentMethodValidator {
 
         body('currency')
         .isString().withMessage('La moneda debe ser una cadena de texto')
-        .isIn(['USD', 'VES', 'COP'])
-        .isLength({ min: 3, max: 3 }).withMessage('La moneda debe tener 3 caracteres')
+        .isIn(['USD', 'VES', 'COP', 'EUR'])
+        .withMessage('La moneda debe ser USD, VES, COP o EUR')
         .trim(),
 
         body('type')
@@ -29,11 +29,17 @@ export class PaymentMethodValidator {
 
         param('id').isInt().toInt(),
 
+        body('name')
+        .optional()
+        .isString().withMessage('El nombre debe ser una cadena de texto')
+        .isLength({ min: 2, max: 100 }).withMessage('El nombre debe tener entre 2 y 100 caracteres')
+        .trim(),
+
         body('currency')
         .optional()
         .isString().withMessage('La moneda debe ser una cadena de texto')
-        .isIn(['USD', 'VES', 'COP'])
-        .isLength({ min: 3, max: 3 }).withMessage('La moneda debe tener 3 caracteres')
+        .isIn(['USD', 'VES', 'COP', 'EUR'])
+        .withMessage('La moneda debe ser USD, VES, COP o EUR')
         .trim(),
         
         body('type')

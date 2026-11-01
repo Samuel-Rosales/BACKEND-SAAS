@@ -5,7 +5,8 @@ export class PaymentMethodController {
     private service = new PaymentMethodService();
 
     create = async (req: Request, res: Response) => {
-        const { status, data, message } = await this.service.create(req.body);
+        const businessId = req.user?.businessId;
+        const { status, data, message } = await this.service.create(req.body, businessId);
 
         res.status(status).json({
             message,
@@ -35,7 +36,8 @@ export class PaymentMethodController {
 
     findOne = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const { status, data, message } = await this.service.findOne(+id);
+        const businessId = req.user?.businessId;
+        const { status, data, message } = await this.service.findOne(+id, businessId);
 
         res.status(status).json({
             message,
@@ -45,7 +47,8 @@ export class PaymentMethodController {
 
     update = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const { status, data, message } = await this.service.update(+id, req.body);
+        const businessId = req.user?.businessId;
+        const { status, data, message } = await this.service.update(+id, req.body, businessId);
 
         res.status(status).json({
             message,
@@ -55,7 +58,8 @@ export class PaymentMethodController {
 
     remove = async (req: Request, res: Response) => {
         const { id } = req.params;
-        const { status, data, message } = await this.service.remove(+id);
+        const businessId = req.user?.businessId;
+        const { status, data, message } = await this.service.remove(+id, businessId);
 
         res.status(status).json({
             message,
