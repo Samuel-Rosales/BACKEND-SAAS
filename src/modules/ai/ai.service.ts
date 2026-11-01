@@ -46,9 +46,9 @@ export class AiService {
 
     constructor() {
         this.apiKey = process.env.GEMINI_API_KEY || '';
-        // Por defecto usar Gemini 3.8 Flash con latencia ultra baja (Thinking Budget 0)
-        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
-        this.fallbackModels = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite-preview', 'gemini-flash-latest'];
+        // Por defecto usar Gemini Flash Lite Latest para latencia ultrabaja y máxima disponibilidad
+        this.primaryModel = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
+        this.fallbackModels = ['gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
         this.usageService = new AiUsageService();
     }
 
@@ -185,7 +185,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
         return axios.post(url, payload, {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 10000
+            timeout: 20000
         });
     }
 
@@ -502,6 +502,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
                 lastError = err;
                 const status = err.response ? err.response.status : null;
                 console.warn(`[Guardián AI] Falló llamada con modelo ${model} (HTTP ${status}): ${err.message}. Probando fallback...`);
+                await new Promise(res => setTimeout(res, 350));
             }
         }
 
@@ -578,6 +579,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
                     }
                 } catch (err: any) {
                     console.warn(`[Guardián AI] Falló follow-up con modelo ${model}: ${err.message}. Probando fallback...`);
+                    await new Promise(res => setTimeout(res, 350));
                 }
             }
 
