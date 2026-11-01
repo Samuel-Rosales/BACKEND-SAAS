@@ -35,8 +35,8 @@ export class StockMovementController {
         const businessId = req.user?.businessId;
 
         if (!businessId) {
-            return res.status(401).json({
-                message: 'No autorizado: ID de negocio no identificado',
+            return res.status(400).json({
+                message: 'ID de negocio no identificado',
                 data: null
             });
         }

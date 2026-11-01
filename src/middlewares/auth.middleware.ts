@@ -21,10 +21,17 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
   const token = authHeader.split(' ')[1];
 
+  let decoded: any;
   try {
-    const decoded: any = verifyToken(token);
-    if (!decoded) return res.status(401).json({ message: 'Token inválido.' });
+    decoded = verifyToken(token);
+    if (!decoded || !decoded.id) {
+      return res.status(401).json({ message: 'Token inválido o expirado.' });
+    }
+  } catch (jwtErr) {
+    return res.status(401).json({ message: 'Token inválido o expirado.' });
+  }
 
+  try {
     const user = await prisma.user.findUnique({ where: { id: decoded.id } });
     if (!user) return res.status(401).json({ message: 'Usuario no encontrado.' });
 
@@ -75,6 +82,8 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
     next();
   } catch (error) {
-    res.status(401).json({ message: 'No autorizado.' });
+    console.error('[authMiddleware] DB/Internal error during auth check:', error);
+    // Un error de base de datos o timeout jamás debe retornar 401 porque causa que el frontend cierre la sesión
+    res.status(500).json({ message: 'Error interno de autenticación en el servidor.' });
   }
 };
