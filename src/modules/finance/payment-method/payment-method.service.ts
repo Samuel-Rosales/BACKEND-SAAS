@@ -29,7 +29,7 @@ export class PaymentMethodService {
                 { name: 'Punto de Venta', type: 'DEBIT_CARD', currency: 'VES', isActive: true },
                 { name: 'Zelle', type: 'ZELLE', currency: 'USD', isActive: false },
                 { name: 'Transferencia Bancaria', type: 'TRANSFER', currency: 'VES', isActive: false },
-                { name: 'Cashea', type: 'OTHER', currency: 'USD', isActive: false },
+                { name: 'Cashea', type: 'OTHER', currency: 'USD', isActive: true },
             ];
 
             if (business?.enableCopCurrency) {
