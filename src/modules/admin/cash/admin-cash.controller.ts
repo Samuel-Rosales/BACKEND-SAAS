@@ -83,4 +83,22 @@ export class AdminCashController {
       });
     }
   }
+
+  async getIncome(req: Request, res: Response) {
+    try {
+      const { startDate, endDate, month } = req.query as {
+        startDate?: string;
+        endDate?: string;
+        month?: string;
+      };
+      const result = await this.service.getIncome({ startDate, endDate, month });
+      return res.status(result.status).json(result);
+    } catch (error: any) {
+      return res.status(500).json({
+        status: 500,
+        message: error.message || 'Error interno del servidor',
+        data: [],
+      });
+    }
+  }
 }

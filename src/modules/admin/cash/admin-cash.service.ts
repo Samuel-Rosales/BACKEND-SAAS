@@ -410,4 +410,137 @@ export class AdminCashService {
       };
     }
   }
+
+  /**
+   * Obtener historial detallado de ingresos (pagos de suscripción aprobados)
+   */
+  async getIncome(filters: GetCashFilterDto = {}) {
+    try {
+      let dateFrom = SAAS_CASH_INCEPTION_DATE;
+      let dateTo: Date | null = null;
+
+      if (filters.startDate) {
+        const parsedStart = new Date(`${filters.startDate}T00:00:00.000Z`);
+        if (!isNaN(parsedStart.getTime())) {
+          dateFrom = parsedStart > SAAS_CASH_INCEPTION_DATE ? parsedStart : SAAS_CASH_INCEPTION_DATE;
+        }
+      } else if (filters.month && /^\d{4}-\d{2}$/.test(filters.month)) {
+        const [y, m] = filters.month.split('-').map(Number);
+        const startOfMonth = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+        dateFrom = startOfMonth > SAAS_CASH_INCEPTION_DATE ? startOfMonth : SAAS_CASH_INCEPTION_DATE;
+        dateTo = new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1, 0, 0, 0, 0) - 1);
+      }
+
+      if (filters.endDate) {
+        const parsedEnd = new Date(`${filters.endDate}T23:59:59.999Z`);
+        if (!isNaN(parsedEnd.getTime())) {
+          dateTo = parsedEnd;
+        }
+      }
+
+      const paymentWhere: any = {
+        status: 'APPROVED',
+        businessId: { notIn: [6, 11] },
+        createdAt: {
+          gte: dateFrom,
+        },
+      };
+
+      if (dateTo) {
+        paymentWhere.createdAt.lte = dateTo;
+      }
+
+      const payments = await prisma.subscriptionPayment.findMany({
+        where: paymentWhere,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          business: {
+            select: {
+              id: true,
+              name: true,
+              document: true,
+              address: true,
+              closingNotificationPhone: true,
+              members: {
+                where: { isActive: true },
+                select: {
+                  role: { select: { code: true } },
+                  user: { select: { id: true, name: true, ci: true } },
+                },
+              },
+            },
+          },
+          plan: {
+            select: {
+              id: true,
+              name: true,
+              priceMonthly: true,
+            },
+          },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              ci: true,
+            },
+          },
+          reviewedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          subscription: {
+            select: {
+              id: true,
+              startDate: true,
+              endDate: true,
+              planType: true,
+              status: true,
+            },
+          },
+        },
+      });
+
+      const data = (payments as any[]).map((p: any) => {
+        const ownerMember = p.business?.members?.find((m: any) => m.role?.code === 'OWNER') || p.business?.members?.[0];
+        return {
+          id: p.id,
+          businessId: p.businessId,
+          businessName: p.business?.name || `Negocio #${p.businessId}`,
+          businessDocument: p.business?.document || null,
+          businessAddress: p.business?.address || null,
+          businessPhone: p.business?.closingNotificationPhone || null,
+          ownerName: ownerMember?.user?.name || p.createdBy?.name || 'Cliente',
+          ownerCi: ownerMember?.user?.ci || p.createdBy?.ci || null,
+          planType: p.planType,
+          planName: p.plan?.name || String(p.planType),
+          monthsPurchased: p.monthsPurchased,
+          amount: Number(p.amount),
+          currency: p.currency,
+          reference: p.reference,
+          proofUrl: p.proofUrl,
+          status: p.status,
+          createdAt: p.createdAt.toISOString(),
+          reviewedAt: p.reviewedAt ? p.reviewedAt.toISOString() : null,
+          reviewedByName: p.reviewedBy?.name || null,
+          subscriptionStartDate: p.subscription?.startDate ? p.subscription.startDate.toISOString() : null,
+          subscriptionEndDate: p.subscription?.endDate ? p.subscription.endDate.toISOString() : null,
+        };
+      });
+
+      return {
+        status: 200,
+        message: 'Historial de ingresos obtenido exitosamente',
+        data,
+      };
+    } catch (error) {
+      console.error('AdminCashService.getIncome error:', error);
+      return {
+        status: 500,
+        message: 'Error al obtener historial de ingresos',
+        data: [],
+      };
+    }
+  }
 }
