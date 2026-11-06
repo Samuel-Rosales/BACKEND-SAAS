@@ -64,6 +64,10 @@ export class AdminCashService {
       const paymentWhere: any = {
         status: 'APPROVED',
         businessId: { notIn: [6, 11] }, // Excluir negocios de prueba / dueño
+        OR: [
+          { reviewNote: null },
+          { NOT: { reviewNote: { contains: '[OCULTO_CONTABILIDAD]' } } },
+        ],
         createdAt: {
           gte: dateFrom,
         },
@@ -441,6 +445,10 @@ export class AdminCashService {
       const paymentWhere: any = {
         status: 'APPROVED',
         businessId: { notIn: [6, 11] },
+        OR: [
+          { reviewNote: null },
+          { NOT: { reviewNote: { contains: '[OCULTO_CONTABILIDAD]' } } },
+        ],
         createdAt: {
           gte: dateFrom,
         },

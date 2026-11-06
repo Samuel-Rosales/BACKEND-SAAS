@@ -98,6 +98,8 @@ export class AdminSubscriptionsReportService {
             select: {
               id: true,
               name: true,
+              billingExempt: true,
+              isWarehouseHub: true,
               closingNotificationPhone: true,
               members: {
                 where: { isActive: true },
@@ -126,7 +128,7 @@ export class AdminSubscriptionsReportService {
         },
       });
 
-      const subscriptions = rawSubscriptions.filter((s) => !isExemptOwnerBusiness(s.business.id, s.business.name));
+      const subscriptions = rawSubscriptions.filter((s) => !isExemptOwnerBusiness(s.business.id, s.business.name) && !(s.business as any).billingExempt && !(s.business as any).isWarehouseHub);
 
       const reminders = subscriptions.map((sub) => {
         const endDate = new Date(sub.endDate);
@@ -275,6 +277,8 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
             select: {
               id: true,
               name: true,
+              billingExempt: true,
+              isWarehouseHub: true,
               closingNotificationPhone: true,
               members: {
                 where: { isActive: true },
@@ -330,9 +334,10 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
       const items = subscriptions.map((sub) => {
         // Determinar precio mensual ($)
         const isTrial = sub.planType === 'TRIAL' || Boolean(sub.plan?.name?.toUpperCase()?.includes('TRIAL'));
+        const isExemptHub = Boolean((sub.business as any).billingExempt || (sub.business as any).isWarehouseHub);
         let monthlyPrice = 0;
 
-        if (isTrial) {
+        if (isTrial || isExemptHub) {
           monthlyPrice = 0;
         } else if (sub.plan && sub.plan.priceMonthly !== null && sub.plan.priceMonthly !== undefined) {
           monthlyPrice = Number(sub.plan.priceMonthly);
@@ -395,8 +400,11 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
             paymentStatusLabel = 'Cuenta Exenta ($0)';
           }
         } else {
-          payingSubscriptions++;
-          projectedRevenue += monthlyPrice;
+          const isHiddenFromAccounting = Boolean(approvedPayment?.reviewNote?.includes('[OCULTO_CONTABILIDAD]'));
+          if (!isHiddenFromAccounting) {
+            payingSubscriptions++;
+            projectedRevenue += monthlyPrice;
+          }
 
           if (approvedPayment) {
             paymentStatus = 'PAID';
@@ -404,8 +412,10 @@ Si ya realizaste tu pago, por favor haz caso omiso a este mensaje. ¡Muchas grac
             paymentAmount = Number(approvedPayment.amount);
             paymentReference = approvedPayment.reference;
             paymentDate = approvedPayment.createdAt.toISOString();
-            collectedRevenue += monthlyPrice;
-            paidCount++;
+            if (!isHiddenFromAccounting) {
+              collectedRevenue += monthlyPrice;
+              paidCount++;
+            }
           } else if (underReviewPayment) {
             paymentStatus = 'UNDER_REVIEW';
             paymentStatusLabel = 'Pago en revisión';
@@ -510,6 +520,7 @@ Si ya realizaste tu pago, por favor haznos llegar tu comprobante o haz caso omis
           paymentAmount,
           paymentReference,
           paymentDate,
+          hiddenFromAccounting: Boolean(approvedPayment?.reviewNote?.includes('[OCULTO_CONTABILIDAD]')),
           owner: {
             name: ownerName,
             ci: ownerCi,

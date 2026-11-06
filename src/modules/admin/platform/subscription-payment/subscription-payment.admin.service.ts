@@ -62,7 +62,15 @@ export class SubscriptionPaymentAdminService {
 
       const whereClause: any = {
         ...(statusFilter ? { status: statusFilter } : {}),
-        ...(searchFilter || {}),
+        AND: [
+          {
+            OR: [
+              { reviewNote: null },
+              { NOT: { reviewNote: { contains: '[OCULTO_CONTABILIDAD]' } } },
+            ],
+          },
+          ...(searchFilter ? [searchFilter] : []),
+        ],
       };
 
       const [payments, total] = await Promise.all([
