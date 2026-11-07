@@ -68,6 +68,143 @@ const parseDateRange = (fromDate?: string, toDate?: string, tzOffset: number = 2
     };
 };
 
+export const resolveBusinessClient = async (
+    businessId: number,
+    clientSearch: string,
+    preferWithDebt: boolean = false
+) => {
+    const rawSearch = (clientSearch || '').trim();
+    if (!rawSearch) return null;
+
+    const normSearch = stripAccents(rawSearch).toLowerCase().trim();
+    const tokens = normSearch.split(/\s+/).filter(Boolean);
+
+    const clients = await prisma.client.findMany({
+        where: { businessId, isActive: true },
+        include: {
+            sales: {
+                where: {
+                    status: { not: 'CANCELLED' },
+                    deletedAt: null,
+                    remainingBalance: { gt: 0 }
+                },
+                select: { id: true, remainingBalance: true }
+            }
+        }
+    });
+
+    const matches = clients.filter(c => {
+        const normName = stripAccents(c.name || '').toLowerCase();
+        const normCi = stripAccents(c.ci || '').toLowerCase();
+        const normPhone = stripAccents(c.phone || '').toLowerCase();
+        const combined = `${normName} ${normCi} ${normPhone}`;
+
+        if (normName.includes(normSearch) || normCi.includes(normSearch) || normPhone.includes(normSearch)) {
+            return true;
+        }
+        return tokens.length > 0 && tokens.every(t => combined.includes(t));
+    });
+
+    if (matches.length === 0) return null;
+
+    matches.sort((a, b) => {
+        if (preferWithDebt) {
+            const aPending = a.sales.reduce((acc, s) => acc + Number(s.remainingBalance), 0);
+            const bPending = b.sales.reduce((acc, s) => acc + Number(s.remainingBalance), 0);
+            const aHasDebt = aPending > 0.01 || Number(a.currentDebt || 0) > 0.01 ? 1 : 0;
+            const bHasDebt = bPending > 0.01 || Number(b.currentDebt || 0) > 0.01 ? 1 : 0;
+            if (aHasDebt !== bHasDebt) return bHasDebt - aHasDebt;
+        }
+
+        const aExact = stripAccents(a.name || '').toLowerCase().trim() === normSearch ? 1 : 0;
+        const bExact = stripAccents(b.name || '').toLowerCase().trim() === normSearch ? 1 : 0;
+        if (aExact !== bExact) return bExact - aExact;
+
+        return Number(b.currentDebt || 0) - Number(a.currentDebt || 0);
+    });
+
+    return matches[0];
+};
+
+export const resolveStorePaymentMethod = async (
+    businessId: number,
+    requestedMethodName?: string,
+    preferredCurrency: 'USD' | 'VES' | 'COP' = 'USD'
+) => {
+    let methods = await prisma.paymentMethod.findMany({
+        where: { businessId, isActive: true },
+        orderBy: { id: 'asc' }
+    });
+
+    if (methods.length === 0) {
+        methods = await prisma.paymentMethod.findMany({
+            where: { businessId: null, isActive: true },
+            orderBy: { id: 'asc' }
+        });
+    }
+    if (methods.length === 0) {
+        methods = await prisma.paymentMethod.findMany({
+            where: { isActive: true },
+            orderBy: { id: 'asc' }
+        });
+    }
+    if (methods.length === 0) return null;
+
+    const normReq = stripAccents(requestedMethodName || '').toLowerCase().trim();
+
+    // Determinar moneda objetivo según lo pedido explícitamente o preferredCurrency
+    let targetCurrency: 'USD' | 'VES' | 'COP' = preferredCurrency;
+    if (/(pagos*movil|pagomovil|puntos*des*venta|punto|biopago|debito|bolivar|bs|ves)/.test(normReq)) {
+        targetCurrency = 'VES';
+    } else if (/(dolar|usd|divisa|zelle|paypal|cashea|$)/.test(normReq)) {
+        targetCurrency = 'USD';
+    } else if (/(peso|cop)/.test(normReq)) {
+        targetCurrency = 'COP';
+    }
+
+    // 1. Buscar coincidencia por tipo específico + moneda
+    if (/(pagos*movil|pagomovil)/.test(normReq)) {
+        const pm = methods.find(m => m.type === 'MOBILE_PAYMENT' || stripAccents(m.name).toLowerCase().includes('pago movil'));
+        if (pm) return pm;
+    }
+    if (/(punto|debito|biopago|tarjeta)/.test(normReq)) {
+        const pos = methods.find(m => m.type === 'DEBIT_CARD' || m.type === 'CREDIT_CARD' || stripAccents(m.name).toLowerCase().includes('punto'));
+        if (pos) return pos;
+    }
+    if (/zelle/.test(normReq)) {
+        const zelle = methods.find(m => m.type === 'ZELLE' || stripAccents(m.name).toLowerCase().includes('zelle'));
+        if (zelle) return zelle;
+    }
+    if (/cashea/.test(normReq)) {
+        const cashea = methods.find(m => stripAccents(m.name).toLowerCase().includes('cashea'));
+        if (cashea) return cashea;
+    }
+    if (/transferencia/.test(normReq)) {
+        const tr = methods.find(m => m.type === 'TRANSFER' && m.currency === targetCurrency)
+            || methods.find(m => m.type === 'TRANSFER');
+        if (tr) return tr;
+    }
+
+    // 2. Si es efectivo o por defecto, buscar CASH en la moneda objetivo (ej: Efectivo Dólares USD)
+    if (!normReq || /(efectivo|dolar|usd|divisa|bolivar|bs|ves|peso|cop)/.test(normReq)) {
+        const cashInTarget = methods.find(m => m.type === 'CASH' && m.currency === targetCurrency);
+        if (cashInTarget) return cashInTarget;
+    }
+
+    // 3. Coincidencia por nombre dentro de la moneda objetivo
+    if (normReq) {
+        const byNameAndCurr = methods.find(m => m.currency === targetCurrency && stripAccents(m.name).toLowerCase().includes(normReq));
+        if (byNameAndCurr) return byNameAndCurr;
+    }
+
+    // 4. Cualquier método activo en la moneda objetivo (priorizando CASH)
+    const anyInTarget = methods.find(m => m.currency === targetCurrency && m.type === 'CASH')
+        || methods.find(m => m.currency === targetCurrency);
+    if (anyInTarget) return anyInTarget;
+
+    return methods[0];
+};
+
 export const AI_TOOL_DECLARATIONS = [
     {
         name: 'consultar_resumen_ventas',
@@ -346,16 +483,18 @@ export const AI_TOOL_DECLARATIONS = [
 ,
     {
         name: 'ejecutar_abonar_a_cliente',
-        description: 'Registra un abono o pago a crédito de un cliente por su nombre, cédula o teléfono (ej: "abónale 20 dólares a Pedro", "Pedro pagó 50"). Busca automáticamente las facturas o cuotas pendientes de ese cliente y aplica el pago en cascada (FIFO), actualizando el saldo deudor global.',
+        description: 'Registra un abono o pago a crédito de un cliente por su nombre, cédula o teléfono (ej: "abónale 10 dólares a Pedro Pérez", "Pedro Pérez me pagó 10 dólares", "abónale 4500 bolívares a Pedro por Pago Móvil", "Pedro canceló toda su deuda"). Busca automáticamente las facturas o cuotas pendientes de ese cliente en la tienda y aplica el pago en cascada (FIFO), convirtiendo correctamente la moneda según el método de pago y actualizando el saldo deudor global en tiempo real.',
         parameters: {
             type: 'OBJECT',
             properties: {
-                clientSearch: { type: 'STRING', description: 'Nombre, apellido, cédula o teléfono del cliente (ej: "Pedro", "Pedro Perez", "24890123").' },
-                amountUSD: { type: 'NUMBER', description: 'Monto a abonar en dólares USD (ej: 20).' },
-                paymentMethodName: { type: 'STRING', description: 'Método de pago utilizado (ej: "Efectivo", "Pago Móvil", "Zelle", "Dólares"). Opcional, por defecto Efectivo USD.' },
-                reference: { type: 'STRING', description: 'Número de referencia bancaria o comprobante. Opcional.' }
+                clientSearch: { type: 'STRING', description: 'Nombre, apellido, cédula o teléfono del cliente (ej: "Pedro Pérez", "Pedro", "24890123").' },
+                amountUSD: { type: 'NUMBER', description: 'Monto a abonar expresado en dólares USD (ej: 10). Usar cuando el usuario indique el monto en dólares o divisas.' },
+                amountVES: { type: 'NUMBER', description: 'Monto a abonar expresado en Bolívares VES / Bs (ej: 4500). Usar únicamente si el usuario indicó el monto pagado en bolívares.' },
+                payFullDebt: { type: 'BOOLEAN', description: 'Colocar en true si el usuario indica que el cliente pagó o canceló toda su deuda pendiente.' },
+                paymentMethodName: { type: 'STRING', description: 'Método de pago utilizado (ej: "Efectivo Dólares", "Efectivo Bolívares", "Pago Móvil", "Punto de Venta", "Zelle", "Transferencia"). Opcional, por defecto Efectivo Dólares.' },
+                reference: { type: 'STRING', description: 'Número de referencia bancaria o nota del abono. Opcional.' }
             },
-            required: ['clientSearch', 'amountUSD']
+            required: ['clientSearch']
         }
     },
     {
@@ -1250,17 +1389,7 @@ export async function executeAiTool(
             const clientSearch = String(args?.clientSearch || '').trim();
             const tone = args?.tone || 'cordial_recordatorio';
 
-            const client = await prisma.client.findFirst({
-                where: {
-                    businessId,
-                    isActive: true,
-                    OR: [
-                        { name: { contains: clientSearch, mode: 'insensitive' } },
-                        { ci: { contains: clientSearch, mode: 'insensitive' } },
-                        { phone: { contains: clientSearch, mode: 'insensitive' } }
-                    ]
-                }
-            });
+            const client = await resolveBusinessClient(businessId, clientSearch, true);
 
             if (!client) {
                 return {
@@ -1555,35 +1684,24 @@ export async function executeAiTool(
         
         case 'ejecutar_abonar_a_cliente': {
             const clientSearch = String(args?.clientSearch || '').trim();
-            const amountUSD = Number(args?.amountUSD);
-            const paymentMethodName = String(args?.paymentMethodName || 'Efectivo').trim();
+            const rawAmountUSD = args?.amountUSD !== undefined && args?.amountUSD !== null ? Number(args.amountUSD) : NaN;
+            const rawAmountVES = args?.amountVES !== undefined && args?.amountVES !== null ? Number(args.amountVES) : NaN;
+            const payFullDebt = Boolean(args?.payFullDebt);
+            const paymentMethodName = String(args?.paymentMethodName || '').trim();
             const reference = String(args?.reference || 'Abono registrado por Guardián AI').trim();
 
             if (!clientSearch) {
                 return { data: { status: 'ERROR', mensaje: 'Debes indicar el nombre, cédula o teléfono del cliente a abonar.' } };
             }
-            if (!amountUSD || isNaN(amountUSD) || amountUSD <= 0) {
-                return { data: { status: 'ERROR', mensaje: 'El monto en dólares USD debe ser mayor a 0.' } };
-            }
 
-            // 1. Buscar cliente por nombre, cédula o teléfono
-            const client = await prisma.client.findFirst({
-                where: {
-                    businessId,
-                    isActive: true,
-                    OR: [
-                        { name: { contains: clientSearch, mode: 'insensitive' } },
-                        { ci: { contains: clientSearch, mode: 'insensitive' } },
-                        { phone: { contains: clientSearch, mode: 'insensitive' } }
-                    ]
-                }
-            });
+            // 1. Buscar cliente de la tienda (insensible a tildes/acentos y priorizando clientes con deuda activa)
+            const client = await resolveBusinessClient(businessId, clientSearch, true);
 
             if (!client) {
                 return {
                     data: {
                         status: 'ERROR',
-                        mensaje: `No se encontró ningún cliente activo que coincida con "${clientSearch}". Verifica el nombre o regístralo primero.`
+                        mensaje: `No se encontró ningún cliente activo en esta tienda que coincida con "${clientSearch}". Verifica el nombre o regístralo primero.`
                     }
                 };
             }
@@ -1613,14 +1731,14 @@ export async function executeAiTool(
                         cliente: client.name,
                         cedula_rif: client.ci,
                         deuda_actual_usd: 0,
-                        mensaje: `El cliente ${client.name} está al día. No tiene facturas ni cuentas pendientes por pagar.`
+                        mensaje: `El cliente ${client.name} está al día. No tiene facturas ni cuentas pendientes por cobrar.`
                     }
                 };
             }
 
-            // 3. Resolver Tasa de Cambio y Método de Pago
+            // 3. Resolver Tasa de Cambio Oficial de la tienda
             const exchangeRate = await resolveBusinessExchangeRate(businessId, prisma);
-            if (!exchangeRate) {
+            if (!exchangeRate || Number(exchangeRate.rate) <= 0) {
                 return {
                     data: {
                         status: 'ERROR',
@@ -1628,19 +1746,41 @@ export async function executeAiTool(
                     }
                 };
             }
+            const rateDec = new Decimal(exchangeRate.rate);
 
-            const paymentMethod = await prisma.paymentMethod.findFirst({
-                where: {
-                    isActive: true,
-                    OR: [
-                        { name: { contains: paymentMethodName, mode: 'insensitive' } },
-                        { currency: 'USD' }
-                    ]
-                },
-                orderBy: { id: 'asc' }
-            }) || await prisma.paymentMethod.findFirst({
-                where: { isActive: true }
-            });
+            // Calcular deuda total real acumulada en facturas pendientes
+            const totalPendingDebtDec = pendingSales.reduce(
+                (acc, s) => acc.add(new Decimal(s.remainingBalance)),
+                new Decimal(0)
+            ).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+            // Determinar el monto en USD a abonar (desde amountUSD, amountVES o payFullDebt)
+            let targetAmountUSDDec: Decimal;
+            let preferredCurrency: 'USD' | 'VES' = 'USD';
+
+            if (payFullDebt && (isNaN(rawAmountUSD) || rawAmountUSD <= 0) && (isNaN(rawAmountVES) || rawAmountVES <= 0)) {
+                targetAmountUSDDec = totalPendingDebtDec;
+            } else if (!isNaN(rawAmountUSD) && rawAmountUSD > 0) {
+                targetAmountUSDDec = new Decimal(rawAmountUSD).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                preferredCurrency = 'USD';
+            } else if (!isNaN(rawAmountVES) && rawAmountVES > 0) {
+                targetAmountUSDDec = new Decimal(rawAmountVES).div(rateDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                preferredCurrency = 'VES';
+            } else {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        mensaje: 'Debes indicar un monto mayor a 0 (en dólares USD o en Bolívares Bs) para registrar el abono.'
+                    }
+                };
+            }
+
+            // 4. Resolver el Método de Pago de ESTA tienda con la moneda adecuada
+            const paymentMethod = await resolveStorePaymentMethod(
+                businessId,
+                paymentMethodName || (preferredCurrency === 'VES' ? 'Efectivo Bolívares' : 'Efectivo Dólares'),
+                preferredCurrency
+            );
 
             if (!paymentMethod) {
                 return {
@@ -1651,86 +1791,138 @@ export async function executeAiTool(
                 };
             }
 
-            // 4. Buscar caja registradora abierta si existe
+            // Si el método es COP, obtener tasa COP de la tienda
+            let copRateDec = new Decimal(4000);
+            if (paymentMethod.currency === 'COP') {
+                const biz = await prisma.business.findUnique({ where: { id: businessId } });
+                if ((biz as any)?.copExchangeRate && Number((biz as any).copExchangeRate) > 0) {
+                    copRateDec = new Decimal((biz as any).copExchangeRate);
+                }
+            }
+
+            // 5. Buscar caja registradora abierta si existe
             const openRegister = await prisma.cashRegister.findFirst({
                 where: { businessId, status: CashStatus.OPEN },
                 include: { member: { select: { user: { select: { name: true } } } } }
             });
 
-            // 5. Aplicar Abono en Cascada (FIFO)
-            let remainingToDistribute = new Decimal(amountUSD).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-            const initialAmountToPay = remainingToDistribute;
+            // 6. Aplicar Abono en Cascada (FIFO) sobre las facturas pendientes
+            let remainingToDistributeUSD = targetAmountUSDDec;
+            const initialRequestedUSD = targetAmountUSDDec;
+            let lastErrorMsg = '';
+
             const appliedBreakdown: Array<{
                 recibo: string;
                 ventaId: number;
                 montoAplicadoUSD: number;
+                montoAplicadoBs: number;
+                saldoAnteriorFacturaUSD: number;
                 saldoRestanteFacturaUSD: number;
                 estadoFinal: string;
             }> = [];
 
             for (const sale of pendingSales) {
-                if (remainingToDistribute.lte(new Decimal(0.01))) break;
+                if (remainingToDistributeUSD.lte(new Decimal(0.01))) break;
 
-                const saleDebt = new Decimal(sale.remainingBalance);
-                let paymentForThisSale: Decimal;
+                const saleDebtUSD = new Decimal(sale.remainingBalance).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+                const paymentForThisSaleUSD = remainingToDistributeUSD.gte(saleDebtUSD)
+                    ? saleDebtUSD
+                    : remainingToDistributeUSD;
 
-                if (remainingToDistribute.gte(saleDebt)) {
-                    paymentForThisSale = saleDebt;
+                // IMPORTANTE: SaleService.addPayment espera data.amount en la moneda nativa del PaymentMethod:
+                // - Si paymentMethod.currency === 'USD', data.amount va en USD.
+                // - Si paymentMethod.currency === 'VES', data.amount va en Bolívares (VES) porque addPayment divide entre rate.
+                // - Si paymentMethod.currency === 'COP', data.amount va en Pesos (COP) porque addPayment divide entre copRate.
+                let amountInMethodCurrency: number;
+                if (paymentMethod.currency === 'USD') {
+                    amountInMethodCurrency = Number(paymentForThisSaleUSD.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2));
+                } else if (paymentMethod.currency === 'COP') {
+                    amountInMethodCurrency = Number(paymentForThisSaleUSD.mul(copRateDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2));
                 } else {
-                    paymentForThisSale = remainingToDistribute;
+                    // VES
+                    amountInMethodCurrency = Number(paymentForThisSaleUSD.mul(rateDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2));
                 }
 
                 const payResult = await saleService.addPayment(businessId, sale.id, {
                     paymentMethodId: paymentMethod.id,
-                    amount: Number(paymentForThisSale.toFixed(2)),
+                    amount: amountInMethodCurrency,
                     exchangeRateId: exchangeRate.id,
                     reference: reference,
                     cashRegisterId: openRegister ? openRegister.id : null
                 });
 
                 if (payResult.status === 200) {
-                    remainingToDistribute = remainingToDistribute.sub(paymentForThisSale);
-                    const updatedSaleBalance = Math.max(0, Number(saleDebt.sub(paymentForThisSale).toFixed(2)));
+                    remainingToDistributeUSD = remainingToDistributeUSD.sub(paymentForThisSaleUSD);
+                    const payData = payResult.data as any;
+                    const realUpdatedBalance = payData?.sale?.remainingBalance !== undefined
+                        ? Math.max(0, Number(Number(payData.sale.remainingBalance).toFixed(2)))
+                        : Math.max(0, Number(saleDebtUSD.sub(paymentForThisSaleUSD).toFixed(2)));
+
                     appliedBreakdown.push({
-                        recibo: sale.receiptNumber ? String(sale.receiptNumber) : `#${sale.id}`,
+                        recibo: sale.receiptNumber ? `Factura #${sale.receiptNumber}` : `Venta #${sale.id}`,
                         ventaId: sale.id,
-                        montoAplicadoUSD: Number(paymentForThisSale.toFixed(2)),
-                        saldoRestanteFacturaUSD: updatedSaleBalance,
-                        estadoFinal: updatedSaleBalance <= 0.05 ? 'TOTALMENTE_PAGADA' : 'ABONADA_PARCIAL'
+                        montoAplicadoUSD: Number(paymentForThisSaleUSD.toFixed(2)),
+                        montoAplicadoBs: Number(paymentForThisSaleUSD.mul(rateDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2)),
+                        saldoAnteriorFacturaUSD: Number(saleDebtUSD.toFixed(2)),
+                        saldoRestanteFacturaUSD: realUpdatedBalance,
+                        estadoFinal: realUpdatedBalance <= 0.05 ? 'TOTALMENTE_PAGADA' : 'ABONADA_PARCIAL'
                     });
+                } else {
+                    lastErrorMsg = payResult.message || 'No se pudo procesar el abono en la factura.';
                 }
             }
 
-            const totalAppliedUSD = Number(initialAmountToPay.sub(remainingToDistribute).toFixed(2));
+            if (appliedBreakdown.length === 0) {
+                return {
+                    data: {
+                        status: 'ERROR',
+                        cliente: client.name,
+                        mensaje: lastErrorMsg || `No se pudo aplicar el abono a las facturas pendientes de ${client.name}.`
+                    }
+                };
+            }
+
+            const totalAppliedUSD = Number(initialRequestedUSD.sub(remainingToDistributeUSD).toFixed(2));
+            const totalAppliedBs = Number(new Decimal(totalAppliedUSD).mul(rateDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2));
+            const unappliedExcessUSD = Math.max(0, Number(remainingToDistributeUSD.toFixed(2)));
 
             const updatedClient = await prisma.client.findUnique({
                 where: { id: client.id },
                 select: { id: true, name: true, ci: true, phone: true, currentDebt: true }
             });
 
-            const newTotalDebt = Number(updatedClient?.currentDebt || 0);
+            const newTotalDebtUSD = Number(Number(updatedClient?.currentDebt || 0).toFixed(2));
+            const newTotalDebtBs = Number(new Decimal(newTotalDebtUSD).mul(rateDec).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2));
 
             const action: AiChatAction = {
                 type: 'NAVIGATE',
-                label: `👁️ Ver Cuenta de ${client.name} en Cobranzas`,
-                url: `/credits`
+                label: `👁️ Ver Cuenta de ${client.name} en Cuentas por Cobrar`,
+                url: `/dashboard/business/${businessId}/credits/sales`
             };
 
             const registerName = openRegister
                 ? (openRegister.member?.user?.name ? `Caja de ${openRegister.member.user.name}` : `Caja #${openRegister.id}`)
-                : 'Ingreso directo (Sin caja de turno)';
+                : 'Ingreso directo en Cobranzas (Sin caja de mostrador abierta)';
+
+            const excessNotice = unappliedExcessUSD > 0.01
+                ? ` Nota: El cliente solo debía ${totalAppliedUSD.toFixed(2)} USD, por lo que su deuda quedó en $0.00 USD (excedente no aplicado: ${unappliedExcessUSD.toFixed(2)} USD).`
+                : '';
 
             return {
                 data: {
                     status: 'EXITOSO',
                     cliente: client.name,
                     cedula_rif: client.ci,
+                    deuda_anterior_global_usd: Number(totalPendingDebtDec.toFixed(2)),
                     monto_total_abonado_usd: totalAppliedUSD,
-                    metodo_pago_usado: paymentMethod.name,
-                    deuda_restante_global_usd: Number(newTotalDebt.toFixed(2)),
+                    monto_total_abonado_ves: totalAppliedBs,
+                    tasa_bcv_aplicada: Number(rateDec.toFixed(2)),
+                    metodo_pago_usado: `${paymentMethod.name} (${paymentMethod.currency})`,
+                    deuda_restante_global_usd: newTotalDebtUSD,
+                    deuda_restante_global_ves: newTotalDebtBs,
                     caja_registradora_ingresada: registerName,
                     desglose_por_factura: appliedBreakdown,
-                    mensaje: `¡Abono procesado con éxito! Se aplicaron $${totalAppliedUSD.toFixed(2)} USD a la cuenta de ${client.name}. Deuda restante: $${newTotalDebt.toFixed(2)} USD.`
+                    mensaje: `¡Abono procesado con éxito! Se descontaron ${totalAppliedUSD.toFixed(2)} USD (Bs. ${totalAppliedBs.toFixed(2)}) de la deuda de ${client.name} mediante ${paymentMethod.name}. Saldo pendiente actual: ${newTotalDebtUSD.toFixed(2)} USD (Bs. ${newTotalDebtBs.toFixed(2)}).${excessNotice}`
                 },
                 action
             };
@@ -2573,16 +2765,7 @@ export async function executeAiTool(
             let paymentMethodUsed = null;
 
             if (!isCredit) {
-                paymentMethodUsed = await prisma.paymentMethod.findFirst({
-                    where: {
-                        isActive: true,
-                        name: { contains: paymentMethodName, mode: 'insensitive' }
-                    }
-                }) || await prisma.paymentMethod.findFirst({
-                    where: { isActive: true, currency: 'USD' }
-                }) || await prisma.paymentMethod.findFirst({
-                    where: { isActive: true }
-                });
+                paymentMethodUsed = await resolveStorePaymentMethod(businessId, paymentMethodName, 'USD');
 
                 if (!paymentMethodUsed) {
                     return {

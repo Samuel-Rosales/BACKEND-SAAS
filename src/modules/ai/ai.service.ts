@@ -169,7 +169,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 - Cobranza por WhatsApp con enlace directo: 'generar_mensaje_cobranza_whatsapp'
 - Registro de gasto por comando: 'ejecutar_crear_gasto'
 - Cambio de precio de producto por comando: 'ejecutar_cambiar_precio_producto'
-- ABONAR / PAGAR A CLIENTE POR COMANDO: 'ejecutar_abonar_a_cliente'
+- ABONAR / PAGAR A CLIENTE POR COMANDO: 'ejecutar_abonar_a_cliente' (Úsala SIEMPRE que el usuario pida abonar, descontar deuda o registrar el pago de un cliente, ej: "abónale a Pedro Pérez que me pagó 10 dólares", "Pedro abonó 20$", "abónale 4500 Bs a María por Pago Móvil", "Pedro pagó toda su deuda". Pasa amountUSD si el monto es en dólares, amountVES si el monto es en bolívares, o payFullDebt: true si pagó todo. Al responder, muestra claramente el monto abonado en USD y Bs, el método de pago aplicado, las facturas abonadas y el saldo pendiente actualizado).
 - SUGERENCIA PREDICTIVA DE COMPRAS Y REPOSICIÓN A PROVEEDORES: 'sugerir_reposicion_compras_proveedores'
 - RESUMEN EJECUTIVO DE APERTURA MATUTINO: 'consultar_resumen_apertura_matutino'
 - CREACIÓN RÁPIDA DE PRODUCTO POR COMANDO DE VOZ: 'ejecutar_crear_producto'

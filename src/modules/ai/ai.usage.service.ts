@@ -9,6 +9,8 @@ export interface BusinessAiUsageInfo {
 }
 
 export class AiUsageService {
+    private static readonly DEFAULT_MONTHLY_LIMIT = 150;
+
     private getCurrentPeriodMonth(tzOffset: number = 240): string {
         const local = new Date(Date.now() - (tzOffset * 60_000));
         return local.toISOString().slice(0, 7); // "YYYY-MM"
@@ -27,14 +29,20 @@ export class AiUsageService {
         });
 
         if (!record) {
-            // Límite por defecto: 100 consultas mensuales
+            // Límite por defecto: 150 puntos/consultas mensuales
             record = await prisma.businessAiUsage.create({
                 data: {
                     businessId,
                     periodMonth,
                     queryCount: 0,
-                    monthlyLimit: 100
+                    monthlyLimit: AiUsageService.DEFAULT_MONTHLY_LIMIT
                 }
+            });
+        } else if (record.monthlyLimit === 100) {
+            // Nivelar registros creados con el límite anterior (100 -> 150)
+            record = await prisma.businessAiUsage.update({
+                where: { id: record.id },
+                data: { monthlyLimit: AiUsageService.DEFAULT_MONTHLY_LIMIT }
             });
         }
 
@@ -69,8 +77,13 @@ export class AiUsageService {
                     businessId,
                     periodMonth,
                     queryCount: 0,
-                    monthlyLimit: 100
+                    monthlyLimit: AiUsageService.DEFAULT_MONTHLY_LIMIT
                 }
+            });
+        } else if (record.monthlyLimit === 100) {
+            record = await prisma.businessAiUsage.update({
+                where: { id: record.id },
+                data: { monthlyLimit: AiUsageService.DEFAULT_MONTHLY_LIMIT }
             });
         }
 
