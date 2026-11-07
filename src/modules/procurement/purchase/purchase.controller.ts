@@ -154,7 +154,8 @@ export class PurchaseController {
                     data: null
                 });
             }
-            const {data, status, message} = await service.findPayables(businessId);
+            const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+            const {data, status, message} = await service.findPayables(businessId, search);
 
             return res.status(status).json({ data, status, message });
 

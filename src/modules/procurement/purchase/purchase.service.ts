@@ -784,20 +784,29 @@ export class PurchaseService {
         }
     }
 
-    async findPayables(businessId: number) {
+    async findPayables(businessId: number, search?: string) {
         try {
+            const trimmedSearch = search?.trim();
+            const searchFilter = trimmedSearch
+                ? {
+                    OR: [
+                        { supplier: { nameCompany: { contains: trimmedSearch, mode: 'insensitive' as const } } },
+                        { supplier: { contactName: { contains: trimmedSearch, mode: 'insensitive' as const } } },
+                        { supplier: { phone: { contains: trimmedSearch, mode: 'insensitive' as const } } },
+                        { reference: { contains: trimmedSearch, mode: 'insensitive' as const } },
+                    ],
+                }
+                : {};
+
             const debts = await prisma.purchase.findMany({
                 where: {
                     businessId,
                     conditions: 'CREDIT', // Solo compras a crédito
-                    // FILTRO CLAVE: Solo traer lo que debemos (Saldo > 0)
-                    /*remainingBalance: {
-                        gt: 0 
-                    },*/
                     // Excluimos compras anuladas
                     status: {
                         not: 'CANCELLED'
-                    }
+                    },
+                    ...searchFilter,
                 },
                 select: {
                     id: true,

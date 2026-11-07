@@ -1604,20 +1604,35 @@ export class SaleService {
         }
     }
 
-    async findCredits(businessId: number) {
+    async findCredits(businessId: number, search?: string) {
         try {
+            const trimmedSearch = search?.trim();
+            const numericCandidate = trimmedSearch
+                ? trimmedSearch.replace(/^(factura\s*#?|#\s*)/i, '').trim()
+                : '';
+            const parsedNumber = /^\d+$/.test(numericCandidate) ? Number(numericCandidate) : NaN;
+
+            const searchFilter = trimmedSearch
+                ? {
+                    OR: [
+                        { client: { name: { contains: trimmedSearch, mode: 'insensitive' as const } } },
+                        { client: { ci: { contains: trimmedSearch, mode: 'insensitive' as const } } },
+                        { client: { phone: { contains: trimmedSearch, mode: 'insensitive' as const } } },
+                        ...(!isNaN(parsedNumber)
+                            ? [{ receiptNumber: parsedNumber }, { id: parsedNumber }]
+                            : []),
+                    ],
+                }
+                : {};
+
             const credits = await prisma.sale.findMany({
                 where: {
                     businessId,
                     conditions: 'CREDIT', // Solo ventas a crédito
-                    // Filtro: Traer solo las que tienen deuda pendiente
-                    /*remainingBalance: {
-                        gt: 0
-                    },*/
-                    // Seguridad extra: que no estén anuladas
                     status: {
                         not: 'CANCELLED'
-                    }
+                    },
+                    ...searchFilter,
                 },
                 select: {
                     id: true,

@@ -187,7 +187,8 @@ export class SaleController {
                 });
             }
 
-            const { data, message, status } = await service.findCredits(businessId);
+            const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+            const { data, message, status } = await service.findCredits(businessId, search);
 
             return res.status(status).json({
                 data,
