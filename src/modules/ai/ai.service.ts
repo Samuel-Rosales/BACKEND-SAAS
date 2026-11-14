@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { AI_TOOL_DECLARATIONS, executeAiTool } from './ai.tools';
-import { ChatHistoryMessage, AiChatResponse, AiChatAction, AiSubagentInfo } from './ai.interface';
+import { executeAiTool, getAllowedToolDeclarations, resolveActiveMemberForUser } from './ai.tools';
+import { ChatHistoryMessage, AiChatResponse, AiChatAction, AiSubagentInfo, AiUserContext } from './ai.interface';
 import { AiUsageService, BusinessAiUsageInfo } from './ai.usage.service';
 import { resolveBusinessExchangeRate } from '@/utils';
 import { prisma } from '@/configs';
@@ -46,9 +46,9 @@ export class AiService {
 
     constructor() {
         this.apiKey = process.env.GEMINI_API_KEY || '';
-        // Por defecto usar Gemini Flash Lite Latest para latencia ultrabaja y máxima disponibilidad
+        // Modelo primario configurable y lista de respaldos reales de Gemini API
         this.primaryModel = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
-        this.fallbackModels = ['gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+        this.fallbackModels = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash'];
         this.usageService = new AiUsageService();
     }
 
@@ -175,7 +175,17 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
 - CREACIÓN RÁPIDA DE PRODUCTO POR COMANDO DE VOZ: 'ejecutar_crear_producto'
 - AUDITORÍA FORENSE DE FRAUDE Y ANULACIONES DE CAJA: 'auditar_fraude_y_anulaciones_caja'
 - COMBOS Y PROMOCIONES INTELIGENTES CON DINERO DORMIDO: 'generar_promociones_combos_estancados'
-- REGISTRO Y EJECUCIÓN DE VENTA REAL EN POS POR COMANDO: 'ejecutar_crear_venta'`
+- REGISTRO Y EJECUCIÓN DE VENTA REAL EN POS POR COMANDO: 'ejecutar_crear_venta'
+
+============================================================
+REGLAS ESTRICTAS DE OPERACIONES TRANSACCIONALES (CERO AZAR):
+============================================================
+1. NUNCA inventes ni asumas datos faltantes en 'ejecutar_crear_venta', 'ejecutar_abonar_a_cliente', 'ejecutar_crear_gasto', 'ejecutar_cambiar_precio_producto' o 'ejecutar_crear_producto'.
+2. En ventas ('ejecutar_crear_venta'): si el usuario no dijo explícitamente a qué cliente le vende, si es contado o crédito, o con qué método de pago va a pagar, NO rellenes esos campos por defecto: déjalos vacíos y llama la herramienta con confirmed=false para consultar stock, precios y devolver las preguntas exactas junto a los métodos reales de la tienda.
+3. Combina siempre el historial conversacional: si en un turno dijo "véndeme 2 harinas" y en el siguiente responde "Consumidor Final, Pago Móvil", reúne ambos datos y llama a la herramienta con confirmed=false para mostrar el resumen de confirmación.
+4. Pasa confirmed=true ÚNICAMENTE cuando el resumen de confirmación ya fue mostrado al usuario y este confirmó explícitamente en su último mensaje (o presionó confirmar).
+5. Si una herramienta responde MISSING_FIELDS, AMBIGUOUS_PRODUCT, AMBIGUOUS_CLIENT, CLIENT_NOT_FOUND, PAYMENT_METHOD_NOT_FOUND o CONFIRMATION_REQUIRED, jamás digas que la operación se completó; pide exactamente la aclaración o confirmación pendiente.
+6. Si una herramienta responde FORBIDDEN, informa cordialmente que el rol del usuario no tiene permisos suficientes para esa consulta u operación.`
                 }
             ]
         };
@@ -195,16 +205,18 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         history: ChatHistoryMessage[] = [],
         tzOffset: number = 240,
         clientLocalDate?: string,
-        userId?: number
+        userId?: number,
+        isSuperAdmin: boolean = false
     ): Promise<AiChatResponse> {
         if (!this.apiKey) {
             throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno del servidor.');
         }
 
         const cleanCmd = (userMessage || '').trim().toLowerCase();
+        const isPureHowTo = !/(?:\b(?:hoy|ayer|mes|semana|factura|cliente|deuda|monto|cu[aá]nto|reporte|pdf|d[oó]lares|bol[ií]vares|bs|\$)\b)/i.test(cleanCmd);
 
         // =========================================================================
-        // MOTOR FAST-PATH FORENSE (< 5 MS) - INSPIRADO EN LA ARQUITECTURA DE ARMANDO
+        // MOTOR FAST-PATH FORENSE (< 5 MS)
         // =========================================================================
 
         // 1. Saludos y Bienvenida Inmediata
@@ -229,21 +241,20 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         }
 
         // 3. Tutor Operativo Ultrarrápido (< 5 ms): ¿Cómo hacer una venta / cómo vender?
-        if (/(?:c[oó]mo\s+(?:hacer|realizar|procesar|efectuar|registrar)?\s*una?\s*venta|c[oó]mo\s+vender|pasos\s+para\s+vender|tutorial\s+de\s+venta|c[oó]mo\s+facturar|c[oó]mo\s+cobrar)/i.test(cleanCmd)) {
+        if (isPureHowTo && /(?:c[oó]mo\s+(?:hacer|realizar|procesar|efectuar|registrar)?\s*una?\s*venta|c[oó]mo\s+vender|pasos\s+para\s+vender|tutorial\s+de\s+venta|c[oó]mo\s+facturar|c[oó]mo\s+cobrar)/i.test(cleanCmd)) {
             return {
                 text: `🛒 **Guía Paso a Paso: ¿Cómo realizar una venta en Guardián?**\n\n` +
                     `1. **Apertura de Caja**: Dirígete a **Cajas Registradoras** en el menú y asegúrate de tener una sesión de caja abierta para el turno.\n` +
-                    `2. **Ingresar al Punto de Venta**: Haz clic en **Punto de Venta (POS)** en el menú lateral izquierdo.\n` +
-                    `3. **Seleccionar Productos**: Haz clic sobre los productos del catálogo, escribe su nombre o código en la barra de búsqueda o usa el lector de código de barras.\n` +
-                    `4. **Modalidad de Venta**: Por defecto se cargan a **Contado**. Si tu empresa tiene habilitado recargo a crédito (+10% o +20%), selecciona la opción correspondiente.\n` +
-                    `5. **Cobrar**: Presiona el botón azul **"Cobrar"** en la parte inferior del ticket.\n` +
-                    `6. **Método de Pago**: Selecciona la forma de pago (Efectivo en $ USD o Bs., Punto de Venta, Pago Móvil o Transferencia). El sistema calculará el cambio o vuelto automáticamente a la tasa oficial BCV.\n` +
-                    `7. **Finalizar e Imprimir**: Presiona **"Confirmar Cobro"**. El sistema generará al instante el comprobante (Factura o Nota de Entrega) y descontará los artículos del inventario en tiempo real.`,
+                    `2. **Ingresar a Ventas**: Haz clic en **Ventas** en el menú lateral izquierdo.\n` +
+                    `3. **Seleccionar Productos**: Agrega los productos del catálogo por nombre o lector de código de barras.\n` +
+                    `4. **Modalidad de Venta**: Elige **Contado** o **Crédito** y selecciona el cliente correspondiente.\n` +
+                    `5. **Cobrar**: Presiona **"Cobrar"** y selecciona el método de pago (Efectivo en $ USD o Bs., Punto de Venta, Pago Móvil o Transferencia).\n` +
+                    `6. **Finalizar e Imprimir**: Confirma el cobro para emitir el comprobante y descontar inventario en tiempo real.`,
                 actions: [
                     {
                         type: 'NAVIGATE',
-                        label: '🛒 Ir al Punto de Venta (POS)',
-                        url: '/sales/pos'
+                        label: '🛒 Ir a Ventas / POS',
+                        url: '/sales'
                     }
                 ],
                 subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
@@ -257,45 +268,44 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         }
 
         // 4. Tutor Operativo: ¿Cómo registrar un gasto?
-        if (/(?:c[oó]mo\s+(?:hacer|registrar|anotar|crear|meter)?\s*un?\s*gasto|c[oó]mo\s+egresar|registrar\s+egreso)/i.test(cleanCmd)) {
+        if (isPureHowTo && /(?:c[oó]mo\s+(?:hacer|registrar|anotar|crear|meter)?\s*un?\s*gasto|c[oó]mo\s+egresar|registrar\s+egreso)/i.test(cleanCmd)) {
             return {
                 text: `💸 **Guía Paso a Paso: ¿Cómo registrar un gasto en Guardián?**\n\n` +
                     `1. **Ruta**: Menú lateral izquierdo -> **Gastos** -> Botón superior **"+ Registrar Gasto"**.\n` +
                     `2. **Concepto**: Escribe el título o motivo del egreso (ej: *"Pago de flete"*, *"Compra de suministros"*).\n` +
                     `3. **Categoría**: Selecciona la categoría adecuada (Servicios, Nómina, Suministros, etc.).\n` +
-                    `4. **Monto y Moneda**: Ingresa la cantidad en **$ USD** o **Bs.** y selecciona la caja de donde sale el dinero.\n` +
-                    `5. **Guardar**: Presiona **"Guardar Gasto"**. El dinero se deducirá automáticamente de tu caja y se reflejará en el reporte de balance.`,
+                    `4. **Monto y Moneda**: Ingresa la cantidad en **$ USD** o **Bs.**.\n` +
+                    `5. **Guardar**: Presiona **"Guardar Gasto"** para registrarlo en tu balance financiero.`,
                 actions: [
                     {
                         type: 'NAVIGATE',
                         label: '💸 Ir a Gastos',
-                        url: '/finance/expenses'
+                        url: '/expenses'
                     }
                 ],
                 subagent: AI_SUBAGENTS.FINANCIAL_AUDITOR,
                 suggestedOptions: [
                     '📊 ¿Cuánto se ha gastado este mes?',
-                    '💵 Registrar gasto por comando',
-                    '🔒 Cierre de caja'
+                    '🔒 ¿Cómo hacer el cierre de caja?'
                 ]
             };
         }
 
         // 5. Tutor Operativo: ¿Cómo anular una venta?
-        if (/(?:c[oó]mo\s+(?:anular|cancelar|eliminar)?\s*(?:una?\s*venta|factura)|anular\s+venta|cancelar\s+venta)/i.test(cleanCmd)) {
+        if (isPureHowTo && /(?:c[oó]mo\s+(?:anular|cancelar|eliminar)?\s*(?:una?\s*venta|factura)|^anular\s+venta$|^cancelar\s+venta$)/i.test(cleanCmd)) {
             return {
                 text: `❌ **Guía Paso a Paso: ¿Cómo anular una venta o recibo?**\n\n` +
                     `1. **Ruta**: Menú lateral izquierdo -> **Ventas / Facturas**.\n` +
                     `2. **Localizar**: Ubica la venta en el listado por el número de comprobante, cliente o fecha.\n` +
                     `3. **Ver Detalles**: Haz clic en el botón **"Ver Detalles"** (icono de ojo 👁️).\n` +
-                    `4. **Anular**: En la parte inferior derecha, haz clic en el botón rojo **"Anular Venta"**.\n` +
+                    `4. **Anular**: En la parte inferior, haz clic en **"Anular Venta"**.\n` +
                     `5. **Motivo**: Escribe el motivo de la anulación y confirma.\n\n` +
                     `*Nota de seguridad*: Se requiere rol de Administrador. Los productos regresan automáticamente al stock y el monto cobrado se descuenta de la caja.`,
                 actions: [
                     {
                         type: 'NAVIGATE',
                         label: '📄 Ir a Listado de Ventas',
-                        url: '/sales/list'
+                        url: '/sales'
                     }
                 ],
                 subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
@@ -308,16 +318,16 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         }
 
         // 6. Tutor Operativo: ¿Cómo pausar y retomar una venta?
-        if (/(?:c[oó]mo\s+(?:pausar|dejar\s+en\s+espera|retomar)?\s*(?:una?\s*venta|ticket)|pausar\s+venta|ventas\s+en\s+espera)/i.test(cleanCmd)) {
+        if (isPureHowTo && /(?:c[oó]mo\s+(?:pausar|dejar\s+en\s+espera|retomar)?\s*(?:una?\s*venta|ticket)|pausar\s+venta|ventas\s+en\s+espera)/i.test(cleanCmd)) {
             return {
                 text: `⏸️ **Guía: Pausar y Retomar Ventas en el POS**\n\n` +
-                    `• **Para pausar una venta en curso**: En el Punto de Venta, con productos cargados en el ticket, haz clic en el botón **"[⏸️ Pausar]"** en la barra superior. Escribe un nombre o nota de referencia del cliente y confirma. Tu ticket quedará limpio para atender al cliente siguiente.\n\n` +
-                    `• **Para retomar la venta**: Haz clic en el botón **"[⏳ En Espera (X)]"** en la barra superior. Selecciona la venta pausada y pulsa **"Retomar Venta"**. Todo su carrito se restablecerá intacto al instante para cobrar.`,
+                    `• **Para pausar una venta en curso**: En el Punto de Venta, con productos cargados en el ticket, haz clic en el botón **"[⏸️ Pausar]"** en la barra superior. Escribe un nombre o nota de referencia del cliente y confirma.\n\n` +
+                    `• **Para retomar la venta**: Haz clic en el botón **"[⏳ En Espera (X)]"** en la barra superior, selecciona la venta pausada y pulsa **"Retomar Venta"**.`,
                 actions: [
                     {
                         type: 'NAVIGATE',
-                        label: '🛒 Ir al POS',
-                        url: '/sales/pos'
+                        label: '🛒 Ir a Ventas / POS',
+                        url: '/sales'
                     }
                 ],
                 subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
@@ -329,7 +339,7 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         }
 
         // 7. Tutor Operativo: Cierre de caja
-        if (/(?:c[oó]mo\s+(?:hacer|realizar|ejecutar)?\s*(?:el\s*)?cierre\s+de\s+caja|cierre\s+x|cierre\s+z|cerrar\s+caja)/i.test(cleanCmd)) {
+        if (isPureHowTo && /(?:c[oó]mo\s+(?:hacer|realizar|ejecutar)?\s*(?:el\s*)?cierre\s+de\s+caja|cierre\s+x|cierre\s+z|cerrar\s+caja)/i.test(cleanCmd)) {
             return {
                 text: `🔒 **Guía Paso a Paso: ¿Cómo hacer el Cierre de Caja?**\n\n` +
                     `1. **Ruta**: Menú lateral izquierdo -> **Cajas Registradoras** -> **Cierre de Caja**.\n` +
@@ -337,12 +347,12 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
                     `3. **Cierre Z (Definitivo)**:\n` +
                     `   - Cuenta el efectivo físico en gaveta (en USD y Bs) e ingrésalo en los campos de arqueo.\n` +
                     `   - Verifica las sumas de transferencias, puntos de venta y pagos móviles.\n` +
-                    `   - Presiona **"Confirmar Cierre Z"** para imprimir el comprobante fiscal/térmico de cuadre y sellar la sesión del turno.`,
+                    `   - Presiona **"Confirmar Cierre Z"** para imprimir el comprobante de cuadre y sellar el turno.`,
                 actions: [
                     {
                         type: 'NAVIGATE',
                         label: '🔒 Ir a Cajas Registradoras',
-                        url: '/finance/cash-register'
+                        url: '/cash-register'
                     }
                 ],
                 subagent: AI_SUBAGENTS.FINANCIAL_AUDITOR,
@@ -354,25 +364,22 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         }
 
         // Tutor Operativo: ¿Cómo actualizar o ajustar stock de un producto?
-        if (/(?:c[oó]mo\s+(?:actualizar|ajustar|cambiar|modificar|corregir|restar|sumar|descontar)?\s*(?:el\s*)?stock|ajuste\s+de\s+(?:stock|inventario)|c[oó]mo\s+(?:hago\s+un\s+)?ajuste\s+de\s+inventario|actualizar\s+existencias?|corregir\s+stock)/i.test(cleanCmd)) {
+        if (isPureHowTo && /(?:c[oó]mo\s+(?:actualizar|ajustar|cambiar|modificar|corregir|restar|sumar|descontar)?\s*(?:el\s*)?stock|ajuste\s+de\s+(?:stock|inventario)|c[oó]mo\s+(?:hago\s+un\s+)?ajuste\s+de\s+inventario|actualizar\s+existencias?|corregir\s+stock)/i.test(cleanCmd)) {
             return {
                 text: `📦 **Guía Oficial: ¿Cómo ajustar o actualizar el stock de un producto en Guardián?**\n\n` +
-                    `⚠️ **Regla Fundamental**: En Guardián el stock **NUNCA se modifica directamente en el Catálogo de Productos**. Toda corrección de existencias debe quedar registrada formalmente en el módulo de **Movimientos** mediante un **Ajuste de Inventario** para garantizar la auditoría contable y el Kardex.\n\n` +
+                    `⚠️ **Regla Fundamental**: En Guardián el stock **NUNCA se modifica directamente en el Catálogo de Productos**. Toda corrección de existencias debe quedar registrada formalmente en el módulo de **Movimientos** mediante un **Ajuste de Inventario**.\n\n` +
                     `**Pasos para realizar el ajuste:**\n` +
-                    `1. **Ruta**: Menú lateral izquierdo -> **Movimientos** (icono de carretilla / dolly).\n` +
-                    `2. **Nuevo Movimiento**: Haz clic en el botón superior **"+ Nuevo Movimiento"**.\n` +
-                    `3. **Tipo de Movimiento**: En el selector de tipo, elige **"Ajuste de Inventario"** (ADJUSTMENT).\n` +
-                    `4. **Almacén y Producto**: Selecciona el almacén físico de destino y busca el producto a corregir.\n` +
-                    `5. **Cantidad a Ajustar**:\n` +
-                    `   • **Para RESTAR stock** (por merma, rotura, merma de peso, vencimiento o faltante en conteo físico): Ingresa la cantidad con **signo negativo** (ejemplo: **-5**) y selecciona el lote de origen.\n` +
-                    `   • **Para SUMAR stock** (por sobrante físico o hallazgo de mercancía): Ingresa la cantidad en **positivo** (ejemplo: **10**), indicando el costo unitario real y fecha de vencimiento si aplica.\n` +
-                    `6. **Motivo del Ajuste (Obligatorio)**: Escribe la justificación (ej: *"Ajuste por conteo físico"*, *"Merma por rotura en anaquel"*).\n` +
-                    `7. **Registrar**: Presiona **"Registrar Movimiento"**. El inventario se actualizará de inmediato en tiempo real en todos tus reportes.`,
+                    `1. **Ruta**: Menú lateral izquierdo -> **Movimientos**.\n` +
+                    `2. **Nuevo Movimiento**: Haz clic en **"+ Nuevo Movimiento"**.\n` +
+                    `3. **Tipo de Movimiento**: Elige **"Ajuste de Inventario"** (ADJUSTMENT).\n` +
+                    `4. **Almacén y Producto**: Selecciona el almacén y busca el producto.\n` +
+                    `5. **Cantidad a Ajustar**: Negativo para restar (merma/rotura) o positivo para sumar.\n` +
+                    `6. **Motivo y Registrar**: Escribe la justificación y presiona **"Registrar Movimiento"**.`,
                 actions: [
                     {
                         type: 'NAVIGATE',
                         label: '📦 Ir a Movimientos de Inventario',
-                        url: '/inventory/movements'
+                        url: '/movements'
                     }
                 ],
                 subagent: AI_SUBAGENTS.INVENTORY_SPECIALIST,
@@ -385,21 +392,19 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         }
 
         // 8. Tutor Operativo: Crear producto
-        if (/(?:c[oó]mo\s+(?:crear|registrar|agregar|a[ñn]adir)?\s*un?\s*producto|nuevo\s+producto|cargar\s+inventario)/i.test(cleanCmd)) {
+        if (isPureHowTo && /(?:c[oó]mo\s+(?:crear|registrar|agregar|a[ñn]adir)?\s*un?\s*producto|nuevo\s+producto|cargar\s+inventario)/i.test(cleanCmd)) {
             return {
                 text: `📦 **Guía Paso a Paso: ¿Cómo crear o registrar un producto?**\n\n` +
-                    `1. **Ruta**: Menú lateral izquierdo -> **Inventario** -> **Catálogo de Productos**.\n` +
-                    `2. **Nuevo Producto**: Haz clic en el botón superior derecho **"+ Nuevo Producto"**.\n` +
-                    `3. **Datos Básicos**: Ingresa el nombre del artículo, categoría y unidad de medida (Kilos, Unidades, Litros, etc.).\n` +
-                    `4. **Precios**: Asigna el costo de compra y el precio de venta en **$ USD**. El sistema calculará el precio en Bolívares automáticamente con la tasa oficial BCV.\n` +
-                    `5. **Código**: Escribe o escanea el código de barras / SKU.\n` +
-                    `6. **Stock**: Establece el stock inicial por depósito o almacén y el umbral de alerta de stock mínimo.\n` +
-                    `7. **Guardar**: Pulsa **"Guardar Producto"**. Estará disponible de inmediato para vender en el POS.`,
+                    `1. **Ruta**: Menú lateral izquierdo -> **Inventario** -> **+ Nuevo Producto**.\n` +
+                    `2. **Datos Básicos**: Ingresa nombre, categoría y unidad de medida.\n` +
+                    `3. **Precios**: Asigna costo y precio de venta en **$ USD**.\n` +
+                    `4. **Código y Stock**: Escanea o escribe el código SKU y establece stock inicial por depósito.\n` +
+                    `5. **Guardar**: Pulsa **"Guardar Producto"**.`,
                 actions: [
                     {
                         type: 'NAVIGATE',
-                        label: '📦 Ir a Catálogo de Productos',
-                        url: '/inventory/products'
+                        label: '📦 Ir a Inventario',
+                        url: '/inventory'
                     }
                 ],
                 subagent: AI_SUBAGENTS.INVENTORY_SPECIALIST,
@@ -411,16 +416,29 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
             };
         }
 
-        // 2. Consulta Ultrarrápida de Tasa Oficial BCV
-        if (/(?:a\s+c[uú]anto\s+est[aá]\s+el\s+d[oó]lar|tasa\s+bcv|precio\s+del\s+d[oó]lar|tasa\s+oficial|tasa\s+del\s+d[oó]lar|cu[aá]l\s+es\s+la\s+tasa)/i.test(cleanCmd) && !/(?:debo|pagu[eé]|gasto|factura|vender)/i.test(cleanCmd)) {
-            let numRate = 80.00;
+        // 2. Consulta Ultrarrápida de Tasa Oficial BCV (sin valor hardcoded falso)
+        if (/(?:a\s+c[uú]anto\s+est[aá]\s+el\s+d[oó]lar|tasa\s+bcv|precio\s+del\s+d[oó]lar|tasa\s+oficial|tasa\s+del\s+d[oó]lar|cu[aá]l\s+es\s+la\s+tasa)/i.test(cleanCmd) && !/(?:debo|pagu[eé]|gasto|factura|vender|vende)/i.test(cleanCmd)) {
+            let numRate = 0;
             try {
-                const rateRecord = await resolveBusinessExchangeRate(businessId);
+                const rateRecord = await resolveBusinessExchangeRate(businessId, prisma);
                 if (rateRecord && rateRecord.rate) {
                     numRate = Number(rateRecord.rate);
                 }
-            } catch {
-                numRate = 80.00;
+            } catch {}
+            if (numRate <= 0) {
+                const biz = await prisma.business.findUnique({
+                    where: { id: businessId },
+                    select: { currentExchangeRate: true }
+                }).catch(() => null);
+                numRate = Number(biz?.currentExchangeRate || 0);
+            }
+            if (numRate <= 0) {
+                return {
+                    text: `⚠️ **Sin Tasa de Cambio Configurada**\n\nNo encontré una tasa oficial BCV activa para esta empresa. Por favor configúrala en Configuración de la Empresa o Tasas de Cambio antes de operar.`,
+                    actions: [{ type: 'NAVIGATE', label: '⚙️ Ir a Configuración', url: '/settings' }],
+                    subagent: AI_SUBAGENTS.SALES_BILLING,
+                    suggestedOptions: ['📊 Ventas de hoy', '💳 Cuentas por cobrar']
+                };
             }
             return {
                 text: `💵 **Tasa Oficial BCV Activa en el Sistema**:\n\nActualmente la tasa oficial activa del Banco Central de Venezuela es de **${numRate.toFixed(2)} Bs./$ USD**.\n\nTodos los precios de su inventario, tickets de venta en caja y conversiones se calculan en tiempo real anclados a este valor.`,
@@ -434,17 +452,27 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
             };
         }
 
-        // Control y limitación de cuota mensual de IA por empresa
-        const usage = await this.usageService.checkAndIncrementUsage(businessId, tzOffset);
-        if (!usage.allowed) {
+        // Control previo de cuota sin descontar aún (se descuenta solo si el turno completa respuesta útil)
+        const usageCheck = await this.usageService.getUsage(businessId, tzOffset);
+        if (!usageCheck.allowed) {
             return {
-                text: `⚠️ **Límite Mensual de Consultas Alcanzado**\n\nTu empresa ha alcanzado el límite de **${usage.monthlyLimit} consultas mensuales** asignadas con Guardián AI para este período (${usage.periodMonth}).\n\nPara ampliar tu cupo de consultas mensuales o consultar los planes superiores de Guardián, por favor comunícate con el administrador del sistema.`,
+                text: `⚠️ **Límite Mensual de Consultas Alcanzado**\n\nTu empresa ha alcanzado el límite de **${usageCheck.monthlyLimit} consultas mensuales** asignadas con Guardián AI para este período (${usageCheck.periodMonth}).\n\nPara ampliar tu cupo de consultas mensuales o consultar los planes superiores de Guardián, por favor comunícate con el administrador del sistema.`,
                 actions: [],
                 subagent: AI_SUBAGENTS.OPERATIVE_TUTOR,
-                usage,
+                usage: usageCheck,
                 suggestedOptions: ['Ver planes de suscripción']
             };
         }
+
+        // Resolver contexto RBAC real del usuario para filtrar herramientas permitidas
+        const activeMember = userId ? await resolveActiveMemberForUser(businessId, userId) : null;
+        const userContext: AiUserContext = {
+            userId,
+            membershipId: activeMember?.id,
+            roleCode: activeMember?.role?.code,
+            isSuperAdmin
+        };
+        const allowedDeclarations = await getAllowedToolDeclarations(userContext.roleCode, isSuperAdmin);
 
         const todayStr = clientLocalDate || (() => {
             const local = new Date(Date.now() - (tzOffset * 60_000));
@@ -467,68 +495,92 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
             parts: [{ text: userMessage }]
         });
 
-        const toolsConfig = [
-            {
-                function_declarations: AI_TOOL_DECLARATIONS
-            }
-        ];
+        const toolsConfig = allowedDeclarations.length > 0
+            ? [{ function_declarations: allowedDeclarations }]
+            : undefined;
 
-        // Se configura thinkingBudget: 0 para máxima velocidad y ultra-baja latencia
-        const initialPayload = {
-            system_instruction: systemInstruction,
-            contents,
-            tools: toolsConfig,
-            generationConfig: {
-                temperature: 0.1
+        const callWithFallback = async (payload: any): Promise<{ res: any; model: string }> => {
+            const candidateModels = [this.primaryModel, ...this.fallbackModels.filter(m => m !== this.primaryModel)];
+            let lastError: any = null;
+            for (const model of candidateModels) {
+                try {
+                    const res = await this.callGeminiApi(model, payload);
+                    if (res && res.status === 200 && res.data?.candidates?.[0]) {
+                        return { res, model };
+                    }
+                } catch (err: any) {
+                    lastError = err;
+                    const status = err.response ? err.response.status : null;
+                    console.warn(`[Guardián AI] Falló llamada con modelo ${model} (HTTP ${status}): ${err.message}. Probando fallback...`);
+                    await new Promise(res => setTimeout(res, 300));
+                }
             }
+            console.error('[Guardián AI] Error final tras probar fallbacks:', lastError?.response?.data || lastError?.message);
+            throw new Error('El asistente inteligente no está disponible temporalmente. Intente nuevamente en unos segundos.');
         };
 
         const collectedActions: AiChatAction[] = [];
+        const executedToolNames: string[] = [];
+        let dynamicSuggestedOptions: string[] | undefined;
+        let lastToolFallbackText = '';
+        let isClarificationOnly = false;
         let candidateModel = this.primaryModel;
-        let response: any = null;
 
-        // Estrategia con reintento y fallback ante spikes de demanda
-        const candidateModels = [this.primaryModel, ...this.fallbackModels.filter(m => m !== this.primaryModel)];
-        let lastError: any = null;
+        const loopContents: any[] = [...contents];
+        let finalReplyText = '';
 
-        for (const model of candidateModels) {
-            try {
-                candidateModel = model;
-                response = await this.callGeminiApi(model, initialPayload);
-                if (response && response.status === 200) {
-                    break;
-                }
-            } catch (err: any) {
-                lastError = err;
-                const status = err.response ? err.response.status : null;
-                console.warn(`[Guardián AI] Falló llamada con modelo ${model} (HTTP ${status}): ${err.message}. Probando fallback...`);
-                await new Promise(res => setTimeout(res, 350));
+        // Bucle multi-ronda (hasta 3 rondas de herramientas en cadena)
+        const MAX_TOOL_ROUNDS = 3;
+        for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+            const payload: any = {
+                system_instruction: systemInstruction,
+                contents: loopContents,
+                generationConfig: { temperature: 0.1 }
+            };
+            if (toolsConfig && round < MAX_TOOL_ROUNDS) {
+                payload.tools = toolsConfig;
             }
-        }
 
-        if (!response || !response.data?.candidates?.[0]) {
-            console.error('[Guardián AI] Error final tras probar fallbacks:', lastError?.response?.data || lastError?.message);
-            throw new Error('El asistente inteligente no está disponible temporalmente. Intente nuevamente en unos segundos.');
-        }
+            const { res, model } = await callWithFallback(payload);
+            candidateModel = model;
 
-        let firstCandidate = response.data.candidates[0];
-        let modelParts = firstCandidate.content?.parts || [];
+            const candidate = res.data.candidates[0];
+            const modelParts = candidate.content?.parts || [];
+            const functionCalls = modelParts.filter((p: any) => p.functionCall);
 
-        // Verificar si el modelo invocó herramientas (Function Calls)
-        const functionCalls = modelParts.filter((p: any) => p.functionCall);
+            if (functionCalls.length === 0 || round === MAX_TOOL_ROUNDS) {
+                finalReplyText = modelParts
+                    .filter((p: any) => p.text)
+                    .map((p: any) => p.text)
+                    .join('\n')
+                    .trim();
+                break;
+            }
 
-        if (functionCalls.length > 0) {
             const toolResultsParts: any[] = [];
+            let roundStatuses: string[] = [];
 
             for (const fc of functionCalls) {
                 const toolName = fc.functionCall.name;
                 const toolArgs = fc.functionCall.args || {};
+                executedToolNames.push(toolName);
 
                 try {
-                    const toolResult = await executeAiTool(toolName, toolArgs, businessId, tzOffset, userId);
+                    const toolResult = await executeAiTool(toolName, toolArgs, businessId, tzOffset, userId, userContext);
 
                     if (toolResult.action) {
                         collectedActions.push(toolResult.action);
+                    }
+                    if (toolResult.suggestedOptions && toolResult.suggestedOptions.length > 0) {
+                        dynamicSuggestedOptions = toolResult.suggestedOptions;
+                    }
+                    if (toolResult.data?.status) {
+                        roundStatuses.push(String(toolResult.data.status));
+                    }
+                    if (toolResult.data?.mensaje) {
+                        lastToolFallbackText = String(toolResult.data.mensaje);
+                    } else if (toolResult.data?.error) {
+                        lastToolFallbackText = String(toolResult.data.error);
                     }
 
                     toolResultsParts.push({
@@ -539,106 +591,71 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
                     });
                 } catch (toolErr: any) {
                     console.error(`[Guardián AI] Error ejecutando herramienta ${toolName}:`, toolErr.message);
+                    lastToolFallbackText = `Error al consultar datos: ${toolErr.message}`;
                     toolResultsParts.push({
                         functionResponse: {
                             name: toolName,
-                            response: { error: `Error al consultar datos: ${toolErr.message}` }
+                            response: { error: lastToolFallbackText }
                         }
                     });
                 }
             }
 
-            // Segunda llamada con los resultados de las herramientas
-            const followUpContents = [
-                ...contents,
-                {
-                    role: 'model',
-                    parts: modelParts
-                },
-                {
-                    role: 'user',
-                    parts: toolResultsParts
-                }
-            ];
+            const clarificationStatuses = new Set([
+                'MISSING_FIELDS',
+                'AMBIGUOUS_PRODUCT',
+                'AMBIGUOUS_CLIENT',
+                'CLIENT_NOT_FOUND',
+                'PAYMENT_METHOD_NOT_FOUND',
+                'DEPOT_NOT_FOUND',
+                'CONFIRMATION_REQUIRED'
+            ]);
+            isClarificationOnly = roundStatuses.length > 0 && roundStatuses.every(s => clarificationStatuses.has(s));
 
-            const followUpPayload = {
-                system_instruction: systemInstruction,
-                contents: followUpContents,
-                generationConfig: {
-                temperature: 0.1
-            }
-            };
+            loopContents.push(
+                { role: 'model', parts: modelParts },
+                { role: 'user', parts: toolResultsParts }
+            );
+        }
 
-            let secondResponse: any = null;
-            for (const model of candidateModels) {
-                try {
-                    candidateModel = model;
-                    secondResponse = await this.callGeminiApi(model, followUpPayload);
-                    if (secondResponse && secondResponse.status === 200) {
-                        break;
-                    }
-                } catch (err: any) {
-                    console.warn(`[Guardián AI] Falló follow-up con modelo ${model}: ${err.message}. Probando fallback...`);
-                    await new Promise(res => setTimeout(res, 350));
-                }
-            }
+        // Cobrar 1 consulta únicamente si no fue un turno intermedio de aclaración/confirmación
+        const finalUsage = isClarificationOnly
+            ? usageCheck
+            : await this.usageService.incrementUsage(businessId, tzOffset);
 
-            const secondCandidate = secondResponse?.data?.candidates?.[0];
-            const secondParts = secondCandidate?.content?.parts || [];
-            
-            const finalReplyText = secondParts
-                .filter((p: any) => p.text)
-                .map((p: any) => p.text)
-                .join('\n')
-                .trim();
-
-            let fallbackText = '';
-            for (const p of toolResultsParts) {
-                const resp = p.functionResponse?.response;
-                if (resp?.mensaje) {
-                    fallbackText += (fallbackText ? '\n\n' : '') + resp.mensaje;
-                } else if (resp?.error) {
-                    fallbackText += (fallbackText ? '\n\n' : '') + resp.error;
-                }
-            }
-
-            // Asignación de subagente según herramientas ejecutadas
-            const toolNames = functionCalls.map((fc: any) => fc.functionCall.name);
+        if (executedToolNames.length > 0) {
             let activeSubagent = AI_SUBAGENTS.FINANCIAL_AUDITOR;
             let suggestedOptions: string[] = ['📊 Ventas de hoy', '📄 PDF de ventas', '🔍 Auditar caja'];
 
-            if (toolNames.some((t: string) => t.includes('inventario') || t.includes('stock') || t.includes('producto') || t.includes('almacen') || t.includes('compras') || t.includes('reposicion') || t.includes('precio') || t.includes('combo'))) {
+            if (executedToolNames.some((t: string) => t.includes('inventario') || t.includes('stock') || t.includes('producto') || t.includes('almacen') || t.includes('compras') || t.includes('reposicion') || t.includes('precio') || t.includes('combo'))) {
                 activeSubagent = AI_SUBAGENTS.INVENTORY_SPECIALIST;
                 suggestedOptions = ['📦 Productos con bajo stock', '🏷️ Inversión total de inventario', '🛒 Sugerir compras a proveedor'];
-            } else if (toolNames.some((t: string) => t.includes('cobranza') || t.includes('credito') || t.includes('deudor') || t.includes('abonar') || t.includes('whatsapp') || t.includes('cliente'))) {
+            } else if (executedToolNames.some((t: string) => t.includes('cobranza') || t.includes('credito') || t.includes('deudor') || t.includes('abonar') || t.includes('whatsapp') || t.includes('cliente'))) {
                 activeSubagent = AI_SUBAGENTS.COLLECTIONS_MANAGER;
                 suggestedOptions = ['📲 Mensaje cobranza WhatsApp', '💰 Cobranza recaudada hoy', '💳 Principales deudores'];
-            } else if (toolNames.some((t: string) => t.includes('caja') || t.includes('gasto') || t.includes('fuga') || t.includes('financiero') || t.includes('ingreso') || t.includes('apertura') || t.includes('fraude'))) {
+            } else if (executedToolNames.some((t: string) => t.includes('caja') || t.includes('gasto') || t.includes('fuga') || t.includes('financiero') || t.includes('ingreso') || t.includes('apertura') || t.includes('fraude'))) {
                 activeSubagent = AI_SUBAGENTS.FINANCIAL_AUDITOR;
                 suggestedOptions = ['🔒 Estado de cajas hoy', '💸 Registrar gasto operativo', '📉 Auditar fugas y dinero dormido'];
-            } else if (toolNames.some((t: string) => t.includes('venta') || t.includes('comision') || t.includes('cotizacion') || t.includes('tasa') || t.includes('empresa') || t.includes('fiscal') || t.includes('seniat'))) {
+            } else if (executedToolNames.some((t: string) => t.includes('venta') || t.includes('comision') || t.includes('cotizacion') || t.includes('tasa') || t.includes('empresa') || t.includes('fiscal') || t.includes('seniat'))) {
                 activeSubagent = AI_SUBAGENTS.SALES_BILLING;
                 suggestedOptions = ['💵 Tasa oficial BCV', '📊 Resumen de ventas hoy', '📄 PDF de ventas'];
             }
 
+            if (dynamicSuggestedOptions && dynamicSuggestedOptions.length > 0) {
+                suggestedOptions = dynamicSuggestedOptions;
+            }
+
             return {
-                text: finalReplyText || fallbackText || 'Operación ejecutada exitosamente.',
+                text: finalReplyText || lastToolFallbackText || 'Operación ejecutada exitosamente.',
                 actions: collectedActions,
                 modelUsed: candidateModel,
                 subagent: activeSubagent,
                 suggestedOptions,
-                usage
+                usage: finalUsage
             };
         }
 
         // Si no hubo tool call (por ejemplo, respuesta de tutorial o soporte), retornar directamente el texto generado
-        const directText = modelParts
-            .filter((p: any) => p.text)
-            .map((p: any) => p.text)
-            .join('\n')
-            .trim();
-
-        // Determinar subagente para respuesta tutorial / conversacional de software administrativo
         let convSubagent = AI_SUBAGENTS.OPERATIVE_TUTOR;
         let convOptions = ['📊 ¿Cómo me fue en ventas?', '💳 Cuentas por cobrar', '📦 Stock bajo'];
 
@@ -657,12 +674,12 @@ GUÍA DE HERRAMIENTAS ANALÍTICAS Y DE EJECUCIÓN:
         }
 
         return {
-            text: directText || 'Disculpa, no pude procesar la solicitud.',
+            text: finalReplyText || 'Disculpa, no pude procesar la solicitud.',
             actions: collectedActions,
             modelUsed: candidateModel,
             subagent: convSubagent,
             suggestedOptions: convOptions,
-            usage
+            usage: finalUsage
         };
     }
 }

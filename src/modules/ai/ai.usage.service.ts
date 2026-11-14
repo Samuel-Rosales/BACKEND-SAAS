@@ -99,7 +99,7 @@ export class AiUsageService {
             };
         }
 
-        // Incrementar uso
+        // Incrementar uso solo cuando sea llamado explícitamente
         const updated = await prisma.businessAiUsage.update({
             where: { id: record.id },
             data: {
@@ -116,5 +116,12 @@ export class AiUsageService {
             remaining: newRemaining,
             periodMonth
         };
+    }
+
+    /**
+     * Incrementa el contador mensual únicamente después de una respuesta exitosa del modelo.
+     */
+    async incrementUsage(businessId: number, tzOffset: number = 240): Promise<BusinessAiUsageInfo> {
+        return this.checkAndIncrementUsage(businessId, tzOffset);
     }
 }

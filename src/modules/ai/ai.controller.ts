@@ -23,7 +23,8 @@ export class AiController {
         try {
             const parsedTzOffset = tzOffset !== undefined && !isNaN(Number(tzOffset)) ? Number(tzOffset) : 240;
             const userId = req.user?.id ? Number(req.user.id) : undefined;
-            const result = await aiService.chat(businessId, message.trim(), history || [], parsedTzOffset, localDate, userId);
+            const isSuperAdmin = Boolean(req.user?.isSuperAdmin);
+            const result = await aiService.chat(businessId, message.trim(), history || [], parsedTzOffset, localDate, userId, isSuperAdmin);
             return res.status(200).json({
                 message: result.text,
                 actions: result.actions,

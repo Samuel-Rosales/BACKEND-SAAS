@@ -5,6 +5,18 @@ export interface ChatHistoryMessage {
     text: string;
 }
 
+export interface AiUserContext {
+    userId?: number;
+    membershipId?: number;
+    roleCode?: string;
+    isSuperAdmin?: boolean;
+}
+
+export interface AiConfirmSummaryLine {
+    label: string;
+    value: string;
+}
+
 export interface AiChatAction {
     type: 'DOWNLOAD_PDF' | 'NAVIGATE' | 'VIEW_DATA' | 'OPEN_WHATSAPP' | 'ACTION_CONFIRM';
     label: string;
@@ -12,6 +24,10 @@ export interface AiChatAction {
     url?: string;
     filename?: string;
     params?: Record<string, any>;
+    summaryLines?: AiConfirmSummaryLine[];
+    totalLabel?: string;
+    confirmMessage?: string;
+    cancelMessage?: string;
 }
 
 export interface AiSubagentInfo {
@@ -33,4 +49,5 @@ export interface AiChatResponse {
 export interface ToolExecutionResult {
     data: any;
     action?: AiChatAction;
+    suggestedOptions?: string[];
 }
