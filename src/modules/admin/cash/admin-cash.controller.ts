@@ -62,6 +62,28 @@ export class AdminCashController {
     }
   }
 
+  async updateExpense(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      if (!id || isNaN(id)) {
+        return res.status(400).json({
+          status: 400,
+          message: 'ID de gasto inválido',
+          data: null,
+        });
+      }
+
+      const result = await this.service.updateExpense(id, req.body);
+      return res.status(result.status).json(result);
+    } catch (error: any) {
+      return res.status(500).json({
+        status: 500,
+        message: error.message || 'Error al actualizar registro',
+        data: null,
+      });
+    }
+  }
+
   async deleteExpense(req: Request, res: Response) {
     try {
       const id = Number(req.params.id);
