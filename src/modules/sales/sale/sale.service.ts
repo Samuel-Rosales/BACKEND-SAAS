@@ -408,9 +408,8 @@ export class SaleService {
 
             // A. Caso CONTADO (CASH)
             if (data.condition === Conditions.CASH) {
-                // Tolerancia de 0.05 (5 centavos) por posibles redondeos de interfaz
-                // remainingBalance > 0.05 ---> .gt(0.05)
-                if (remainingBalance.gt(0.05)) {
+                // Tolerancia de EPSILON ($0.02) por posibles redondeos de conversión VES/USD
+                if (remainingBalance.gt(EPSILON)) {
                     throw new BusinessError(
                         `Monto insuficiente para venta de Contado. Faltan $${remainingBalance.toString()}`,
                         400
